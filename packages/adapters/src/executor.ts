@@ -395,19 +395,78 @@ function shellCFlagProgram(words: string[], interpreterIndex: number): string | 
   return undefined;
 }
 
+function preserveShellCommandBoundaries(command: string): string {
+  let quote: "'" | '"' | undefined;
+  let result = "";
+  for (let index = 0; index < command.length; index += 1) {
+    const character = command[index];
+    const next = command[index + 1];
+    if (character === "\\" && quote !== "'") {
+      if (next === "\n") {
+        index += 1;
+        continue;
+      }
+      // Keep escaped characters intact; an escaped quote is not a boundary.
+      result += character;
+      if (next !== undefined) {
+        result += next;
+        index += 1;
+      }
+      continue;
+    }
+    if (character === quote) quote = undefined;
+    else if (!quote && (character === "'" || character === '"')) quote = character;
+    result += character === "\n" && !quote ? "\n;" : character;
+  }
+  return result;
+}
+
 function tokenizeProtectedShellCommand(command: string): string[] | "dynamic" {
   try {
+    // shell-quote treats newlines as whitespace. Preserve command boundaries for
+    // the dot builtin, after folding shell line continuations. Retaining the
+    // newline also preserves comment handling (comments remain fail-closed).
+    const separated = preserveShellCommandBoundaries(command);
     const parsed = parseShellCommand<{ expansion: string }>(
-      command,
+      separated,
       (name) => STATIC_SHELL_EXPANSIONS[name] ?? { expansion: name },
       { splitUnquoted: true },
     );
     const words: string[] = [];
-    for (const entry of parsed) {
+    let commandPosition = true;
+    let redirectTarget = false;
+    for (const [index, entry] of parsed.entries()) {
       if (typeof entry === "string") {
         // Backtick fragments are not fully tokenized; treat them as dynamic.
         if (entry.includes("`")) return "dynamic";
-        words.push(entry.toLowerCase());
+        const word = entry.toLowerCase();
+        // `find .`, `git add .`, and `git -C .` use a path, not the
+        // executable `. script` builtin. Keep the path out of the builtin scan.
+        words.push(word === "." && (!commandPosition || redirectTarget) ? "./" : word);
+        if (redirectTarget) {
+          redirectTarget = false;
+          continue;
+        }
+        const next = parsed[index + 1];
+        if (
+          commandPosition &&
+          /^\d+$/.test(word) &&
+          typeof next === "object" &&
+          "op" in next &&
+          /^[<>]/.test(next.op)
+        ) {
+          // A leading file descriptor belongs to a redirect, not the command.
+        } else if (commandPosition && /^(?:then|do|else)$/.test(word)) {
+          commandPosition = true;
+        } else if (commandPosition && (word === "coproc" || word === "function")) return "dynamic";
+        else if (
+          commandPosition &&
+          (/^(?:command|builtin|exec|time|if|elif|while|until|!|\{)$/.test(word) ||
+            word.startsWith("-") ||
+            /^[a-z_][a-z0-9_]*=/.test(word))
+        ) {
+          // Shell prefixes and assignments leave the command word pending.
+        } else commandPosition = false;
         continue;
       }
       if ("expansion" in entry) {
@@ -420,6 +479,10 @@ function tokenizeProtectedShellCommand(command: string): string[] | "dynamic" {
         continue;
       }
       if ("op" in entry && SAFE_SHELL_CONTROL_OPS.has(entry.op)) {
+        if (["&&", "||", ";", "|", "&"].includes(entry.op)) {
+          commandPosition = true;
+          redirectTarget = false;
+        } else redirectTarget = true;
         continue;
       }
       return "dynamic";
@@ -440,7 +503,7 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
   }
   // eval/source/. can hide protected commands inside an expansion string that the
   // outer tokenizer keeps as a single word (e.g. eval "pkill chromium").
-  if (commandNames.some((word) => /^(?:eval|source|\.)$/.test(word ?? ""))) {
+  if (words.includes(".") || commandNames.some((word) => /^(?:eval|source)$/.test(word ?? ""))) {
     return true;
   }
   if (
@@ -2362,7 +2425,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (graphical && isProtectedComputerLifecycleCommand(command)) {
               return finish({
                 error:
-                  "Computer lifecycle commands are unavailable. Keep the browser and desktop running; use computer_observe, computer_act, open_path, or launch_app instead.",
+                  "This command was not run: the desktop-protection guard detected a protected command or shell syntax it cannot inspect. Shell access is still available. For ordinary repository work, use direct commands with explicit paths, without sourcing or command substitution. Do not stop or restart browser/desktop processes.",
               });
             }
             const cwd = resolveBotWorkspaceCwd(

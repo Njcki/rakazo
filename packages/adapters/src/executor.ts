@@ -75,6 +75,8 @@ import {
 } from "@rakazo/core";
 import {
   approvalEffectKey,
+  isToolEffectIdempotencyKey,
+  legacyScopedToolEffectIdempotencyKey,
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@rakazo/core/node/approval-effect-key";
@@ -1686,6 +1688,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return secretPausedToolResult();
         };
 
+        const mutatingEffectOccurrences = new Map<string, number>();
+        const consumedEffectIds = new Set<string>();
+        const nextMutatingEffectOccurrence = (toolName: string, args: Record<string, unknown>) => {
+          const fingerprint = toolEffectIdempotencyKey(runId, toolName, args);
+          const occurrence = mutatingEffectOccurrences.get(fingerprint) ?? 0;
+          mutatingEffectOccurrences.set(fingerprint, occurrence + 1);
+          return occurrence;
+        };
+
         const applyTool = async (
           name: string,
           args: Record<string, unknown>,
@@ -1924,13 +1935,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
           let gateDecision: "ask" | "allow" = plan === "ask" ? "ask" : "allow";
           const needsApprovalEarly = plan === "ask" || plan === "judge";
           // A resumed approval keeps its key even if "Always allow" changed the policy.
-          const effectKey =
+          const usesApprovalKey =
             nextApprovedTool ||
             name === "request_secret" ||
             needsApprovalEarly ||
-            requiresApprovalByDefault
+            requiresApprovalByDefault;
+          // Count before choosing a key so an approved replay (occurrence 0 / base
+          // key) cannot collide with a later identical-args call in this attempt.
+          // request_secret stays single-use: retries must reuse the same card.
+          const occurrence =
+            name === "request_secret"
+              ? 0
+              : nextMutatingEffectOccurrence(replayEffectToolName, args);
+          const effectKey =
+            usesApprovalKey && occurrence === 0
               ? approvalEffectKey(runId, replayEffectToolName, args)
-              : toolEffectIdempotencyKey(runId, replayEffectToolName, executionId, args);
+              : toolEffectIdempotencyKey(runId, replayEffectToolName, args, occurrence);
           // Connector read-only hints must not bypass approval, review, or replay decisions.
           const applied = READ_ONLY_AGENT_TOOLS.has(name)
             ? undefined
@@ -1941,6 +1961,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 effectKey,
                 effectRequest,
                 executionId,
+                consumedEffectIds,
               );
 
           const runAutoReview = async () => {
@@ -3300,7 +3321,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   | "status"
                   | "fyi"
                   | undefined,
-                deliveryKey: executionId,
+                deliveryKey: effectKey,
               },
             );
             if (!sent.ok) return finish({ error: sent.error });
@@ -3334,7 +3355,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               {
                 address: args.address ? String(args.address) : undefined,
                 message: redactSecrets(String(args.message ?? ""), runSecrets),
-                deliveryKey: executionId,
+                deliveryKey: effectKey,
               },
             );
             if (!result.ok) return finish({ error: result.error });
@@ -4598,11 +4619,13 @@ async function recordEffect(
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
+  consumedIds?: Set<string>,
 ) {
   const existing = await deps.prisma.externalEffect.findUnique({
     where: { idempotencyKey },
   });
   if (existing) {
+    consumedIds?.add(existing.id);
     await deps.events.append({
       spaceId: run.spaceId,
       threadId: run.threadId,
@@ -4614,28 +4637,81 @@ async function recordEffect(
     return { duplicate: true, effect: existing };
   }
 
-  // Pre-fix rows used bare provider tool-call ids. Only reuse them for the same
-  // run, tool, and request so a reused provider id cannot attach to a different mutation.
-  if (legacyIdempotencyKey && legacyIdempotencyKey !== idempotencyKey) {
-    const legacy = await deps.prisma.externalEffect.findUnique({
-      where: { idempotencyKey: legacyIdempotencyKey },
-    });
-    if (
-      legacy &&
-      legacy.runId === run.id &&
-      legacy.kind === kind &&
-      stableJsonValue(legacy.request) === stableJsonValue(request)
-    ) {
-      await deps.events.append({
-        spaceId: run.spaceId,
-        threadId: run.threadId,
-        botId: run.botId,
-        type: "effect.reconciled",
-        runId: run.id,
-        payload: { executionId: legacyIdempotencyKey, kind, legacy: true },
+  // Pre-fix rows used bare provider ids or scoped keys that included the
+  // ephemeral model tool-call id. Same-id unique lookup still works; a restart
+  // with a new id finds the row by run, tool, and request instead.
+  let expectedRequest: string | undefined;
+  try {
+    expectedRequest = stableJsonValue(request);
+  } catch {
+    expectedRequest = undefined;
+  }
+  if (legacyIdempotencyKey && legacyIdempotencyKey !== idempotencyKey && expectedRequest) {
+    const scopedLegacy =
+      request && typeof request === "object" && !Array.isArray(request)
+        ? legacyScopedToolEffectIdempotencyKey(
+            run.id,
+            kind,
+            legacyIdempotencyKey,
+            request as Record<string, unknown>,
+          )
+        : undefined;
+    for (const candidate of [scopedLegacy, legacyIdempotencyKey]) {
+      if (!candidate || candidate === idempotencyKey) continue;
+      const sameIdLegacy = await deps.prisma.externalEffect.findUnique({
+        where: { idempotencyKey: candidate },
       });
-      return { duplicate: true, effect: legacy };
+      if (
+        sameIdLegacy &&
+        !consumedIds?.has(sameIdLegacy.id) &&
+        sameIdLegacy.runId === run.id &&
+        sameIdLegacy.kind === kind &&
+        stableJsonValue(sameIdLegacy.request) === expectedRequest
+      ) {
+        consumedIds?.add(sameIdLegacy.id);
+        await deps.events.append({
+          spaceId: run.spaceId,
+          threadId: run.threadId,
+          botId: run.botId,
+          type: "effect.reconciled",
+          runId: run.id,
+          payload: { executionId: candidate, kind, legacy: true },
+        });
+        return { duplicate: true, effect: sameIdLegacy };
+      }
     }
+  }
+
+  const prior = await deps.prisma.externalEffect.findMany({
+    where: { runId: run.id, kind },
+    orderBy: { createdAt: "asc" },
+  });
+  const legacy =
+    expectedRequest === undefined
+      ? undefined
+      : prior.find((candidate) => {
+          if (consumedIds?.has(candidate.id)) return false;
+          if (candidate.idempotencyKey === idempotencyKey) return false;
+          if (candidate.runId !== run.id || candidate.kind !== kind) return false;
+          try {
+            if (stableJsonValue(candidate.request) !== expectedRequest) return false;
+          } catch {
+            return false;
+          }
+          // Live later occurrences use a new modern key; do not steal an earlier modern row.
+          return !isToolEffectIdempotencyKey(candidate.idempotencyKey, run.id, kind);
+        });
+  if (legacy) {
+    consumedIds?.add(legacy.id);
+    await deps.events.append({
+      spaceId: run.spaceId,
+      threadId: run.threadId,
+      botId: run.botId,
+      type: "effect.reconciled",
+      runId: run.id,
+      payload: { executionId: legacy.idempotencyKey, kind, legacy: true },
+    });
+    return { duplicate: true, effect: legacy };
   }
 
   const effect = await deps.prisma.externalEffect.create({
@@ -4648,6 +4724,7 @@ async function recordEffect(
       request: request as never,
     },
   });
+  consumedIds?.add(effect.id);
   return { duplicate: false, effect };
 }
 

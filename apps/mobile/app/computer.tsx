@@ -21,6 +21,7 @@ import {
   embeddableScreenUrl,
   previewPlaceholder,
   readScreenUrl,
+  retainScreenSource,
   SCREEN_URL_OPEN_ATTEMPTS,
 } from "../lib/computer";
 import { createComputerRefresh } from "../lib/computer-refresh";
@@ -511,10 +512,12 @@ function ScreenWebView({
   onError: () => void;
 }) {
   const tokens = useMobileTokens();
+  const sourceUrl = useRef(url);
+  sourceUrl.current = retainScreenSource(sourceUrl.current, url);
   return (
     <WebView
-      key={url}
-      source={{ uri: url }}
+      key={sourceUrl.current}
+      source={{ uri: sourceUrl.current }}
       style={{ flex: 1, backgroundColor: tokens.background }}
       pointerEvents={interactive ? "auto" : "none"}
       javaScriptEnabled

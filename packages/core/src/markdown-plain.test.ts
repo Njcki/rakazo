@@ -2,6 +2,55 @@ import { describe, expect, it } from "vitest";
 import { plainTextFromMarkdown, truncatedPlainText } from "./markdown-plain.js";
 
 describe("plainTextFromMarkdown", () => {
+  it.each([
+    "Saved monthly_sales_report.csv",
+    "Set DATABASE_POOL_SIZE to 12",
+    "Keep foo__bar__baz unchanged",
+    "Open https://example.test/monthly_sales_report",
+    "Email first_middle_last@example.test",
+    "保留客户_月度_报告和équipe_nom_complet",
+    "Keep cafe\u0301_nom_ unchanged",
+  ])("preserves underscores inside words: %s", (text) => {
+    expect(plainTextFromMarkdown(text)).toBe(text);
+  });
+
+  it("still removes underscore emphasis around identifiers and punctuation", () => {
+    expect(
+      plainTextFromMarkdown("_one_ __two__ ___three___ (_four_) __monthly_sales_report__"),
+    ).toBe("one two three (four) monthly_sales_report");
+  });
+
+  it("removes nested underscore emphasis without changing identifiers", () => {
+    expect(plainTextFromMarkdown("__bold _italic_ bold__")).toBe("bold italic bold");
+    expect(plainTextFromMarkdown("__bold _italic___")).toBe("bold italic");
+    expect(plainTextFromMarkdown("___bold__ italic_")).toBe("bold italic");
+    expect(plainTextFromMarkdown("_italic __bold__ italic_ and __monthly_sales_report__")).toBe(
+      "italic bold italic and monthly_sales_report",
+    );
+  });
+
+  it("preserves a long sequence of unmatched underscore openers", () => {
+    const text = "_word ".repeat(100_000).trim();
+    expect(plainTextFromMarkdown(text)).toBe(text);
+  });
+
+  it.each(["_one_~~two~~", "~~one~~_two_", "_one_**two**", "**one**_two_"])(
+    "removes adjacent formatting without changing delimiter boundaries: %s",
+    (text) => expect(plainTextFromMarkdown(text)).toBe("onetwo"),
+  );
+
+  it("does not let HTML attribute underscores steal visible emphasis", () => {
+    expect(plainTextFromMarkdown('_Open <a href="/_draft">report</a> now_')).toBe(
+      "Open report now",
+    );
+    expect(plainTextFromMarkdown('_Open <a title=">_draft">report</a> now_')).toBe(
+      "Open report now",
+    );
+    expect(plainTextFromMarkdown('<a title="> report')).toBe("report");
+    expect(plainTextFromMarkdown('_See <a title="> now_')).toBe("See now");
+    expect(plainTextFromMarkdown('See <a href="x>y" title="z')).toBe("See");
+  });
+
   it("drops emphasis markers", () => {
     expect(plainTextFromMarkdown("Created **Projects-CoS** as a **Project**")).toBe(
       "Created Projects-CoS as a Project",

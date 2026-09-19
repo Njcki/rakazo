@@ -15,21 +15,67 @@ export function plainTextFromMarkdown(markdown: string): string {
   text = takeEscapes(text, stash);
   text = takeLinks(text)
     .replace(/<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\s]*)>/g, "$1")
-    .replace(/<([^<>\s]+@[^<>\s]+\.[^<>\s]+)>/g, "$1")
+    .replace(/<([^<>\s]+@[^<>\s]+\.[^<>\s]+)>/g, "$1");
+  text = stripUnderscoreEmphasis(stripHtmlTags(text))
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/^>\s+/gm, "")
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/^\s*\d+\.\s+/gm, "")
     .replace(/^\s*[-*_]{3,}\s*$/gm, "")
-    .replace(/(\*\*|__)(.*?)\1/g, "$2")
-    .replace(/(\*|_)([^*_\n]+)\1/g, "$2")
-    .replace(/~~(.*?)~~/g, "$1")
-    .replace(/<[^>]+>/g, " ");
+    .replace(/(\*\*)(.*?)\1/g, "$2")
+    .replace(/(\*)([^*\n]+)\1/g, "$2")
+    .replace(/~~(.*?)~~/g, "$1");
   text = text.replace(
     new RegExp(`${mark}(\\d+)${mark}`, "g"),
     (_match, index: string) => payloads[Number(index)] ?? "",
   );
   return text.replace(/\s+/g, " ").trim();
+}
+
+/** Pair delimiter runs once, without rescanning unmatched suffixes. */
+function stripUnderscoreEmphasis(text: string): string {
+  type Delimiter = { start: number; end: number; removed: number };
+  const delimiters: Delimiter[] = [];
+  const openers: Delimiter[] = [];
+  let previousEnd = 0;
+  for (const match of text.matchAll(/_+/g)) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (text.slice(previousEnd, start).includes("\n")) {
+      openers.length = 0;
+    }
+    previousEnd = end;
+    const delimiter = { start, end, removed: 0 };
+    delimiters.push(delimiter);
+    // Two UTF-16 units preserve astral letters when checking each adjacent code point.
+    const before = text.slice(Math.max(0, start - 2), start);
+    const after = text.slice(end, end + 2);
+    const canClose = !/^[\p{L}\p{N}\p{M}]/u.test(after) && /\S$/u.test(before);
+    let remaining = end - start;
+    while (canClose && remaining > 0 && openers.length) {
+      const opener = openers[openers.length - 1];
+      if (!opener) break;
+      const available = opener.end - opener.start - opener.removed;
+      const paired = Math.min(available, remaining);
+      opener.removed += paired;
+      delimiter.removed += paired;
+      remaining -= paired;
+      if (paired === available) openers.pop();
+    }
+    if (remaining > 0 && !/[\p{L}\p{N}\p{M}]$/u.test(before) && /^\S/u.test(after)) {
+      openers.push(delimiter);
+    }
+  }
+  const parts: string[] = [];
+  let from = 0;
+  for (const delimiter of delimiters) {
+    if (!delimiter.removed) continue;
+    parts.push(text.slice(from, delimiter.start));
+    parts.push("_".repeat(delimiter.end - delimiter.start - delimiter.removed));
+    from = delimiter.end;
+  }
+  parts.push(text.slice(from));
+  return parts.join("");
 }
 
 /** Strip Markdown first so truncation cannot land inside a marker. */
@@ -39,6 +85,50 @@ export function truncatedPlainText(markdown: string, maxChars: number): string {
   const end =
     maxChars > 0 && (text.charCodeAt(maxChars - 1) & 0xfc00) === 0xd800 ? maxChars - 1 : maxChars;
   return text.slice(0, end);
+}
+
+/** Matching `>` for a tag at `<`, ignoring `>` inside quoted attributes. */
+function htmlTagClose(text: string, open: number): number {
+  let quote: '"' | "'" | undefined;
+  let gtInOpenQuote = -1;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = undefined;
+        gtInOpenQuote = -1;
+        continue;
+      }
+      if (ch === ">" && gtInOpenQuote === -1) gtInOpenQuote = i;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === ">") return i;
+  }
+  if (gtInOpenQuote !== -1) return gtInOpenQuote;
+  // Unclosed quote with no `>`: consume the rest so attribute text cannot leak.
+  return quote && text.length > open + 1 ? text.length - 1 : -1;
+}
+
+function stripHtmlTags(text: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] === "<") {
+      const close = htmlTagClose(text, i);
+      if (close !== -1) {
+        out += " ";
+        i = close + 1;
+        continue;
+      }
+    }
+    out += text[i];
+    i += 1;
+  }
+  return out;
 }
 
 function takeEscapes(text: string, stash: (payload: string) => string): string {

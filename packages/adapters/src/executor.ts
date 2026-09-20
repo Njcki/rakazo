@@ -595,6 +595,27 @@ function isFailedToolResult(value: unknown): value is { error: unknown } {
   return error !== undefined && error !== null;
 }
 
+/**
+ * MCP tools report a failure as a result carrying `isError: true` rather than by throwing,
+ * so nothing populates `completion.error` and the call is audited as a success. Read the
+ * message out of the result instead. The result itself is untouched and still reaches the
+ * model, which is what lets the agent react to the failure.
+ */
+function toolResultErrorText(result: unknown): string | undefined {
+  const payload = (result as { details?: unknown } | null)?.details ?? result;
+  if (!payload || typeof payload !== "object") return undefined;
+  if ((payload as { isError?: unknown }).isError !== true) return undefined;
+  const content = (payload as { content?: unknown }).content;
+  const text = Array.isArray(content)
+    ? content
+        .map((part) => (part as { text?: unknown } | null)?.text)
+        .filter((value): value is string => typeof value === "string")
+        .join("\n")
+        .trim()
+    : "";
+  return text || "tool reported an error result";
+}
+
 export function toolCompletionFromResult(
   base: Pick<AgentToolCompletion, "name" | "executionId" | "durationMs">,
   result: unknown,
@@ -611,14 +632,16 @@ export function toolCompletionAuditPayload(
   const durationMs = Number.isFinite(completion.durationMs)
     ? Math.max(0, Math.round(completion.durationMs))
     : 0;
+  const error =
+    completion.error === undefined ? toolResultErrorText(completion.result) : completion.error;
   const payload: Record<string, unknown> = {
     name: redactSecrets(completion.name, secrets),
     executionId: redactSecrets(completion.executionId, secrets),
     durationMs,
-    outcome: completion.paused ? "paused" : completion.error === undefined ? "succeeded" : "error",
+    outcome: completion.paused ? "paused" : error === undefined ? "succeeded" : "error",
   };
-  if (completion.error !== undefined) {
-    payload.error = sanitizeConnectorError(completion.error, secrets);
+  if (error !== undefined) {
+    payload.error = sanitizeConnectorError(error, secrets);
   }
   if (!isAuditableToolResult(completion.result)) return payload;
 

@@ -101,6 +101,41 @@ describe("tool completion audit", () => {
     });
     expect(completion).not.toHaveProperty("result");
   });
+
+  it("records an MCP tool result flagged isError as an error", () => {
+    const payload = toolCompletionAuditPayload({
+      name: "mcp__files__read_text_file",
+      executionId: "call-1",
+      durationMs: 9,
+      result: {
+        content: [{ type: "text", text: "ENOENT: no such file or directory, open '/missing'" }],
+        details: {
+          content: [{ type: "text", text: "ENOENT: no such file or directory, open '/missing'" }],
+          isError: true,
+        },
+      },
+    });
+
+    expect(payload).toMatchObject({
+      outcome: "error",
+      error: "ENOENT: no such file or directory, open '/missing'",
+    });
+  });
+
+  it("keeps an MCP tool result without isError a success", () => {
+    const payload = toolCompletionAuditPayload({
+      name: "mcp__files__read_text_file",
+      executionId: "call-2",
+      durationMs: 9,
+      result: {
+        content: [{ type: "text", text: "file contents" }],
+        details: { content: [{ type: "text", text: "file contents" }], isError: false },
+      },
+    });
+
+    expect(payload).toMatchObject({ outcome: "succeeded" });
+    expect(payload).not.toHaveProperty("error");
+  });
 });
 
 describe("run workspace checkpoint", () => {

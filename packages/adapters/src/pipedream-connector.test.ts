@@ -165,6 +165,26 @@ describe("PipedreamConnector", () => {
     ).rejects.toThrow("secure HTTPS connect URL");
   });
 
+  it("reports the status when a token response carries no JSON body", async () => {
+    const connector = new PipedreamConnector(
+      {
+        clientId: "fake-client-id",
+        clientSecret: "fake-client-secret",
+        projectId: "fake-project-id",
+        environment: "development",
+        identitySecret: "fake-identity-secret",
+      },
+      { fetch: vi.fn().mockResolvedValue(new Response("", { status: 502 })) },
+    );
+
+    await expect(
+      connector.begin(
+        { provider: "gmail", redirectUrl: "https://rakazo.example.test/app" },
+        context,
+      ),
+    ).rejects.toThrow("Pipedream authentication failed: 502");
+  });
+
   it("rejects an oversized token response before buffering it", async () => {
     const response = new Response("oversized", {
       headers: { "content-length": String(MAX_PIPEDREAM_RESPONSE_BYTES + 1) },

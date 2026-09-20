@@ -515,7 +515,8 @@ export class PipedreamConnector implements ManagedConnectorProvider {
         signal: requestAbort,
       },
     );
-    const body = JSON.parse(await readPipedreamBody(response, requestAbort)) as {
+    const text = await readPipedreamBody(response, requestAbort);
+    const body = (response.ok && text ? JSON.parse(text) : {}) as {
       access_token?: string;
       expires_in?: number;
       error?: string;

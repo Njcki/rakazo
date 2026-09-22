@@ -1181,7 +1181,8 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
 /** Build AgentTool.parameters for a connector tool, including OpenAI wire fidelity. */
 export function parametersFor(tool: ConnectorTool) {
   const schema = builtinParameters(tool) ?? safeJsonSchemaParameters(tool);
-  // Type.Union (top-level oneOf/anyOf) serializes without type/properties.
+  // Type.Union (top-level oneOf/anyOf) serializes without type/properties, and
+  // Anthropic rejects a root union, so it is flattened into one object schema.
   // Re-wrap only when needed so Type.Object schemas keep TypeBox Kind metadata.
   if (!openAiToolParametersNeedNormalization(schema)) return schema;
   return Type.Unsafe(

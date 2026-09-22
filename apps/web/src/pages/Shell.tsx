@@ -4349,7 +4349,9 @@ export function ShellPage() {
     </div>
   );
 
-  return <AvatarStyleProvider value="organic">{shell}</AvatarStyleProvider>;
+  return (
+    <AvatarStyleProvider value={bootstrapMe?.avatarStyle ?? "robot"}>{shell}</AvatarStyleProvider>
+  );
 }
 
 const Transcript = memo(function Transcript({

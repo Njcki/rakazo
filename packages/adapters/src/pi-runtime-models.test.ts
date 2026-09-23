@@ -16,7 +16,10 @@ describe("request model catalogs", () => {
   it.each([
     ["openrouter", "openai/gpt-5.6-luna"],
     ["openai-codex", "gpt-6-astra"],
+    ["openai-codex", "gpt-6-luna"],
+    ["openai-codex", "gpt-6-sol"],
     ["anthropic", "claude-fable-5-1"],
+    ["anthropic", "claude-opus-5-5"],
   ])("offers and resolves %s/%s with vision", (provider, id) => {
     const entry = listPiCatalog().find((model) => model.provider === provider && model.id === id);
     expect(entry).toBeDefined();
@@ -25,7 +28,14 @@ describe("request model catalogs", () => {
     expect(model?.input).toContain("image");
     expect(modelAcceptsImageInput(provider, id)).toBe(true);
     expect(entry?.thinkingLevels).toEqual(getSupportedThinkingLevels(model!));
-    if (provider === "openai-codex") expect(entry?.signIn).toBe("device-code");
+    if (provider === "openai-codex") {
+      expect(entry?.signIn).toBe("device-code");
+      expect(entry?.thinkingLevels).toContain("max");
+    }
+    if (provider === "anthropic") {
+      expect(entry?.signIn).toBe("auth-url");
+      expect(entry?.thinkingLevels).toContain("max");
+    }
   });
 
   it("isolates concurrent OpenAI-compatible endpoint registrations", () => {

@@ -664,6 +664,11 @@ export function ShellPage() {
   const expandedHistoryThread = useRef<string | null>(null);
   const historyEpoch = useRef(0);
   const jumpGeneration = useRef(0);
+  const [scrollRequest, setScrollRequest] = useState<{
+    messageId: string;
+    nonce: number;
+  } | null>(null);
+  const clearScrollRequest = useCallback(() => setScrollRequest(null), []);
   const initiallyScrolledThread = useRef<string | null>(null);
   const messageScroll = useRef<HTMLDivElement>(null);
   const pinnedAroundRef = useRef<{
@@ -1655,20 +1660,20 @@ export function ShellPage() {
       setRoutines([]);
       setRoutinesBotId(null);
     }
-    window.requestAnimationFrame(() => {
-      if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
-      if (!targetInPage) {
+    if (targetInPage) {
+      // The transcript owns the scroll: it retries until the pinned row is
+      // mounted and unfollows the tail, so live commits cannot cancel it.
+      setScrollRequest({ messageId: target.messageId, nonce: jumpId });
+    } else {
+      window.requestAnimationFrame(() => {
+        if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
         const element = messageScroll.current;
         if (element) {
           element.scrollTop = element.scrollHeight;
           initiallyScrolledThread.current = page.threadId;
         }
-        return;
-      }
-      document
-        .querySelector(`[data-message-id="${target.messageId}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
+      });
+    }
   }
 
   useEffect(() => {
@@ -1916,7 +1921,7 @@ export function ShellPage() {
     if (existing) {
       // Cancel any in-flight around-fetch so it cannot overwrite this scroll.
       jumpGeneration.current += 1;
-      existing.scrollIntoView({ behavior: "smooth", block: "center" });
+      setScrollRequest({ messageId, nonce: jumpGeneration.current });
       return;
     }
     const groupId = activeGroupId.current;
@@ -3423,6 +3428,8 @@ export function ShellPage() {
           <Transcript
             key={activeSnapshot?.threadId}
             scrollRef={messageScroll}
+            scrollRequest={scrollRequest}
+            onScrollRequestHandled={clearScrollRequest}
             artifactTarget={transcriptArtifactTarget}
             messages={transcriptMessages}
             olderCursor={activeSnapshot?.olderCursor ?? null}
@@ -4474,6 +4481,8 @@ export function ShellPage() {
 
 const Transcript = memo(function Transcript({
   scrollRef,
+  scrollRequest,
+  onScrollRequestHandled,
   artifactTarget,
   messages,
   olderCursor,
@@ -4500,6 +4509,8 @@ const Transcript = memo(function Transcript({
   onOpenComputer,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
+  scrollRequest: { messageId: string; nonce: number } | null;
+  onScrollRequestHandled: () => void;
   artifactTarget: ArtifactTarget;
   messages: ThreadMessage[];
   olderCursor: number | null;
@@ -4658,6 +4669,38 @@ const Transcript = memo(function Transcript({
     );
   }, [scrollRef]);
 
+  const scrolledJump = useRef<number | null>(null);
+  const jumpScrolling = useRef(false);
+  const jumpScrollTimer = useRef<number | undefined>(undefined);
+  const endJumpScroll = useCallback(() => {
+    jumpScrolling.current = false;
+    window.clearTimeout(jumpScrollTimer.current);
+    scrollRef.current?.removeEventListener("scrollend", endJumpScroll);
+  }, [scrollRef]);
+  // A jump scroll must win over follow-the-tail: unfollow inside the commit
+  // that mounts the row so a live commit cannot cancel the animation, keep
+  // retrying while the pinned window is still rendering, and suppress the
+  // near-end follow re-arm only for the jump's own scroll events — scrollend
+  // (or user input interrupting it, which also fires scrollend) ends the
+  // suppression, with the timeout as fallback when no scroll happens.
+  useLayoutEffect(() => {
+    if (!scrollRequest || scrolledJump.current === scrollRequest.nonce) return;
+    const element = scrollRef.current;
+    const row = element?.querySelector(
+      `[data-message-id="${CSS.escape(scrollRequest.messageId)}"]`,
+    );
+    if (!element || !row) return;
+    scrolledJump.current = scrollRequest.nonce;
+    following.current = false;
+    autoScrolling.current = false;
+    jumpScrolling.current = true;
+    element.addEventListener("scrollend", endJumpScroll, { once: true });
+    window.clearTimeout(jumpScrollTimer.current);
+    jumpScrollTimer.current = window.setTimeout(endJumpScroll, 2_000);
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    onScrollRequestHandled();
+  }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled]);
+
   useLayoutEffect(() => {
     if (following.current) snapToEnd();
   }, [messages, running, snapToEnd]);
@@ -4689,6 +4732,7 @@ const Transcript = memo(function Transcript({
   useEffect(
     () => () => {
       window.clearTimeout(autoScrollTimer.current);
+      window.clearTimeout(jumpScrollTimer.current);
     },
     [],
   );
@@ -4723,6 +4767,9 @@ const Transcript = memo(function Transcript({
           lastScrollTop.current = event.currentTarget.scrollTop;
           const nearEnd = transcriptIsNearEnd(event.currentTarget);
           setAtEnd(nearEnd);
+          // A jump scroll owns the viewport until its animation settles; its
+          // own near-end crossings must not re-arm tail-following.
+          if (jumpScrolling.current) return;
           if (nearEnd) {
             if (scrolledDown) following.current = true;
             if (autoScrolling.current) {

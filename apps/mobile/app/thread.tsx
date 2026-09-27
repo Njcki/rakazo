@@ -72,6 +72,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { McpApprovalCard } from "../components/McpApprovalCard";
 import {
   MarkdownArtifactPreview,
   type MarkdownArtifactPreviewTarget,
@@ -2380,6 +2381,10 @@ const MessageBubble = memo(function MessageBubble({
     (block): block is Extract<MessageBlock, { kind: "app_connect" }> =>
       block.kind === "app_connect",
   );
+  const mcpApprovalBlocks = message.blocks.filter(
+    (block): block is Extract<MessageBlock, { kind: "mcp_approval" }> =>
+      block.kind === "mcp_approval",
+  );
   const ask = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
       block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
@@ -2397,6 +2402,16 @@ const MessageBubble = memo(function MessageBubble({
           <AppConnectCard
             key={`${block.provider}-${index}`}
             botId={cardBotId}
+            block={block}
+            accessibilityActions={actionProps.accessibilityActions}
+            onAccessibilityAction={actionProps.onAccessibilityAction}
+          />
+        ))}
+        {mcpApprovalBlocks.map((block) => (
+          <McpApprovalCard
+            key={block.serverId}
+            botId={cardBotId}
+            threadId={message.threadId}
             block={block}
             accessibilityActions={actionProps.accessibilityActions}
             onAccessibilityAction={actionProps.onAccessibilityAction}
@@ -2651,13 +2666,24 @@ const MessageBubble = memo(function MessageBubble({
       </Pressable>
     );
   }
-  if (appConnectBlocks.length > 0 && appConnectBlocks.length === message.blocks.length) {
+  const inlineCardCount = appConnectBlocks.length + mcpApprovalBlocks.length;
+  if (inlineCardCount > 0 && inlineCardCount === message.blocks.length) {
     return (
       <View style={{ gap: 8, width: "100%" }}>
         {appConnectBlocks.map((block, index) => (
           <AppConnectCard
             key={`${block.provider}-${index}`}
             botId={cardBotId}
+            block={block}
+            accessibilityActions={actionProps.accessibilityActions}
+            onAccessibilityAction={actionProps.onAccessibilityAction}
+          />
+        ))}
+        {mcpApprovalBlocks.map((block) => (
+          <McpApprovalCard
+            key={block.serverId}
+            botId={cardBotId}
+            threadId={message.threadId}
             block={block}
             accessibilityActions={actionProps.accessibilityActions}
             onAccessibilityAction={actionProps.onAccessibilityAction}
@@ -2741,6 +2767,16 @@ const MessageBubble = memo(function MessageBubble({
           <AppConnectCard
             key={`${block.provider}-${index}`}
             botId={cardBotId}
+            block={block}
+            accessibilityActions={actionProps.accessibilityActions}
+            onAccessibilityAction={actionProps.onAccessibilityAction}
+          />
+        ))}
+        {mcpApprovalBlocks.map((block) => (
+          <McpApprovalCard
+            key={block.serverId}
+            botId={cardBotId}
+            threadId={message.threadId}
             block={block}
             accessibilityActions={actionProps.accessibilityActions}
             onAccessibilityAction={actionProps.onAccessibilityAction}
@@ -2891,6 +2927,16 @@ const MessageBubble = memo(function MessageBubble({
           <AppConnectCard
             key={`${block.provider}-${index}`}
             botId={cardBotId}
+            block={block}
+            accessibilityActions={actionProps.accessibilityActions}
+            onAccessibilityAction={actionProps.onAccessibilityAction}
+          />
+        ))}
+        {mcpApprovalBlocks.map((block) => (
+          <McpApprovalCard
+            key={block.serverId}
+            botId={cardBotId}
+            threadId={message.threadId}
             block={block}
             accessibilityActions={actionProps.accessibilityActions}
             onAccessibilityAction={actionProps.onAccessibilityAction}

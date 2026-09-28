@@ -19,6 +19,7 @@ import {
 } from "@rakazo/adapter-kit";
 import type {
   CloudAgentConnection,
+  CodexLiveCatalog,
   ComposioProvider,
   ComputerExecutionLease,
   ConnectorRegistry,
@@ -30,15 +31,20 @@ import type {
 } from "@rakazo/adapters";
 import {
   acquireComputerExecutionLease,
+  applyCodexLiveCatalog,
   applyTeachingDesktopInput,
   archiveBot,
   assertSafeRemoteUrl,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
+  CHATGPT_OAUTH_PROVIDER,
+  CodexCatalogCache,
   ComputerBusyError,
   cancelComputerRunWork,
   checkpointAndRecordComputerWorkspace,
   clearInactiveUserComputerControl,
+  codexLiveCatalogsForSpace,
+  codexLiveListsModel,
   computerSupportsUpdate,
   computerUpdateView,
   createVoiceProvider,
@@ -54,6 +60,7 @@ import {
   isComputerScreenUnavailable,
   isSandboxGoneError,
   isScratchpadStatus,
+  kickModelCredentialRefresh,
   listAvailablePiCatalog,
   listPiCatalog,
   listScratchpadItems,
@@ -61,6 +68,7 @@ import {
   mapScratchpadItem,
   modelCredentialAuthKindsForSpace,
   modelCredentialDto,
+  parseModelSecret,
   pickReusableConnection,
   planLiveConnectionSync,
   prepareApiInstall,
@@ -472,6 +480,19 @@ export interface RouterDeps {
   home: AgentHomeStore;
   secrets: EncryptedSecretStore;
   oauthLogins: PiOAuthLogins;
+  /** Live Codex catalog seam; defaults to the shared per-process cache. */
+  codexCatalog?: CodexLiveCatalog;
+  /**
+   * Detached refresh for a stored credential whose bearer expired — the live
+   * catalog path calls it instead of refreshing inline. Defaults to the
+   * runtime's locked `kickModelCredentialRefresh`; injectable for tests so a
+   * catalog read never reaches the real OAuth refresh endpoint.
+   */
+  refreshExpiredModelCredential?: (
+    scope: { userId: string; spaceId: string },
+    secretId: string,
+    provider: string,
+  ) => void;
   integrationSettings?: IntegrationProviderSettings;
   composio?: ComposioProvider;
   mcpOAuth?: McpOAuthBroker;
@@ -572,6 +593,11 @@ export function createRouter(deps: RouterDeps) {
   const repos = createRepos(deps.prisma);
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
+  const codexCatalog = deps.codexCatalog ?? new CodexCatalogCache();
+  const refreshExpiredCredential =
+    deps.refreshExpiredModelCredential ??
+    ((scope: { userId: string; spaceId: string }, secretId: string, provider: string) =>
+      kickModelCredentialRefresh(deps.prisma, deps.secrets, scope, secretId, provider));
   const groupRepos = createGroupRepos(deps.prisma);
   const taughtSkills = createTaughtSkillsService({
     prisma: deps.prisma,
@@ -867,7 +893,24 @@ export function createRouter(deps: RouterDeps) {
           deps.secrets,
           context.actor,
         );
-        return [...listAvailablePiCatalog(auth.byProvider, auth.byModel), scriptedCatalogEntry];
+        const available = listAvailablePiCatalog(auth.byProvider, auth.byModel);
+        const live = await codexLiveCatalogsForSpace(
+          deps.prisma,
+          deps.secrets,
+          context.actor,
+          auth,
+          codexCatalog,
+          {
+            // An expired bearer yields no catalog this round; kick the runtime's
+            // locked refresh so the next read can see the account's real list.
+            onExpiredToken: (secretId) =>
+              refreshExpiredCredential(context.actor, secretId, CHATGPT_OAUTH_PROVIDER),
+          },
+        );
+        return [
+          ...(live.size > 0 ? applyCodexLiveCatalog(available, auth, live) : available),
+          scriptedCatalogEntry,
+        ];
       }),
       credentials: authed.models.credentials.handler(async ({ context }) => {
         const rows = await deps.prisma.userModelCredential.findMany({
@@ -941,14 +984,19 @@ export function createRouter(deps: RouterDeps) {
             message: error instanceof Error ? error.message : "Invalid model connection",
           });
         }
-        return persistModelCredential(deps, context.actor, {
-          provider: input.provider,
-          plaintext,
-          label: input.label,
-          modelId: input.modelId,
-          supportsImages: input.supportsImages,
-          signal: context.signal,
-        });
+        return persistModelCredential(
+          deps,
+          context.actor,
+          {
+            provider: input.provider,
+            plaintext,
+            label: input.label,
+            modelId: input.modelId,
+            supportsImages: input.supportsImages,
+            signal: context.signal,
+          },
+          codexCatalog,
+        );
       }),
       probeOpenAiCompatible: authed.models.probeOpenAiCompatible.handler(
         async ({ context, input }) => {
@@ -988,15 +1036,20 @@ export function createRouter(deps: RouterDeps) {
           input.loginId,
           context.actor,
           async (login) => {
-            return persistModelCredential(deps, context.actor, {
-              provider: login.provider,
-              plaintext: serializeModelSecret({ kind: "oauth", credential: login.credential }),
-              label:
-                login.label ??
-                listPiCatalog().find((entry) => entry.provider === login.provider)?.providerName,
-              modelId: login.modelId,
-              signal: login.signal,
-            });
+            return persistModelCredential(
+              deps,
+              context.actor,
+              {
+                provider: login.provider,
+                plaintext: serializeModelSecret({ kind: "oauth", credential: login.credential }),
+                label:
+                  login.label ??
+                  listPiCatalog().find((entry) => entry.provider === login.provider)?.providerName,
+                modelId: login.modelId,
+                signal: login.signal,
+              },
+              codexCatalog,
+            );
           },
         );
         if (result.status === "pending") {
@@ -1012,28 +1065,58 @@ export function createRouter(deps: RouterDeps) {
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
-        await withSerializableRetry(() =>
-          deps.prisma.$transaction(
+        const loadSpaceModelState = async (
+          client: Pick<PrismaClient, "spaceModelPreference" | "userModelCredential">,
+        ) => {
+          const [preferences, credentials] = await Promise.all([
+            client.spaceModelPreference.findMany({
+              where: {
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                credential: { provider: input.provider },
+              },
+              include: { credential: true },
+            }),
+            client.userModelCredential.findMany({
+              where: { userId: context.actor.userId, provider: input.provider },
+            }),
+          ]);
+          return {
+            preferences,
+            candidates: defaultModelCredentialCandidates({
+              provider: input.provider,
+              modelId: input.modelId,
+              preferences,
+              credentials,
+            }),
+          };
+        };
+        await withSerializableRetry(async () => {
+          // Warm each candidate's live catalog before opening the serializable
+          // transaction — the in-transaction reads use waitMs 0 so the tx never
+          // waits on network. The warm also kicks a detached credential refresh
+          // for expired bearers so a retried call sees the rotated token.
+          const warm = await loadSpaceModelState(deps.prisma).catch(() => undefined);
+          await Promise.all(
+            (warm?.candidates ?? []).map((candidate) =>
+              readStoredModelAuth(
+                deps.prisma,
+                deps.secrets,
+                context.actor.userId,
+                candidate.secretId,
+                input.provider,
+                input.modelId,
+                codexCatalog,
+                {
+                  onExpiredToken: () =>
+                    refreshExpiredCredential(context.actor, candidate.secretId, input.provider),
+                },
+              ).catch(() => undefined),
+            ),
+          );
+          return deps.prisma.$transaction(
             async (tx) => {
-              const [preferences, credentials] = await Promise.all([
-                tx.spaceModelPreference.findMany({
-                  where: {
-                    spaceId: context.actor.spaceId,
-                    userId: context.actor.userId,
-                    credential: { provider: input.provider },
-                  },
-                  include: { credential: true },
-                }),
-                tx.userModelCredential.findMany({
-                  where: { userId: context.actor.userId, provider: input.provider },
-                }),
-              ]);
-              const candidates = defaultModelCredentialCandidates({
-                provider: input.provider,
-                modelId: input.modelId,
-                preferences,
-                credentials,
-              });
+              const { preferences, candidates } = await loadSpaceModelState(tx);
               if (candidates.length === 0) {
                 throw new ORPCError("NOT_FOUND", {
                   message: `No model credential is connected for ${input.provider}.`,
@@ -1053,6 +1136,12 @@ export function createRouter(deps: RouterDeps) {
                   candidate.secretId,
                   input.provider,
                   input.modelId,
+                  codexCatalog,
+                  {
+                    waitMs: 0,
+                    onExpiredToken: () =>
+                      refreshExpiredCredential(context.actor, candidate.secretId, input.provider),
+                  },
                 );
                 if (auth.status === "unreadable") continue;
                 sawReadable = true;
@@ -1079,8 +1168,8 @@ export function createRouter(deps: RouterDeps) {
               await selectSpaceModelPreference(tx, context.actor, credentialId, input.modelId);
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-          ),
-        );
+          );
+        });
         return { ok: true as const };
       }),
     },
@@ -1194,6 +1283,15 @@ export function createRouter(deps: RouterDeps) {
               credential.secretId,
               input.modelProvider,
               input.modelId,
+              codexCatalog,
+              {
+                onExpiredToken: () =>
+                  refreshExpiredCredential(
+                    context.actor,
+                    credential.secretId,
+                    input.modelProvider!,
+                  ),
+              },
             );
             if (authError) throw new ORPCError("BAD_REQUEST", { message: authError });
           }
@@ -5394,13 +5492,27 @@ async function persistModelCredential(
     supportsImages?: boolean;
     signal?: AbortSignal;
   },
+  codexCatalog: CodexLiveCatalog,
 ) {
   throwIfAborted(input.signal);
   const requestedModelId = usableModelId(input.modelId);
   const authError = requestedModelId
     ? validateModelAuthAvailability(input.provider, requestedModelId, input.plaintext)
     : undefined;
-  if (authError) throw new ORPCError("BAD_REQUEST", { message: authError });
+  // The backend's live catalog can clear a static OAuth exclusion for the
+  // account this credential signs into (e.g. Codex Spark on ChatGPT plans).
+  if (
+    authError &&
+    requestedModelId &&
+    !(await codexLiveListsModel(
+      codexCatalog,
+      actor.userId,
+      parseModelSecret(input.plaintext),
+      requestedModelId,
+    ))
+  ) {
+    throw new ORPCError("BAD_REQUEST", { message: authError });
+  }
   const stored = await deps.secrets.put(input.plaintext, {
     operationId: "cred",
     traceId: "cred",

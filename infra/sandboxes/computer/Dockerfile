@@ -36,6 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     fonts-dejavu-core \
     dbus-x11 \
+    xdg-desktop-portal \
+    xdg-desktop-portal-gtk \
     xdg-utils \
     curl \
     git \

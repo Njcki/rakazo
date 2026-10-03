@@ -95,11 +95,11 @@ import {
   type MobileSnapshot,
   mergeMobileSnapshot,
   messagingProviderLabel,
+  mobileThreadRefreshResult,
   prependMobileMessagePage,
   rpc,
   selectedSpaceId,
   selectSpace,
-  shouldApplyMobileThreadRefresh,
   subscribeThread,
 } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
@@ -786,23 +786,26 @@ function Thread() {
     );
     // Only the newest started refresh may commit. Threads also receive live
     // events; an older snapshot must not overwrite those while a newer refresh
-    // is already in flight.
-    if (
-      generation !== refreshGeneration.current ||
-      !shouldApplyMobileThreadRefresh({
-        requestEpoch: epoch,
-        currentEpoch: historyEpoch.current,
-        targetBotId,
-        targetGroupId,
-        activeBotId: activeBotId.current,
-        activeGroupId: activeGroupId.current,
-      })
-    )
-      return next;
-    commitSnap(
-      mergeMobileSnapshot(snapRef.current, next, expandedHistoryThread.current === next.threadId),
-    );
-    return next;
+    // is already in flight. The subscription starts from the snapshot returned
+    // here, so a discarded fetch must not supply its cursor.
+    const result = mobileThreadRefreshResult({
+      fetched: next,
+      onScreen: snapRef.current,
+      requestGeneration: generation,
+      currentGeneration: refreshGeneration.current,
+      requestEpoch: epoch,
+      currentEpoch: historyEpoch.current,
+      targetBotId,
+      targetGroupId,
+      activeBotId: activeBotId.current,
+      activeGroupId: activeGroupId.current,
+    });
+    if (result.commit) {
+      commitSnap(
+        mergeMobileSnapshot(snapRef.current, next, expandedHistoryThread.current === next.threadId),
+      );
+    }
+    return result.snapshot ?? undefined;
   }
 
   async function applyMessageJump(target: { botId?: string; groupId?: string; messageId: string }) {

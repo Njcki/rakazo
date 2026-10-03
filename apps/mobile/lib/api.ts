@@ -888,6 +888,27 @@ export function shouldApplyMobileThreadRefresh(input: {
   );
 }
 
+/**
+ * What a refresh may hand the live subscription. The server replays events
+ * after this snapshot's cursor, so an uncommitted fetch must not supply it.
+ */
+export function mobileThreadRefreshResult(input: {
+  fetched: MobileSnapshot;
+  onScreen: MobileSnapshot | null;
+  requestGeneration: number;
+  currentGeneration: number;
+  requestEpoch: number;
+  currentEpoch: number;
+  targetBotId: string | undefined;
+  targetGroupId: string | undefined;
+  activeBotId: string | undefined;
+  activeGroupId: string | undefined;
+}): { commit: boolean; snapshot: MobileSnapshot | null } {
+  const commit =
+    input.requestGeneration === input.currentGeneration && shouldApplyMobileThreadRefresh(input);
+  return { commit, snapshot: commit ? input.fetched : input.onScreen };
+}
+
 export type MobileMessagePage = ThreadHistory<MobileMessage>;
 
 export function mergeMobileSnapshot(

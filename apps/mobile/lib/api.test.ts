@@ -18,6 +18,7 @@ import {
   MAX_MOBILE_AUTH_RESPONSE_BYTES,
   MAX_MOBILE_RPC_RESPONSE_BYTES,
   mergeMobileSnapshot,
+  mobileThreadRefreshResult,
   passwordResetCapabilities,
   prependMobileMessagePage,
   requestPasswordReset,
@@ -1940,6 +1941,80 @@ describe("mobile thread refresh targeting", () => {
     await refresh;
 
     expect(applied).toBeNull();
+  });
+});
+
+describe("discarded mobile thread refresh cursor", () => {
+  const onScreen = {
+    ...snapshot([mobileMessage("shown", [{ kind: "text", text: "shown" }], 2)]),
+    cursor: 2,
+  };
+  const fetched = {
+    ...snapshot([
+      mobileMessage("shown", [{ kind: "text", text: "shown" }], 2),
+      mobileMessage("missed", [{ kind: "text", text: "from the discarded snapshot" }], 4),
+      mobileMessage("also-missed", [{ kind: "text", text: "also only in that snapshot" }], 5),
+    ]),
+    cursor: 5,
+  };
+  const gate = {
+    fetched,
+    onScreen,
+    requestEpoch: 1,
+    currentEpoch: 1,
+    requestGeneration: 1,
+    currentGeneration: 1,
+    targetBotId: "bot-1",
+    targetGroupId: undefined,
+    activeBotId: "bot-1",
+    activeGroupId: undefined,
+  };
+
+  // The server replays events with seq greater than the subscription cursor.
+  function shownAfter(cursor: number) {
+    const events = [
+      {
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "missed",
+          role: "bot",
+          blocks: [{ kind: "text", text: "from the discarded snapshot" }],
+        },
+      },
+      {
+        type: "thread.message.created",
+        seq: 5,
+        payload: {
+          messageId: "also-missed",
+          role: "bot",
+          blocks: [{ kind: "text", text: "also only in that snapshot" }],
+        },
+      },
+    ];
+    return events.reduce<MobileSnapshot>(
+      (view, event) => (event.seq > cursor ? (applyMobileThreadEvent(view, event) ?? view) : view),
+      onScreen,
+    );
+  }
+
+  it("shows events only a discarded refresh had seen when a newer refresh fails", () => {
+    for (const discard of [{ currentGeneration: 2 }, { currentEpoch: 2 }]) {
+      const result = mobileThreadRefreshResult({ ...gate, ...discard });
+      const shown = shownAfter(result.snapshot?.cursor ?? -1);
+      expect(result.commit).toBe(false);
+      expect(shown.messages.map((message) => message.id)).toEqual([
+        "shown",
+        "missed",
+        "also-missed",
+      ]);
+    }
+  });
+
+  it("starts the subscription at a snapshot the refresh committed", () => {
+    const result = mobileThreadRefreshResult(gate);
+    expect(result.commit).toBe(true);
+    expect(result.snapshot?.cursor).toBe(fetched.cursor);
   });
 });
 

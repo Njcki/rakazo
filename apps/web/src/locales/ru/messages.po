@@ -1671,8 +1671,9 @@ msgstr "Отклонить"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Default"
-msgstr ""
+msgstr "По умолчанию"
 
 #. js-lingui-explicit-id
 #. placeholder {0}: thinkingLevelLabel("medium")

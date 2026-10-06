@@ -3384,6 +3384,9 @@ const MessageBubble = memo(function MessageBubble({
             </Pressable>
           ),
         )}
+        {message.role === "bot" && onPlay && speakableMessageText(message) ? (
+          <MessageSpeakButton messageId={message.id} onPlay={onPlay} />
+        ) : null}
         {appConnectBlocks.map((block, index) => (
           <AppConnectCard
             key={`${block.provider}-${index}`}
@@ -3468,9 +3471,6 @@ function MessageTextCard({
 }) {
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
-  const { t } = useI18n();
-  const playback = useSyncExternalStore(subscribeVoicePlayback, getVoicePlaybackState);
-  const isSpeakingThis = playback.messageId === message.id && playback.status !== "idle";
   const contentText = blockText(message);
   if (!contentText) return null;
   return (
@@ -3531,24 +3531,32 @@ function MessageTextCard({
           </ChatMarkdown>
         )
       }
-      {onPlay ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("Play")}
-          accessibilityState={{ disabled: isSpeakingThis }}
-          disabled={isSpeakingThis}
-          onPress={onPlay}
-          hitSlop={6}
-          style={[messagePlayStyles.button, { opacity: isSpeakingThis ? 0.4 : 1 }]}
-        >
-          <NativeSymbol
-            ios={isSpeakingThis ? "waveform" : "play.fill"}
-            android={isSpeakingThis ? "pulse-outline" : "play"}
-            size={13}
-            color={tokens.mutedForeground}
-          />
-        </Pressable>
-      ) : null}
+      {onPlay ? <MessageSpeakButton messageId={message.id} onPlay={onPlay} /> : null}
+    </Pressable>
+  );
+}
+
+function MessageSpeakButton({ messageId, onPlay }: { messageId: string; onPlay: () => void }) {
+  const tokens = mobileTokens();
+  const { t } = useI18n();
+  const playback = useSyncExternalStore(subscribeVoicePlayback, getVoicePlaybackState);
+  const isSpeakingThis = playback.messageId === messageId && playback.status !== "idle";
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={t("Play")}
+      accessibilityState={{ disabled: isSpeakingThis }}
+      disabled={isSpeakingThis}
+      onPress={onPlay}
+      hitSlop={6}
+      style={[messagePlayStyles.button, { opacity: isSpeakingThis ? 0.4 : 1 }]}
+    >
+      <NativeSymbol
+        ios={isSpeakingThis ? "waveform" : "play.fill"}
+        android={isSpeakingThis ? "pulse-outline" : "play"}
+        size={13}
+        color={tokens.mutedForeground}
+      />
     </Pressable>
   );
 }

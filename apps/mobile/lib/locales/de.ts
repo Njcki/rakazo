@@ -165,6 +165,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Skill {name}": "Skill {name}",
   "Skipped {items}": "{items} übersprungen",
   "Speak message": "Nachricht vorlesen",
+  "Select text": "Text auswählen",
   "All bots": "Alle Bots",
   Artifact: "Artefakt",
   Artifacts: "Artefakte",

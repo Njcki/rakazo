@@ -18,6 +18,7 @@ import {
   buildComposerMentionOptions,
   type ComposerMention,
   cloudAgentHttpsUrl,
+  formatFileSize,
   formatMessageTime,
   groupVoiceChats,
   isApprovalAskBlock,
@@ -3237,16 +3238,15 @@ const MessageBubble = memo(function MessageBubble({
               >
                 📎 {attachment.name ?? t("File")}
               </Text>
-              {attachment.size ? (
+              {formatFileSize(attachment.size) ? (
                 <Text
                   style={{
-                    color:
-                      message.role === "user" ? tokens.secondaryForeground : tokens.mutedForeground,
+                    color: tokens.mutedForeground,
                     marginTop: 4,
                     fontSize: 13,
                   }}
                 >
-                  {attachment.mimeType ?? "file"} · {attachment.size} bytes
+                  {formatFileSize(attachment.size)}
                 </Text>
               ) : null}
             </Pressable>

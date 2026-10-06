@@ -120,6 +120,7 @@ import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-o
 import { nextAutoSpeakAction } from "../lib/auto-speak";
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import { setCallProviderTranscribe, startCall, useCallSession } from "../lib/call-session";
+import { transparentColor } from "../lib/color";
 import { loadDeviceVoiceEnabled } from "../lib/device-voice";
 import { available as dictationAvailable } from "../lib/dictation";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
@@ -303,6 +304,7 @@ export default function ThreadRoute() {
 
 function createThreadHeaderStyles() {
   const tokens = mobileTokens();
+  const transparentBackground = transparentColor(tokens.background);
   return StyleSheet.create({
     titleCapsule: {
       flexDirection: "row",
@@ -327,7 +329,15 @@ function createThreadHeaderStyles() {
       top: 0,
       left: 0,
       right: 0,
-      experimental_backgroundImage: `linear-gradient(to bottom, ${tokens.background} 0%, ${tokens.background} 58%, ${tokens.background}00 100%)`,
+      experimental_backgroundImage: `linear-gradient(to bottom, ${tokens.background} 0%, ${tokens.background} 58%, ${transparentBackground} 100%)`,
+    },
+    composerFade: {
+      position: "absolute",
+      bottom: "100%",
+      left: -20,
+      right: -20,
+      height: 24,
+      experimental_backgroundImage: `linear-gradient(to top, ${tokens.background} 0%, ${transparentBackground} 100%)`,
     },
   });
 }
@@ -523,6 +533,7 @@ function Thread() {
       : [];
   const currentBot = botId ? mentionBots.find((bot) => bot.id === botId) : undefined;
   const displayName = currentBot?.name ?? name;
+  const composerPrompt = displayName ? t("Message {name}", { name: displayName }) : t("Message…");
   const notificationThreadId = snap?.threadId ?? requestedThreadId ?? currentBot?.threadId;
   activeThreadId.current = notificationThreadId;
   const currentBotStatus = snap ? snap.run?.status : currentBot?.status;
@@ -1234,6 +1245,16 @@ function Thread() {
     });
   }
 
+  const composerPillStyle = {
+    width: 36,
+    height: 28,
+    borderRadius: 14,
+    marginBottom: 8,
+    backgroundColor: tokens.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  } as const;
+
   const canSend =
     Boolean(draft.trim()) ||
     selectedSkill !== null ||
@@ -1882,7 +1903,7 @@ function Thread() {
             key={jumpScrollTarget.current ?? pinnedTarget?.messageId ?? threadKey}
             ref={pinnedScroll}
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingTop: headerHeight + 8 }}
+            contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 16 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           >
             {loadEarlierControl}
@@ -1899,7 +1920,7 @@ function Thread() {
             extraData={answerableAskMessageId}
             style={{ flex: 1 }}
             // Inverted, so the bottom padding is the visual top, clear of the transparent header.
-            contentContainerStyle={{ paddingBottom: headerHeight + 8 }}
+            contentContainerStyle={{ paddingBottom: headerHeight + 8, paddingTop: 16 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             scrollEventThrottle={16}
             onScrollBeginDrag={() => {
@@ -1993,6 +2014,8 @@ function Thread() {
       {/* Fades messages out under the transparent header; the alpha stop keeps the page hue. */}
       <View pointerEvents="none" style={[styles.headerFade, { height: headerHeight + 24 }]} />
       <View style={{ paddingBottom: keyboardVisible ? 12 : Math.max(insets.bottom + 12, 24) }}>
+        {/* Fades messages out above the composer, like the header fade. */}
+        <View pointerEvents="none" style={styles.composerFade} />
         {replyTarget ? (
           <View
             style={{
@@ -2197,14 +2220,7 @@ function Thread() {
             ))}
           </View>
         ) : null}
-        <View
-          style={{
-            flexDirection: "row",
-            gap: 8,
-            marginTop: 16,
-            alignItems: "flex-end",
-          }}
-        >
+        <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10, marginTop: 8 }}>
           <Pressable
             accessibilityLabel={t("Attach file")}
             onPress={showAttachMenu}
@@ -2212,7 +2228,8 @@ function Thread() {
               width: 44,
               height: 44,
               borderRadius: 22,
-              borderWidth: 1,
+              backgroundColor: tokens.card,
+              borderWidth: StyleSheet.hairlineWidth,
               borderColor: tokens.border,
               alignItems: "center",
               justifyContent: "center",
@@ -2223,180 +2240,191 @@ function Thread() {
           <View
             style={{
               flex: 1,
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 6,
-              backgroundColor: tokens.card,
-              borderRadius: 20,
-              paddingHorizontal: 10,
-              paddingVertical: 8,
               minHeight: 44,
+              borderRadius: 22,
+              backgroundColor: tokens.card,
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: tokens.border,
+              flexDirection: "row",
+              alignItems: "flex-end",
+              paddingStart: 16,
+              paddingEnd: 4,
             }}
           >
-            {selectedSkill ? (
-              <View
-                testID="skill-chip"
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  backgroundColor: tokens.muted,
-                  borderRadius: 999,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  maxWidth: "100%",
-                }}
-              >
-                <NativeSymbol
-                  ios="cube"
-                  android="cube-outline"
-                  size={13}
-                  color={tokens.mutedForeground}
-                />
-                <Text
-                  numberOfLines={1}
-                  style={{ color: tokens.foreground, fontSize: 13, flexShrink: 1 }}
-                >
-                  {selectedSkill.name}
-                </Text>
-                <Pressable
-                  accessibilityLabel={t("Remove skill {name}", { name: selectedSkill.name })}
-                  hitSlop={8}
-                  onPress={() => setSelectedSkill(null)}
-                >
-                  <NativeSymbol
-                    ios="xmark"
-                    android="close"
-                    size={12}
-                    color={tokens.mutedForeground}
-                  />
-                </Pressable>
-              </View>
-            ) : null}
-            {selectedMentions.map((mention) => (
-              <View
-                key={mentionChipKey(mention)}
-                testID="mention-chip"
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                  backgroundColor: tokens.muted,
-                  borderRadius: 999,
-                  paddingHorizontal: 10,
-                  paddingVertical: 5,
-                  maxWidth: "100%",
-                }}
-              >
-                <MentionChipIcon mention={mention} />
-                <Text
-                  numberOfLines={1}
-                  style={{ color: tokens.foreground, fontSize: 13, flexShrink: 1 }}
-                >
-                  {mention.name}
-                </Text>
-                <Pressable
-                  accessibilityLabel={t("Remove mention {name}", { name: mention.name })}
-                  hitSlop={8}
-                  onPress={() =>
-                    setSelectedMentions((current) =>
-                      current.filter(
-                        (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
-                      ),
-                    )
-                  }
-                >
-                  <NativeSymbol
-                    ios="xmark"
-                    android="close"
-                    size={12}
-                    color={tokens.mutedForeground}
-                  />
-                </Pressable>
-              </View>
-            ))}
-            <TextInput
-              value={draft}
-              onChangeText={updateDraft}
-              accessibilityLabel={
-                displayName ? t("Message {name}", { name: displayName }) : t("Message")
-              }
-              onKeyPress={(event) => {
-                if (
-                  event.nativeEvent.key === "Backspace" &&
-                  draft.length === 0 &&
-                  (selectedSkill !== null || selectedMentions.length > 0)
-                ) {
-                  removeLastChip();
-                }
-              }}
-              placeholder={
-                selectedSkill || selectedMentions.length
-                  ? undefined
-                  : displayName
-                    ? t("Message {name}", { name: displayName })
-                    : t("Message…")
-              }
-              placeholderTextColor={tokens.mutedForeground}
-              keyboardAppearance={colorScheme}
-              multiline
-              textAlignVertical="center"
-              blurOnSubmit={false}
+            <View
               style={{
-                flexGrow: 1,
-                flexShrink: 1,
-                minWidth: 96,
-                color: tokens.foreground,
-                paddingVertical: 2,
-                maxHeight: 100,
-                writingDirection: "auto",
-              }}
-            />
-          </View>
-          {botId && !onCall && draft.trim().length === 0 ? (
-            <Pressable
-              accessibilityLabel={t("Call")}
-              onPress={() => void startVoiceCall()}
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                borderWidth: 1,
-                borderColor: tokens.border,
+                flex: 1,
+                flexDirection: "row",
+                flexWrap: "wrap",
                 alignItems: "center",
-                justifyContent: "center",
+                gap: 6,
               }}
             >
-              <NativeSymbol
-                ios="waveform"
-                android="pulse-outline"
-                size={18}
-                color={tokens.mutedForeground}
-              />
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityLabel={t("Send")}
-            disabled={sending || !canSend}
-            onPress={() => void send()}
-            style={{
-              backgroundColor: tokens.primary,
-              borderRadius: 22,
-              width: 44,
-              height: 44,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: sending || !canSend ? 0.5 : 1,
-            }}
-          >
-            <NativeSymbol
-              ios="arrow.up"
-              android="arrow-up"
-              size={18}
-              color={tokens.primaryForeground}
-            />
-          </Pressable>
+              {selectedSkill ? (
+                <View
+                  testID="skill-chip"
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: tokens.muted,
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    maxWidth: "100%",
+                  }}
+                >
+                  <NativeSymbol
+                    ios="cube"
+                    android="cube-outline"
+                    size={13}
+                    color={tokens.mutedForeground}
+                  />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: tokens.foreground, fontSize: 13, flexShrink: 1 }}
+                  >
+                    {selectedSkill.name}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={t("Remove skill {name}", { name: selectedSkill.name })}
+                    hitSlop={8}
+                    onPress={() => setSelectedSkill(null)}
+                  >
+                    <NativeSymbol
+                      ios="xmark"
+                      android="close"
+                      size={12}
+                      color={tokens.mutedForeground}
+                    />
+                  </Pressable>
+                </View>
+              ) : null}
+              {selectedMentions.map((mention) => (
+                <View
+                  key={mentionChipKey(mention)}
+                  testID="mention-chip"
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    backgroundColor: tokens.muted,
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    maxWidth: "100%",
+                  }}
+                >
+                  <MentionChipIcon mention={mention} />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: tokens.foreground, fontSize: 13, flexShrink: 1 }}
+                  >
+                    {mention.name}
+                  </Text>
+                  <Pressable
+                    accessibilityLabel={t("Remove mention {name}", { name: mention.name })}
+                    hitSlop={8}
+                    onPress={() =>
+                      setSelectedMentions((current) =>
+                        current.filter(
+                          (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
+                        ),
+                      )
+                    }
+                  >
+                    <NativeSymbol
+                      ios="xmark"
+                      android="close"
+                      size={12}
+                      color={tokens.mutedForeground}
+                    />
+                  </Pressable>
+                </View>
+              ))}
+              <View style={{ flexGrow: 1, flexShrink: 1, minWidth: 96 }}>
+                {!draft && !selectedSkill && !selectedMentions.length ? (
+                  <Text
+                    numberOfLines={1}
+                    importantForAccessibility="no"
+                    accessibilityElementsHidden
+                    accessible={false}
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      top: 11,
+                      start: 0,
+                      end: 0,
+                      fontSize: 17,
+                      lineHeight: 22,
+                      color: tokens.mutedForeground,
+                    }}
+                  >
+                    {composerPrompt}
+                  </Text>
+                ) : null}
+                <TextInput
+                  value={draft}
+                  onChangeText={updateDraft}
+                  accessibilityLabel={composerPrompt}
+                  onKeyPress={(event) => {
+                    if (
+                      event.nativeEvent.key === "Backspace" &&
+                      draft.length === 0 &&
+                      (selectedSkill !== null || selectedMentions.length > 0)
+                    ) {
+                      removeLastChip();
+                    }
+                  }}
+                  keyboardAppearance={colorScheme}
+                  multiline
+                  textAlignVertical="top"
+                  blurOnSubmit={false}
+                  style={{
+                    color: tokens.foreground,
+                    fontSize: 17,
+                    lineHeight: 22,
+                    paddingTop: 11,
+                    paddingBottom: 11,
+                    maxHeight: 132,
+                    writingDirection: "auto",
+                  }}
+                />
+              </View>
+            </View>
+            {!canSend && botId && !onCall ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Call")}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                onPress={() => void startVoiceCall()}
+                style={composerPillStyle}
+              >
+                <NativeSymbol
+                  ios="waveform"
+                  android="pulse-outline"
+                  size={15}
+                  color={tokens.primaryForeground}
+                />
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Send")}
+                disabled={sending || !canSend}
+                hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+                onPress={() => void send()}
+                style={[composerPillStyle, { opacity: sending || !canSend ? 0.5 : 1 }]}
+              >
+                <NativeSymbol
+                  ios="arrow.up"
+                  android="arrow-up"
+                  size={15}
+                  color={tokens.primaryForeground}
+                />
+              </Pressable>
+            )}
+          </View>
           {working ? (
             <Pressable
               accessibilityLabel={t("Stop")}

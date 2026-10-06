@@ -14,18 +14,22 @@ import {
 import type { ThreadItem } from "@rakazo/core";
 import {
   abortableDelay,
+  appendNewerThreadPage,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
   cloudAgentHttpsUrl,
   formatFileSize,
   formatMessageTime,
+  forwardProbeAfterPage,
   groupVoiceChats,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
   latestAnswerableAskMessageId,
+  leaveThreadWindow,
   mentionChipKey,
+  openThreadWindow,
   plainTextFromMarkdown,
   projectMessageReactions,
   resolveComposerSendPlan,
@@ -34,6 +38,7 @@ import {
   type SlashActionId,
   selectedAskActionLabel,
   serializeComposerPrompt,
+  threadWindowMessages,
   truncateSlashDescription,
   userVisibleMessages,
   withLiveStreamingProgress,
@@ -381,8 +386,9 @@ function Thread() {
     groupId?: string;
     messageId: string;
     threadId: string;
-    messages: readonly MobileMessage[];
-    olderCursor: number | null;
+    newerCursor: number | null;
+    coveredThroughSeq?: number;
+    probeSeq?: number;
   } | null>(null);
   const jumpScrollTarget = useRef<string | null>(null);
   const activeBotId = useRef(botId);
@@ -405,6 +411,7 @@ function Thread() {
     expandedHistoryThread.current = null;
     pinnedAroundRef.current = null;
     jumpScrollTarget.current = null;
+    joinPinnedAfterLayout.current = null;
     loadingOlderContent.current = false;
     setThreadScrollState(scrollBehavior.current.state());
   }, [threadKey]);
@@ -459,6 +466,12 @@ function Thread() {
   const [error, setError] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [selectableText, setSelectableText] = useState<string | null>(null);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  const loadingNewerContent = useRef(false);
+  // A failed newer page waits for the next drag instead of retrying on every scroll event.
+  const newerLoadFailed = useRef(false);
+  const pinnedScrollMetrics = useRef({ offset: 0, viewport: 0, content: 0 });
+  const joinPinnedAfterLayout = useRef<number | null>(null);
   const [markdownPreview, setMarkdownPreview] = useState<MarkdownArtifactPreviewTarget | null>(
     null,
   );
@@ -929,22 +942,106 @@ function Thread() {
     if (target.groupId && activeGroupId.current !== target.groupId) return;
     if (target.botId && activeBotId.current !== target.botId) return;
     const targetInPage = page.messages.some((message) => message.id === target.messageId);
+    const opened = targetInPage ? openThreadWindow(snap, page) : null;
     expandedHistoryThread.current = targetInPage ? page.threadId : null;
-    pinnedAroundRef.current = targetInPage
+    pinnedAroundRef.current = opened
       ? {
           ...threadTarget,
           messageId: target.messageId,
           threadId: page.threadId,
-          messages: [...page.messages],
-          olderCursor: page.olderCursor,
+          newerCursor: opened.newerCursor,
         }
       : null;
     jumpScrollTarget.current = targetInPage ? target.messageId : null;
-    commitSnap({
-      ...snap,
-      messages: targetInPage ? [...page.messages] : snap.messages,
-      olderCursor: targetInPage ? page.olderCursor : snap.olderCursor,
-    });
+    newerLoadFailed.current = false;
+    joinPinnedAfterLayout.current = null;
+    pinnedScrollMetrics.current = { offset: 0, viewport: 0, content: 0 };
+    commitSnap(opened?.snapshot ?? snap);
+  }
+
+  async function loadNewerMessages() {
+    const pinned = pinnedAroundRef.current;
+    if (
+      (!botId && !groupId) ||
+      pinned?.newerCursor == null ||
+      loadingNewerContent.current ||
+      newerLoadFailed.current
+    )
+      return;
+    loadingNewerContent.current = true;
+    setLoadingNewer(true);
+    const epoch = historyEpoch.current;
+    const probe = pinned.probeSeq ?? pinned.newerCursor + 1;
+    let visibleUnchanged = false;
+    try {
+      // Pages come back centered on the seq, so the one after the cursor overlaps what is loaded.
+      const page = await rpc<MobileMessagePage & { coveredThroughSeq?: number }>(
+        "threads/messages",
+        {
+          ...(groupId ? { groupId } : { botId: botId! }),
+          around: { seq: probe },
+        },
+      );
+      if (epoch !== historyEpoch.current || pinnedAroundRef.current !== pinned || !snapRef.current)
+        return;
+      const visibleBefore = threadWindowMessages(
+        snapRef.current.messages,
+        pinned.newerCursor,
+      ).length;
+      const reported = page.coveredThroughSeq ?? null;
+      const carried =
+        reported == null ? undefined : Math.max(pinned.coveredThroughSeq ?? reported, reported);
+      const next = appendNewerThreadPage(
+        snapRef.current,
+        pinned.newerCursor,
+        page,
+        reported == null ? null : carried,
+      );
+      const step = forwardProbeAfterPage({
+        probe,
+        newerCursor: pinned.newerCursor,
+        nextCursor: next.newerCursor,
+        reportedCoverage: reported,
+        carriedCoverage: pinned.coveredThroughSeq,
+      });
+      if (step.stalled) newerLoadFailed.current = true;
+      visibleUnchanged =
+        threadWindowMessages(next.snapshot.messages, next.newerCursor).length === visibleBefore;
+      pinnedAroundRef.current = {
+        ...pinned,
+        newerCursor: next.newerCursor,
+        coveredThroughSeq: step.coverage,
+        probeSeq: step.probe,
+      };
+      commitSnap(next.snapshot);
+      if (next.newerCursor == null) {
+        joinPinnedAfterLayout.current = pinnedScrollMetrics.current.content;
+      }
+    } catch (err) {
+      if (epoch !== historyEpoch.current || pinnedAroundRef.current !== pinned) return;
+      newerLoadFailed.current = true;
+      setError(err instanceof Error ? err.message : t("Could not open message"));
+    } finally {
+      loadingNewerContent.current = false;
+      setLoadingNewer(false);
+      if (visibleUnchanged) loadNewerNearEnd();
+    }
+  }
+
+  function showLatest() {
+    const pinned = pinnedAroundRef.current;
+    pinnedAroundRef.current = null;
+    joinPinnedAfterLayout.current = null;
+    jumpScrollTarget.current = null;
+    expandedHistoryThread.current = null;
+    // The live list mounts at the latest message.
+    scrollBehavior.current.jumpToLatest();
+    setThreadScrollState(scrollBehavior.current.state());
+    commitSnap(
+      snapRef.current && pinned
+        ? leaveThreadWindow(snapRef.current, pinned.newerCursor)
+        : snapRef.current,
+    );
   }
 
   async function loadOlderMessages() {
@@ -952,13 +1049,14 @@ function Thread() {
     loadingOlderContent.current = true;
     setLoadingOlder(true);
     const epoch = historyEpoch.current;
+    const pinned = pinnedAroundRef.current;
     try {
       const page = await rpc<MobileMessagePage>("threads/messages", {
         ...(groupId ? { groupId } : { botId: botId! }),
         before: snap.olderCursor,
         includePeerReceipts: true,
       });
-      if (epoch !== historyEpoch.current) {
+      if (epoch !== historyEpoch.current || pinnedAroundRef.current !== pinned) {
         loadingOlderContent.current = false;
         return;
       }
@@ -1378,6 +1476,8 @@ function Thread() {
         return;
       }
       if (isCurrentTarget(botTarget, groupTarget)) {
+        // A sent message lands at the latest end, past an older page opened from search.
+        if (pinnedAroundRef.current) showLatest();
         void refresh().catch(() => undefined);
       }
     } catch (err) {
@@ -1580,6 +1680,7 @@ function Thread() {
         ((pinnedTarget.botId && pinnedTarget.botId === botId) ||
           (pinnedTarget.groupId && pinnedTarget.groupId === groupId))),
   );
+  const pinnedNewerCursor = showPinnedPage ? (pinnedTarget?.newerCursor ?? null) : null;
 
   function performScroll(action: ThreadScrollAction) {
     if (!action || showPinnedPage) return;
@@ -1587,6 +1688,34 @@ function Thread() {
       offset: 0,
       animated: action === "smooth" && !reducedMotion,
     });
+  }
+
+  function pinnedDistanceFromEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    return contentSize.height - layoutMeasurement.height - contentOffset.y;
+  }
+
+  function pinnedNearEnd() {
+    const { offset, viewport, content } = pinnedScrollMetrics.current;
+    return viewport > 0 && content - viewport - offset <= 80;
+  }
+
+  function loadNewerNearEnd() {
+    const { offset, viewport, content } = pinnedScrollMetrics.current;
+    // Fetch the next page while a screen of this one is still left to read; a page shorter
+    // than the screen never scrolls, so layout and content changes check too.
+    if (viewport > 0 && content - viewport - offset < viewport) void loadNewerMessages();
+  }
+
+  function updatePinnedScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    // Once the page reaches the latest message, the end of it is the live thread.
+    if (
+      pinnedNewerCursor === null &&
+      !jumpScrollTarget.current &&
+      pinnedDistanceFromEnd(event) <= 80
+    ) {
+      showLatest();
+    }
   }
 
   function updateUserScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -1905,10 +2034,47 @@ function Thread() {
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 16 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            scrollEventThrottle={16}
+            onLayout={(event) => {
+              pinnedScrollMetrics.current.viewport = event.nativeEvent.layout.height;
+              loadNewerNearEnd();
+            }}
+            onContentSizeChange={(_, height) => {
+              pinnedScrollMetrics.current.content = height;
+              const armedAt = joinPinnedAfterLayout.current;
+              if (armedAt != null && height !== armedAt) {
+                joinPinnedAfterLayout.current = null;
+                if (pinnedAroundRef.current?.newerCursor == null && pinnedNearEnd()) {
+                  showLatest();
+                  return;
+                }
+              }
+              loadNewerNearEnd();
+            }}
+            onScroll={(event) => {
+              const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+              pinnedScrollMetrics.current = {
+                offset: contentOffset.y,
+                viewport: layoutMeasurement.height,
+                content: contentSize.height,
+              };
+              loadNewerNearEnd();
+            }}
+            onScrollBeginDrag={() => {
+              newerLoadFailed.current = false;
+            }}
+            onScrollEndDrag={updatePinnedScroll}
+            onMomentumScrollEnd={updatePinnedScroll}
           >
             {loadEarlierControl}
-            {visibleMessages.map((message) => renderMessageRow(message, { enableJump: true }))}
-            {workingFooter}
+            {threadWindowMessages(visibleMessages, pinnedNewerCursor).map((message) =>
+              renderMessageRow(message, { enableJump: true }),
+            )}
+            {pinnedNewerCursor === null ? (
+              workingFooter
+            ) : loadingNewer ? (
+              <ActivityIndicator color={tokens.mutedForeground} style={{ marginVertical: 12 }} />
+            ) : null}
           </ScrollView>
         ) : (
           <FlatList
@@ -1964,13 +2130,17 @@ function Thread() {
             }
           />
         )}
-        {!showPinnedPage && threadScrollState.detached ? (
+        {showPinnedPage || threadScrollState.detached ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
               threadScrollState.unread ? t("Jump to latest, new messages") : t("Jump to latest")
             }
             onPress={() => {
+              if (showPinnedPage) {
+                showLatest();
+                return;
+              }
               performScroll(scrollBehavior.current.jumpToLatest());
               setThreadScrollState(scrollBehavior.current.state());
             }}

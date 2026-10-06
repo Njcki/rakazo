@@ -878,6 +878,7 @@ export const ThreadMessagePageSchema = z.object({
   threadId: Id,
   messages: z.array(ThreadMessageSchema),
   olderCursor: z.number().int().nonnegative().nullable(),
+  coveredThroughSeq: z.number().int().nonnegative().optional(),
 });
 export type ThreadMessagePage = z.infer<typeof ThreadMessagePageSchema>;
 

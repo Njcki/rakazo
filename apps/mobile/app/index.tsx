@@ -21,6 +21,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { KeyboardController } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotOrganizeModal } from "../components/bot-organize-modal";
@@ -605,7 +606,11 @@ export default function Home() {
               onPress={() => {
                 setQuery("");
                 setSearchHits([]);
-                router.push(mobileSearchDestination(item.hit));
+                // A thread that opens while the search keyboard is still up or closing sizes
+                // itself against that keyboard and can leave its composer off screen.
+                void KeyboardController.dismiss().then(() =>
+                  router.push(mobileSearchDestination(item.hit)),
+                );
               }}
             />
           ) : item.type === "heading" ? (

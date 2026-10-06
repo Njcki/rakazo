@@ -29,6 +29,7 @@ import {
   plainTextFromMarkdown,
   projectMessageReactions,
   resolveComposerSendPlan,
+  resolvePersonaColorDef,
   SLASH_ACTIONS,
   type SlashActionId,
   selectedAskActionLabel,
@@ -161,7 +162,7 @@ import {
   ThreadScrollBehavior,
   type ThreadScrollState,
 } from "../lib/thread-scroll";
-import { speakText } from "../lib/voice";
+import { getVoicePlaybackState, speakQueue, speakText, subscribeVoicePlayback } from "../lib/voice";
 import { probeProviderTranscribe, resolveVoiceCallPlan } from "../lib/voice-call-entry";
 
 type PendingAttachment = PickedAttachment & { threadKey: string };
@@ -211,6 +212,16 @@ function isWorkingStatus(status: string | undefined): boolean {
     status === "waiting_input" ||
     status === "waiting_takeover"
   );
+}
+
+const ATTACHMENT_PLACEHOLDER_LINE = /^\[(?:image|file|chart): .*\]$/;
+
+function speakableMessageText(message: MobileMessage): string {
+  return blockText(message)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !ATTACHMENT_PLACEHOLDER_LINE.test(line))
+    .join("\n");
 }
 
 export default function ThreadRoute() {
@@ -518,7 +529,13 @@ function Thread() {
     if (decision.action !== "speak") return;
     autoSpokenBotId.current = currentBot.id;
     autoSpoken.current = decision.messageId;
-    void speakText(decision.text, { botId: currentBot.id }).catch(() => undefined);
+    void speakText(decision.text, {
+      botId: currentBot.id,
+      speaker: {
+        name: currentBot.name,
+        color: resolvePersonaColorDef(currentBot.id, currentBot.color).light,
+      },
+    }).catch(() => undefined);
   }, [botId, inGroup, currentBot, navigation, snap?.botId, snap?.messages, snap?.run?.status]);
 
   useEffect(() => {
@@ -1371,12 +1388,37 @@ function Thread() {
   );
 
   const speak = useCallback(
-    (message: MobileMessage) =>
-      void speakMessage(message.botId ?? botId ?? snap?.members?.[0]?.botId ?? "", message).catch(
-        (err) =>
+    (message: MobileMessage) => {
+      const startIndex = visibleMessages.findIndex((candidate) => candidate.id === message.id);
+      const fromHere = startIndex === -1 ? [message] : visibleMessages.slice(startIndex);
+      const items = fromHere.flatMap((candidate) => {
+        if (candidate.role !== "bot") return [];
+        const text = speakableMessageText(candidate);
+        if (!text) return [];
+        const speakerBotId = candidate.botId ?? botId ?? snap?.members?.[0]?.botId ?? "";
+        return [
+          {
+            text,
+            botId: speakerBotId,
+            messageId: candidate.id,
+            speaker: {
+              name: memberName(snap?.members, speakerBotId) ?? displayName,
+              color: speakerColorFor(mentionBots, snap?.members, speakerBotId),
+            },
+          },
+        ];
+      });
+      if (items.length === 0) return;
+      void speakQueue(items)
+        .then((spoken) => {
+          if (!spoken)
+            Alert.alert(t("Could not speak"), t("Add a voice provider in Voice settings."));
+        })
+        .catch((err: unknown) =>
           Alert.alert(t("Could not speak"), err instanceof Error ? err.message : t("Try again.")),
-      ),
-    [botId, snap?.members],
+        );
+    },
+    [botId, displayName, mentionBots, snap?.members, visibleMessages],
   );
 
   async function startVoiceCall() {
@@ -1668,6 +1710,7 @@ function Thread() {
               onAnswer={answerMessage}
               onOpenBot={openBot}
               onPreviewMarkdown={setMarkdownPreview}
+              onPlay={onCall ? undefined : () => speak(message)}
               onPreviewImage={(target) =>
                 router.push({
                   pathname: "/image",
@@ -2638,12 +2681,17 @@ function memberName(
   return members.find((member) => member.botId === botId)?.name;
 }
 
-async function speakMessage(botId: string, message: MobileMessage) {
-  const text = blockText(message);
-  if (!text.trim()) return;
-  if (!(await speakText(text, { botId }))) {
-    throw new Error(t("Add a voice provider in Voice settings."));
-  }
+/** Each bot keeps one identity color across web and mobile — same lookup as the avatar. */
+function speakerColorFor(
+  bots: MobileBot[],
+  members: MobileSnapshot["members"] | undefined,
+  botId: string | undefined,
+): string | undefined {
+  if (!botId) return undefined;
+  const raw =
+    bots.find((bot) => bot.id === botId)?.color ??
+    members?.find((member) => member.botId === botId)?.color;
+  return resolvePersonaColorDef(botId, raw).light;
 }
 
 type MessageActionProps = Pick<
@@ -2663,6 +2711,7 @@ const MessageBubble = memo(function MessageBubble({
   onAnswer,
   onOpenBot,
   onPreviewMarkdown,
+  onPlay,
   onPreviewImage,
   actionProps,
 }: {
@@ -2677,6 +2726,7 @@ const MessageBubble = memo(function MessageBubble({
   onAnswer: (message: MobileMessage, answer: string, username?: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
+  onPlay?: () => void;
   onPreviewImage: (target: ImageArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
@@ -3110,6 +3160,8 @@ const MessageBubble = memo(function MessageBubble({
   if (attachments.length > 0) {
     const speaker =
       message.role === "bot" ? (memberName(members, message.botId) ?? botName) : undefined;
+    const speakerColor =
+      message.role === "bot" ? speakerColorFor(bots, members, message.botId) : undefined;
     return (
       <View
         style={{
@@ -3124,7 +3176,13 @@ const MessageBubble = memo(function MessageBubble({
         }}
       >
         {speaker ? (
-          <Text style={{ color: tokens.mutedForeground, fontSize: 12.5, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: speakerColor ?? tokens.mutedForeground,
+              fontSize: 12.5,
+              fontWeight: "600",
+            }}
+          >
             {speaker}
           </Text>
         ) : null}
@@ -3277,7 +3335,10 @@ const MessageBubble = memo(function MessageBubble({
   const segments = messagePresentationSegments(message.blocks);
   const speaker =
     message.role === "bot" ? (memberName(members, message.botId) ?? botName) : undefined;
+  const speakerColor =
+    message.role === "bot" ? speakerColorFor(bots, members, message.botId) : undefined;
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
+  const lastContent = segments.map((segment) => segment.kind).lastIndexOf("content");
   return (
     <View style={{ gap: 8, width: "100%" }}>
       {segments.map((segment, index) => (
@@ -3285,7 +3346,9 @@ const MessageBubble = memo(function MessageBubble({
           key={`${message.id}-content-${index}`}
           message={{ ...message, blocks: segment.blocks }}
           speaker={index === firstContent ? speaker : undefined}
+          speakerColor={index === firstContent ? speakerColor : undefined}
           replyPreview={index === firstContent ? replyPreview : undefined}
+          onPlay={message.role === "bot" && index === lastContent ? onPlay : undefined}
           actionProps={actionProps}
         />
       ))}
@@ -3302,19 +3365,38 @@ const MessageBubble = memo(function MessageBubble({
   );
 });
 
+const messagePlayStyles = StyleSheet.create({
+  button: {
+    alignSelf: "flex-end",
+    marginTop: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
 function MessageTextCard({
   message,
   speaker,
+  speakerColor,
   replyPreview,
+  onPlay,
   actionProps,
 }: {
   message: MobileMessage;
   speaker?: string;
+  speakerColor?: string;
   replyPreview?: MobileMessage;
+  onPlay?: () => void;
   actionProps: MessageActionProps;
 }) {
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
+  const { t } = useI18n();
+  const playback = useSyncExternalStore(subscribeVoicePlayback, getVoicePlaybackState);
+  const isSpeakingThis = playback.messageId === message.id && playback.status !== "idle";
   const contentText = blockText(message);
   if (!contentText) return null;
   return (
@@ -3332,7 +3414,7 @@ function MessageTextCard({
       {speaker ? (
         <Text
           style={{
-            color: tokens.mutedForeground,
+            color: speakerColor ?? tokens.mutedForeground,
             fontSize: 12.5,
             fontWeight: "600",
             marginBottom: 4,
@@ -3375,6 +3457,24 @@ function MessageTextCard({
           </ChatMarkdown>
         )
       }
+      {onPlay ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("Play")}
+          accessibilityState={{ disabled: isSpeakingThis }}
+          disabled={isSpeakingThis}
+          onPress={onPlay}
+          hitSlop={6}
+          style={[messagePlayStyles.button, { opacity: isSpeakingThis ? 0.4 : 1 }]}
+        >
+          <NativeSymbol
+            ios={isSpeakingThis ? "waveform" : "play.fill"}
+            android={isSpeakingThis ? "pulse-outline" : "play"}
+            size={13}
+            color={tokens.mutedForeground}
+          />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }

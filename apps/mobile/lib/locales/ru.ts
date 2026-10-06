@@ -486,6 +486,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Read replies aloud": "Читать ответы вслух",
   "Speak + transcribe": "Озвучить и расшифровать",
   "Speak message": "Озвучить сообщение",
+  Play: "Воспроизвести",
+  Pause: "Пауза",
   "Select text": "Выделить текст",
   Speak: "Озвучить",
   "Speak only": "Только озвучить",

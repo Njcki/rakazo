@@ -52,7 +52,7 @@ vi.mock("react-native", async () => {
     };
 
   return {
-    View: mockComponent("rn-view", ["minWidth"]),
+    View: mockComponent("rn-view", ["minWidth", "flex", "flexGrow"]),
     Text: mockComponent("rn-text", ["accessibilityRole", "textDecorationLine"]),
     ScrollView: mockComponent("rn-scroll-view", ["horizontal"]),
     Pressable: mockComponent("rn-pressable", ["accessibilityRole", "borderBottomWidth"]),
@@ -174,6 +174,32 @@ describe("user message links", () => {
       root.unmount();
     });
     container.remove();
+  });
+});
+
+describe("native markdown lists", () => {
+  it("gives list items an intrinsic width instead of a zero flex basis", () => {
+    // `flex: 1` on list content collapsed a shrink-wrapped bubble to one character wide.
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"- premier point\n- second point"}</ChatMarkdown>,
+    );
+    expect(html).toContain('data-flex-grow="1"');
+    expect(html).not.toContain('data-flex="1"');
+    expect(html).toContain("premier point");
+    const ordered = renderToStaticMarkup(<ChatMarkdown>{"3. trois\n4. quatre"}</ChatMarkdown>);
+    expect(ordered).toContain("3.");
+    expect(ordered).toContain("4.");
+    expect(ordered).not.toContain('data-flex="1"');
+  });
+
+  it("numbers an ordered list nested inside a bulleted one", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"- outer\n  1. first\n  2. second"}</ChatMarkdown>,
+    );
+    expect(html).toContain("1.");
+    expect(html).toContain("2.");
+    // One bullet for the outer item, none for the nested numbered items.
+    expect(html.split("\u00B7").length - 1).toBe(1);
   });
 });
 

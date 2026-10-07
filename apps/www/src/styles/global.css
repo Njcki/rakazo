@@ -2160,6 +2160,191 @@ button.button--secondary:focus-visible {
   color: var(--blue);
 }
 
+.alt-page {
+  max-width: 960px;
+  padding: 72px 0 110px;
+}
+
+.alt-page h1 {
+  margin: 0 0 18px;
+  color: var(--ink);
+  font-family: Aeonik, Geist, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(2rem, 4vw, 40px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.alt-page h2 {
+  margin: 48px 0 12px;
+  color: var(--ink);
+  font-family: Aeonik, Geist, ui-sans-serif, system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.alt-page h3 {
+  margin: 22px 0 6px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.alt-page p,
+.alt-page li {
+  color: var(--body);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.alt-page ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.alt-page p a:not(.button),
+.alt-page li a:not(.button) {
+  color: var(--blue);
+}
+
+.alt-page p a:not(.button):hover,
+.alt-page p a:not(.button):focus-visible,
+.alt-page li a:not(.button):hover,
+.alt-page li a:not(.button):focus-visible {
+  color: var(--blue-bottom);
+}
+
+.alt-page .alt-crumb {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.alt-page .alt-note {
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+.alt-page ul.source-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.alt-page ul.source-list li {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.alt-page ul.source-list li:not(:last-child)::after {
+  content: ",\00a0";
+  color: var(--muted);
+}
+
+.alt-page ul.source-list a {
+  color: var(--muted-2);
+}
+
+.alt-page ul.source-list a:hover,
+.alt-page ul.source-list a:focus-visible {
+  color: var(--ink);
+}
+
+.alt-table-wrap {
+  margin: 28px 0 8px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.alt-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.alt-table caption {
+  caption-side: top;
+}
+
+.alt-table th,
+.alt-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.alt-table tr:last-child th,
+.alt-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.alt-table thead th {
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.alt-table th[scope="row"] {
+  width: 18%;
+  min-width: 7.5rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.alt-page .alt-index {
+  display: grid;
+  gap: 12px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alt-card {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 22px 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.alt-card:hover,
+.alt-card:focus-visible {
+  border-color: var(--line-2);
+}
+
+.alt-card h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.alt-card p {
+  margin: 8px 0 0;
+}
+
+.alt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
 .guide {
   max-width: 920px;
   padding: 72px 0 110px;

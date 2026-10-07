@@ -1,0 +1,30 @@
+---
+import { ALTERNATIVES, ALTERNATIVES_HUB, COMPARED_ON, GET_STARTED, alternativePath } from "../alternatives";
+import { DOCS_URL, GITHUB_URL } from "../site";
+import Button from "./Button.astro";
+import SiteFrame from "./SiteFrame.astro";
+---
+
+<SiteFrame title={ALTERNATIVES_HUB.title} description={ALTERNATIVES_HUB.description}>
+  <h1>{ALTERNATIVES_HUB.h1}</h1>
+  <p>{ALTERNATIVES_HUB.intro}</p>
+  <p class="alt-note">Public descriptions as of {COMPARED_ON}.</p>
+  <ul class="alt-index">
+    {
+      ALTERNATIVES.map((page) => (
+        <li>
+          <a class="alt-card" href={alternativePath(page)}>
+            <h2>{page.h1}</h2>
+            <p>{page.summary}</p>
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+  <h2>{GET_STARTED.heading}</h2>
+  <p>{GET_STARTED.copy}</p>
+  <div class="alt-actions">
+    <Button href={DOCS_URL} external>{GET_STARTED.docsLabel}</Button>
+    <Button href={GITHUB_URL} variant="secondary" external>{GET_STARTED.githubLabel}</Button>
+  </div>
+</SiteFrame>

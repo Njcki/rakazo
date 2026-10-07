@@ -21,6 +21,7 @@ type Props = {
   linkLabels?: {
     docs: string;
     changelog: string;
+    alternatives: string;
     about: string;
     support: string;
     privacy: string;
@@ -41,6 +42,7 @@ const {
   linkLabels = {
     docs: "Docs",
     changelog: "Changelog",
+    alternatives: "Alternatives",
     about: "About",
     support: "Support",
     privacy: "Privacy",
@@ -83,6 +85,9 @@ function isCurrentPage(href: string): boolean {
       <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
       <a href={DOCS_URL} target="_blank" rel="noreferrer">{linkLabels.docs}</a>
       <a href={CHANGELOG_URL} target="_blank" rel="noreferrer">{linkLabels.changelog}</a>
+      <a href="/alternatives/" aria-current={isCurrentPage("/alternatives/") ? "page" : undefined}>
+        {linkLabels.alternatives}
+      </a>
       <a href={GROK_ALTERNATIVE_PATH} aria-current={isCurrentPage(GROK_ALTERNATIVE_PATH) ? "page" : undefined}>
         {linkLabels.grokAlternative}
       </a>

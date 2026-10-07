@@ -35,8 +35,14 @@ describe("agent content negotiation", () => {
   it("maps canonical and trailing-slash page paths to Markdown documents", () => {
     expect(getMarkdownDocument("/")).toContain("# Rakazo");
     expect(getMarkdownDocument("/about/")).toContain("# About Rakazo");
+    expect(getMarkdownDocument("/grok-bot-alternative/")).toContain(
+      "Is Grok Bot open source?",
+    );
     expect(getMarkdownAlternate("/")).toBe("/index.md");
     expect(getMarkdownAlternate("/support/")).toBe("/support.md");
+    expect(getMarkdownAlternate("/grok-bot-alternative/")).toBe(
+      "/grok-bot-alternative.md",
+    );
     expect(getMarkdownDocument("/terms/")).toContain("# Rakazo terms");
     expect(getMarkdownDocument("/missing")).toBeUndefined();
     expect(getMarkdownAlternate("/missing")).toBeUndefined();

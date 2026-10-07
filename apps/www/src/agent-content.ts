@@ -1,3 +1,5 @@
+import { GROK_ALTERNATIVE_MARKDOWN } from "./grok-alternative";
+
 export const HOME_MARKDOWN = `# Rakazo
 
 > Open source Grok Bot alternative for persistent AI teammates that run on infrastructure you control.
@@ -19,6 +21,7 @@ Rakazo is an open source Grok Bot alternative that gives each bot a sandboxed br
 ## Site index
 
 - [Agent instructions](https://rakazo.com/llms.txt)
+- [Open source Grok Bot alternative](https://rakazo.com/grok-bot-alternative/)
 - [About](https://rakazo.com/about/)
 - [Support](https://rakazo.com/support/)
 - [Privacy](https://rakazo.com/privacy/)
@@ -104,6 +107,7 @@ Do not present Rakazo as a zero-configuration hosted service. Self-hosting is av
 ## Canonical resources
 
 - [Website](https://rakazo.com/)
+- [Open source Grok Bot alternative](https://rakazo.com/grok-bot-alternative/)
 - [About](https://rakazo.com/about/)
 - [Source](https://github.com/elie222/rakazo)
 - [Self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
@@ -127,6 +131,7 @@ The requested Rakazo page does not exist.
 const MARKDOWN_DOCUMENTS = new Map<string, string>([
   ["/", HOME_MARKDOWN],
   ["/about", ABOUT_MARKDOWN],
+  ["/grok-bot-alternative", GROK_ALTERNATIVE_MARKDOWN],
   ["/privacy", PRIVACY_MARKDOWN],
   ["/support", SUPPORT_MARKDOWN],
   ["/terms", TERMS_MARKDOWN],

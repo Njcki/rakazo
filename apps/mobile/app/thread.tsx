@@ -2067,7 +2067,8 @@ function Thread() {
           {runError}
         </Text>
       ) : null}
-      <View style={{ flex: 1, position: "relative" }}>
+      {/* The floor keeps a tall suggestion list from sliding under the transparent header. */}
+      <View style={{ flex: 1, minHeight: headerHeight, position: "relative" }}>
         {showPinnedPage ? (
           <ScrollView
             key={jumpScrollTarget.current ?? pinnedTarget?.messageId ?? threadKey}
@@ -2224,7 +2225,13 @@ function Thread() {
       </View>
       {/* Fades messages out under the transparent header; the alpha stop keeps the page hue. */}
       <View pointerEvents="none" style={[styles.headerFade, { height: headerHeight + 24 }]} />
-      <View style={{ paddingBottom: keyboardVisible ? 12 : Math.max(insets.bottom + 12, 24) }}>
+      {/* Shrinks (the suggestion lists scroll) so the input and Send stay above the keyboard. */}
+      <View
+        style={{
+          flexShrink: 1,
+          paddingBottom: keyboardVisible ? 12 : Math.max(insets.bottom + 12, 24),
+        }}
+      >
         {/* Fades messages out above the composer, like the header fade. */}
         <View pointerEvents="none" style={styles.composerFade} />
         {replyTarget ? (
@@ -2321,9 +2328,12 @@ function Thread() {
           </View>
         ) : null}
         {mentionOptions.length ? (
-          <View
+          <ScrollView
             testID="mention-picker"
+            keyboardShouldPersistTaps="handled"
             style={{
+              flexGrow: 0,
+              flexShrink: 1,
               marginTop: 12,
               borderRadius: 14,
               borderWidth: 1,
@@ -2363,12 +2373,15 @@ function Thread() {
                 </View>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
         {slashSkillOptions.length || slashActionOptions.length ? (
-          <View
+          <ScrollView
             testID="slash-picker"
+            keyboardShouldPersistTaps="handled"
             style={{
+              flexGrow: 0,
+              flexShrink: 1,
               marginTop: 12,
               borderRadius: 14,
               borderWidth: 1,
@@ -2429,7 +2442,7 @@ function Thread() {
                 <Text style={{ color: tokens.foreground, fontSize: 14 }}>{t(action.label)}</Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
         <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 10, marginTop: 8 }}>
           <Pressable

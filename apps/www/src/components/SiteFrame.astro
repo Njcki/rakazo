@@ -10,12 +10,14 @@ type Props = {
   title: string;
   description: string;
   faq?: readonly FaqItem[];
+  structuredData?: object;
 };
 
-const { title, description, faq } = Astro.props;
+const { title, description, faq, structuredData: structuredDataProp } = Astro.props;
 const stars = await fetchGithubStars();
 const starsLabel = stars === null ? "Star" : formatStarCount(stars);
-const structuredData = faq && faq.length > 0 ? faqPageSchema(faq) : undefined;
+const structuredData =
+  structuredDataProp ?? (faq && faq.length > 0 ? faqPageSchema(faq) : undefined);
 ---
 
 <BaseLayout

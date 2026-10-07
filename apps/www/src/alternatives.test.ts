@@ -5,10 +5,16 @@ import {
   HUB_CARDS,
   alternativeMarkdown,
   alternativePath,
-  alternativesIndexMarkdown,
   faqPageSchema,
 } from "./alternatives";
 import { getMarkdownAlternate, getMarkdownDocument } from "./agent-content";
+import {
+  ROUNDUP_CARDS,
+  ROUNDUP_FAQ,
+  roundupMarkdown,
+  roundupStructuredData,
+  roundupWordCount,
+} from "./roundup";
 
 describe("alternative pages", () => {
   it("publishes Muse and Dots from one list the hub can render", () => {
@@ -21,7 +27,7 @@ describe("alternative pages", () => {
     ]);
     expect(new Set(ALTERNATIVES.map((page) => page.slug)).size).toBe(ALTERNATIVES.length);
 
-    const index = alternativesIndexMarkdown();
+    const index = roundupMarkdown();
     expect(index.startsWith(`# ${ALTERNATIVES_HUB.h1}\n`)).toBe(true);
     expect(HUB_CARDS.map((card) => card.href)).toEqual([
       "/muse-alternative/",
@@ -66,7 +72,21 @@ describe("alternative pages", () => {
   });
 
   it("serves the same comparison as Markdown on the page URL", () => {
-    expect(getMarkdownDocument("/alternatives/")).toContain(`# ${ALTERNATIVES_HUB.h1}`);
+    expect(getMarkdownDocument("/alternatives/")).toBe(roundupMarkdown());
+    expect(roundupWordCount()).toBeGreaterThan(1800);
+    expect(roundupWordCount()).toBeLessThan(2400);
+    const roundupSchema = roundupStructuredData();
+    expect(roundupSchema["@graph"].map((node) => node["@type"])).toEqual(["ItemList", "FAQPage"]);
+    const faqPage = roundupSchema["@graph"].find((node) => node["@type"] === "FAQPage");
+    if (faqPage?.["@type"] !== "FAQPage") {
+      throw new Error("FAQPage missing");
+    }
+    expect(faqPage.mainEntity?.map((item) => item.name)).toEqual(
+      ROUNDUP_FAQ.map((item) => item.question),
+    );
+    for (const page of ALTERNATIVES) {
+      expect(ROUNDUP_CARDS.some((card) => card.href === alternativePath(page))).toBe(true);
+    }
     expect(getMarkdownAlternate("/alternatives/")).toBe("/alternatives.md");
 
     const hermes = ALTERNATIVES.find((page) => page.slug === "hermes-alternative");

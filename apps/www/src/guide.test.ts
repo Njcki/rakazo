@@ -41,6 +41,8 @@ describe("guide pages", () => {
     expect(OPENCLAW_MARKDOWN).toContain("## Setup");
     expect(OPENCLAW_MARKDOWN).toContain("## Day-to-day management");
     expect(OPENCLAW_MARKDOWN).toContain("leaves the Gateway in that terminal");
+    expect(OPENCLAW_MARKDOWN).toContain("Updated October 7, 2026");
+    expect(OPENCLAW_MARKDOWN).toContain("just chat, like Grok Bot");
     expect(OPENCLAW_MARKDOWN).not.toContain("has to stay running");
     expect(SELF_HOST_MARKDOWN).toContain(PUBLISHED_IMAGES_INSTALL);
     expect(SELF_HOST_MARKDOWN).toContain("SANDBOX_CONTROL_VIA_LOOPBACK=true");

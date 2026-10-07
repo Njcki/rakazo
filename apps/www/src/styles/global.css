@@ -2329,7 +2329,8 @@ button.button--secondary:focus-visible {
   border-color: var(--line-2);
 }
 
-.alt-card h2 {
+.alt-card h2,
+.alt-card h3 {
   margin: 0;
   font-size: 22px;
 }
@@ -2377,6 +2378,11 @@ button.button--secondary:focus-visible {
   color: var(--body);
   font-size: 17px;
   line-height: 1.7;
+}
+
+.guide .alt-note {
+  color: var(--muted);
+  font-size: 14.5px;
 }
 
 .guide ul {

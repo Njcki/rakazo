@@ -58,6 +58,7 @@ export const SELF_HOST_DESCRIPTION =
 
 export const OPENCLAW_H1 = "Open source OpenClaw alternative";
 export const OPENCLAW_TITLE = "Open Source OpenClaw Alternative – Rakazo";
+export const OPENCLAW_UPDATED = "October 7, 2026";
 export const OPENCLAW_DESCRIPTION =
   "Rakazo and OpenClaw are both open source, self-hosted AI agents. Rakazo keeps setup and daily use in chat. OpenClaw's docs add a gateway, a config file, and a background service you can install.";
 
@@ -104,6 +105,21 @@ export const OPENCLAW_FAQS: readonly FaqItem[] = [
     question: "Is Rakazo simpler to set up than OpenClaw?",
     answer:
       "The documented paths are different. Rakazo's self-host guide is a Docker installer, or the desktop app starting that stack, then an account and a model. After that Rakazo is just chat, and you manage the bot from that chat. OpenClaw's getting-started guide is an installer and a wizard (Quick start or Custom setup). You can chat while the Gateway runs in that terminal. `openclaw gateway install` keeps it running in the background, then `openclaw gateway status` and `openclaw dashboard`. Connecting a chat app is another step. OpenClaw can be short when a model login is already detected. The ongoing surface is still the Gateway and the config file.",
+  },
+  {
+    question: "Can I chat with OpenClaw before installing a background service?",
+    answer:
+      "Yes. Quick start leaves the Gateway in that terminal until you stop it, so you can send a message before `openclaw gateway install`. That command is the later step that keeps the Gateway in the background: a LaunchAgent on macOS, a systemd user unit on Linux, or a Scheduled Task on Windows. Rakazo does not add a gateway service. After Docker or the desktop app, the product is the chat.",
+  },
+  {
+    question: "Do I manage OpenClaw from the chat?",
+    answer:
+      "You message the assistant from chat apps or the Control UI. The docs send later changes through `openclaw configure` and `~/.openclaw/openclaw.json`. `openclaw doctor` and `openclaw gateway status` are separate commands. Rakazo keeps schedules, memory, and approval boundaries in the same chat, the way Grok Bot does.",
+  },
+  {
+    question: "Is Rakazo just chat, like Grok Bot?",
+    answer:
+      "After the install, yes. You set up the bot and manage it from that chat on the web, desktop, and mobile apps. OpenClaw is also a conversation, and its docs add a Gateway you keep running and a config file for later changes. The two are not interchangeable. Rakazo does not import an OpenClaw setup.",
   },
   {
     question: "Is Rakazo a drop-in replacement for OpenClaw?",
@@ -337,7 +353,19 @@ ${faqMarkdown(SELF_HOST_FAQS)}
 - [OpenClaw comparison](${SITE_URL}${OPENCLAW_ALTERNATIVE_PATH})
 `;
 
+export const OPENCLAW_RELATED = [
+  { href: "/grok-bot-alternative/", label: "Grok Bot alternative" },
+  { href: "/muse-alternative/", label: "Meta Muse" },
+  { href: "/dots-alternative/", label: "OpenAI Dots" },
+  { href: "/instinct-alternative/", label: "Instinct AI" },
+  { href: "/hark-alternative/", label: "Hark Pro" },
+  { href: "/hermes-alternative/", label: "Hermes Agent" },
+  { href: "/alternatives/", label: "All comparisons" },
+] as const;
+
 export const OPENCLAW_MARKDOWN = `# Open source OpenClaw alternative
+
+Updated ${OPENCLAW_UPDATED}.
 
 > A fair comparison of Rakazo and OpenClaw, two open source ways to run an AI agent you control.
 
@@ -391,4 +419,5 @@ ${faqMarkdown(OPENCLAW_FAQS)}
 
 - [Home](${SITE_URL}/)
 - [Self-hosted AI agent guide](${SITE_URL}${SELF_HOST_GUIDE_PATH})
+${OPENCLAW_RELATED.map((item) => `- [${item.label}](${SITE_URL}${item.href})`).join("\n")}
 `;

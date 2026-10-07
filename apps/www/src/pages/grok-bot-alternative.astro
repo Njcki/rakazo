@@ -11,7 +11,10 @@ import {
   GROK_ALTERNATIVE_H1,
   GROK_ALTERNATIVE_TITLE,
   GROK_INTRO,
+  GROK_OTHER_ALTERNATIVES,
+  GROK_SECTIONS,
   GROK_SOURCES,
+  GROK_UPDATED,
   INSTALL_COMMAND,
   SELF_HOST_AFTER,
   SELF_HOST_LEAD,
@@ -36,7 +39,16 @@ const structuredData = grokAlternativeStructuredData(pageUrl);
     <Header starsLabel={starsLabel} />
     <main id="main" class="guide">
       <h1>{GROK_ALTERNATIVE_H1}</h1>
+      <p class="alt-note">Updated {GROK_UPDATED}.</p>
       {GROK_INTRO.map((paragraph) => <p>{paragraph}</p>)}
+      {
+        GROK_SECTIONS.map((section) => (
+          <section>
+            <h2>{section.heading}</h2>
+            {section.paragraphs.map((paragraph) => <p>{paragraph}</p>)}
+          </section>
+        ))
+      }
 
       <h2>How they compare</h2>
       <div class="compare-scroll">
@@ -83,6 +95,17 @@ const structuredData = grokAlternativeStructuredData(pageUrl);
         <Button href={DOCS_URL} external>Read the docs</Button>
         <Button href={GITHUB_URL} variant="secondary" external>View on GitHub</Button>
       </div>
+
+      <h2>Other alternatives</h2>
+      <ul>
+        {
+          GROK_OTHER_ALTERNATIVES.map((item) => (
+            <li>
+              <a href={item.href}>{item.label}</a> — {item.note}
+            </li>
+          ))
+        }
+      </ul>
 
       <h2 id="faq">FAQ</h2>
       {

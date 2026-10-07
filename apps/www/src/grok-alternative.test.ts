@@ -3,7 +3,10 @@ import { getHomeCopy } from "./i18n/home";
 import {
   GROK_ALTERNATIVE_FAQ,
   GROK_ALTERNATIVE_MARKDOWN,
+  GROK_OTHER_ALTERNATIVES,
+  GROK_UPDATED,
   grokAlternativeStructuredData,
+  grokWordCount,
 } from "./grok-alternative";
 
 describe("Grok Bot alternative page", () => {
@@ -37,6 +40,13 @@ describe("homepage headings", () => {
 
 describe("self-host quick start", () => {
   it("names the Docker minimum and keeps remote setup private until the owner exists", async () => {
+    expect(grokWordCount()).toBeGreaterThan(1400);
+    expect(grokWordCount()).toBeLessThan(1700);
+    expect(GROK_ALTERNATIVE_MARKDOWN).toContain(`Updated ${GROK_UPDATED}.`);
+    expect(GROK_ALTERNATIVE_MARKDOWN).toContain("## Other alternatives");
+    for (const item of GROK_OTHER_ALTERNATIVES) {
+      expect(GROK_ALTERNATIVE_MARKDOWN).toContain(item.href);
+    }
     expect(GROK_ALTERNATIVE_MARKDOWN).toContain("Docker Engine 26+");
     expect(GROK_ALTERNATIVE_MARKDOWN).toContain("--prepare-only");
     expect(GROK_ALTERNATIVE_MARKDOWN).toContain("only on the machine running Rakazo");

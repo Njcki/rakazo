@@ -1,4 +1,5 @@
-import { ALTERNATIVES, alternativeMarkdown, alternativesIndexMarkdown } from "./alternatives";
+import { ALTERNATIVES, alternativeMarkdown } from "./alternatives";
+import { roundupMarkdown } from "./roundup";
 import { GROK_ALTERNATIVE_MARKDOWN } from "./grok-alternative";
 import { OPENCLAW_MARKDOWN, SELF_HOST_MARKDOWN } from "./guide";
 
@@ -147,7 +148,7 @@ const MARKDOWN_DOCUMENTS = new Map<string, string>([
   ["/privacy", PRIVACY_MARKDOWN],
   ["/self-hosted-ai-agent", SELF_HOST_MARKDOWN],
   ["/support", SUPPORT_MARKDOWN],
-  ["/alternatives", alternativesIndexMarkdown()],
+  ["/alternatives", roundupMarkdown()],
   ...ALTERNATIVES.map((page) => [`/${page.slug}`, alternativeMarkdown(page)] as const),
   ["/terms", TERMS_MARKDOWN],
 ]);

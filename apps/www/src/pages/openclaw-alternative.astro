@@ -16,9 +16,11 @@ import {
   OPENCLAW_GETTING_STARTED_URL,
   OPENCLAW_H1,
   OPENCLAW_GITHUB_URL,
+  OPENCLAW_RELATED,
   OPENCLAW_SANDBOX_URL,
   OPENCLAW_SETUP_PARAGRAPHS,
   OPENCLAW_TITLE,
+  OPENCLAW_UPDATED,
 } from "../guide";
 import { fetchGithubStars, formatStarCount } from "../github";
 import { getHomeCopy } from "../i18n/home";
@@ -42,6 +44,7 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
     <GetStartedDialog copy={home.getStartedDialog} waitlist={home.waitlist} />
     <main id="main" class="privacy-copy guide">
       <h1>{OPENCLAW_H1}</h1>
+      <p class="alt-note">Updated {OPENCLAW_UPDATED}.</p>
       <p>
         The main difference is simplicity. Like Grok Bot, Rakazo is just chat: you set up the bot
         and manage it from that chat. OpenClaw is also
@@ -166,6 +169,11 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
       <ul>
         <li><a href="/">Rakazo home</a></li>
         <li><a href={SELF_HOST_GUIDE_PATH}>Self-hosted AI agent guide</a></li>
+        {OPENCLAW_RELATED.map((item) => (
+          <li>
+            <a href={item.href}>{item.label}</a>
+          </li>
+        ))}
       </ul>
 
       <h2 id="selfhost">Get started</h2>

@@ -3,17 +3,8 @@ import type { MessageBlock } from "@rakazo/contracts";
 import type { ViewProps } from "react-native";
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useI18n } from "../lib/i18n";
+import { threadCardWidth } from "../lib/message-presentation";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
-
-const THREAD_HORIZONTAL_PADDING = 20;
-const MESSAGE_COLUMN_RATIO = 0.9;
-const CARD_MAX_WIDTH = 340;
-
-/** Width of a normal bot row: thread padding, then the 90% column cap. */
-function computerCardWidth(windowWidth: number): number {
-  const contentWidth = Math.max(0, windowWidth - THREAD_HORIZONTAL_PADDING * 2);
-  return Math.min(CARD_MAX_WIDTH, Math.floor(contentWidth * MESSAGE_COLUMN_RATIO));
-}
 
 const styles = StyleSheet.create({
   button: {
@@ -59,7 +50,7 @@ export function ComputerCard({
       style={[
         styles.card,
         {
-          width: computerCardWidth(windowWidth),
+          width: threadCardWidth(windowWidth),
           borderColor: tokens.border,
           backgroundColor: tokens.card,
         },

@@ -113,6 +113,9 @@ export default function Layout() {
                       presentation: "formSheet",
                       sheetAllowedDetents: [0.6, 1],
                       sheetGrabberVisible: true,
+                      // Expo Router makes formSheet headers transparent on Liquid Glass, which
+                      // puts the first field under the bar; keep it opaque so the form starts below.
+                      headerTransparent: false,
                     }}
                   />
                   <Stack.Screen name="models" options={{ title: t("Models") }} />

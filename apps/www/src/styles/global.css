@@ -2101,6 +2101,17 @@ button {
 
 .privacy-copy h1 {
   margin-bottom: 18px;
+  font-size: clamp(2.25rem, 5vw, 44px);
+  line-height: 1.1;
+}
+
+.privacy-copy h2 {
+  margin: 44px 0 12px;
+  color: var(--ink);
+  font-family: Aeonik, Geist, ui-sans-serif, system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .privacy-copy p,
@@ -2110,10 +2121,17 @@ button {
   line-height: 1.7;
 }
 
+.privacy-copy p + p,
+.privacy-copy p + ul,
+.privacy-copy ul + p {
+  margin-top: 14px;
+}
+
 .privacy-copy ul {
   display: grid;
-  gap: 10px;
+  gap: 6px;
   padding-left: 22px;
+  list-style: disc;
 }
 
 .privacy-copy a {

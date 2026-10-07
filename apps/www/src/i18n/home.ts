@@ -19,6 +19,9 @@ export type HomeCopy = {
     openSource: string;
     grokBot: string;
     docs: string;
+    blog: string;
+    alternatives: string;
+    alternativesMenu: string;
     viewOnGithub: string;
   };
   hero: {
@@ -105,6 +108,7 @@ export type HomeCopy = {
       privacy: string;
       terms: string;
       grokAlternative: string;
+      blog: string;
     };
   };
 };
@@ -283,6 +287,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       openSource: "Open source",
       grokBot: "Grok Bot",
       docs: "Docs",
+      blog: "Blog",
+      alternatives: "Alternatives",
+      alternativesMenu: "Alternative pages",
       viewOnGithub: "View on GitHub",
     },
     hero: {
@@ -398,6 +405,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         privacy: "Privacy",
         terms: "Terms",
         grokAlternative: "Grok Bot alternative",
+        blog: "Blog",
       },
     },
   },
@@ -420,6 +428,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       openSource: "Open Source",
       grokBot: "Grok Bot",
       docs: "Docs",
+      blog: "Blog",
+      alternatives: "Alternativen",
+      alternativesMenu: "Vergleichsseiten",
       viewOnGithub: "Auf GitHub ansehen",
     },
     hero: {
@@ -535,6 +546,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         privacy: "Datenschutz",
         terms: "AGB",
         grokAlternative: "Grok-Bot-Alternative",
+        blog: "Blog",
       },
     },
   },
@@ -556,6 +568,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       openSource: "오픈소스",
       grokBot: "Grok Bot",
       docs: "Docs",
+      blog: "블로그",
+      alternatives: "대안",
+      alternativesMenu: "대안 페이지",
       viewOnGithub: "GitHub에서 보기",
     },
     hero: {
@@ -671,6 +686,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         privacy: "개인정보 처리방침",
         terms: "이용약관",
         grokAlternative: "Grok Bot 대안",
+        blog: "블로그",
       },
     },
   },
@@ -692,6 +708,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       openSource: "开源",
       grokBot: "Grok Bot",
       docs: "文档",
+      blog: "博客",
+      alternatives: "替代方案",
+      alternativesMenu: "替代页面",
       viewOnGithub: "在 GitHub 上查看",
     },
     hero: {
@@ -807,6 +826,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         privacy: "隐私",
         terms: "条款",
         grokAlternative: "Grok Bot 替代品",
+        blog: "博客",
       },
     },
   },

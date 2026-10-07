@@ -2,6 +2,7 @@
 import Button from "../components/Button.astro";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
+import VsCard from "../components/VsCard.astro";
 import { fetchGithubStars, formatStarCount } from "../github";
 import {
   COMPARE_NOTE,
@@ -21,12 +22,15 @@ import {
   grokAlternativeStructuredData,
 } from "../grok-alternative";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { ogPublicPath } from "../og-pages";
 import { DOCS_URL, GITHUB_URL, SITE_URL } from "../site";
+import { vsCard } from "../vs-points";
 
 const stars = await fetchGithubStars();
 const starsLabel = stars === null ? "Star" : formatStarCount(stars);
 const pageUrl = new URL(Astro.url.pathname, SITE_URL).toString();
 const structuredData = grokAlternativeStructuredData(pageUrl);
+const card = vsCard("grok-bot-alternative");
 ---
 
 <BaseLayout
@@ -34,12 +38,14 @@ const structuredData = grokAlternativeStructuredData(pageUrl);
   description={GROK_ALTERNATIVE_DESCRIPTION}
   {structuredData}
   localeAlternates={false}
+  ogImage={ogPublicPath("grok-bot-alternative")}
 >
   <div class="container">
     <Header starsLabel={starsLabel} />
     <main id="main" class="guide">
       <h1>{GROK_ALTERNATIVE_H1}</h1>
       <p class="alt-note">Updated {GROK_UPDATED}.</p>
+      {card && <VsCard otherName="Grok Bot" rakazo={card.rakazo} other={card.other} />}
       {GROK_INTRO.map((paragraph) => <p>{paragraph}</p>)}
       {
         GROK_SECTIONS.map((section) => (

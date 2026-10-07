@@ -5,6 +5,8 @@ import InlineCode from "../components/InlineCode.astro";
 import Footer from "../components/Footer.astro";
 import GetStartedDialog from "../components/GetStartedDialog.astro";
 import Header from "../components/Header.astro";
+import SetupSteps from "../components/SetupSteps.astro";
+import VsCard from "../components/VsCard.astro";
 import {
   COMPARISON_ROWS,
   faqPageStructuredData,
@@ -25,12 +27,15 @@ import {
 import { fetchGithubStars, formatStarCount } from "../github";
 import { getHomeCopy } from "../i18n/home";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { ogPublicPath } from "../og-pages";
 import { GITHUB_URL, SELF_HOST_GUIDE_PATH } from "../site";
+import { vsCard } from "../vs-points";
 
 const home = getHomeCopy("en");
 const stars = await fetchGithubStars();
 const starsLabel = stars === null ? "Star" : formatStarCount(stars);
 const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
+const card = vsCard("openclaw-alternative");
 ---
 
 <BaseLayout
@@ -38,6 +43,7 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
   description={OPENCLAW_DESCRIPTION}
   {structuredData}
   localeAlternates={false}
+  ogImage={ogPublicPath("openclaw-alternative")}
 >
   <div class="container">
     <Header starsLabel={starsLabel} />
@@ -45,6 +51,12 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
     <main id="main" class="privacy-copy guide">
       <h1>{OPENCLAW_H1}</h1>
       <p class="alt-note">Updated {OPENCLAW_UPDATED}.</p>
+      {
+        card && (
+          <VsCard otherName="OpenClaw" rakazo={card.rakazo} other={card.other} />
+        )
+      }
+      <SetupSteps />
       <p>
         The main difference is simplicity. Like Grok Bot, Rakazo is just chat: you set up the bot
         and manage it from that chat. OpenClaw is also

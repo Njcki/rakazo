@@ -104,6 +104,20 @@ describe("mobile message presentation", () => {
       ]),
     ).toEqual([{ kind: "content", blocks: [{ kind: "text", text: "Done." }] }]);
   });
+
+  it("keeps the computer takeover card out of the text bubble", () => {
+    const computer: Extract<MessageBlock, { kind: "computer" }> = {
+      kind: "computer",
+      state: "Needs you",
+      text: "Sign in to continue.",
+    };
+
+    expect(messagePresentationSegments([computer])).toEqual([]);
+    expect(hasVisibleMessagePresentation([computer])).toBe(true);
+    expect(messagePresentationSegments([{ kind: "text", text: "Opening." }, computer])).toEqual([
+      { kind: "content", blocks: [{ kind: "text", text: "Opening." }] },
+    ]);
+  });
 });
 
 describe("quotableMessageSegments", () => {

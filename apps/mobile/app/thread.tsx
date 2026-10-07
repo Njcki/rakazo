@@ -88,6 +88,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppConnectCard } from "../components/AppConnectCard";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
+import { ComputerCard } from "../components/ComputerCard";
 import type { ImageArtifactPreviewTarget } from "../components/image-artifact-viewer";
 import { InlineImageAttachment } from "../components/inline-image-attachment";
 import { McpApprovalCard } from "../components/McpApprovalCard";
@@ -1546,6 +1547,12 @@ function Thread() {
     [router],
   );
 
+  const openComputer = useCallback(
+    (id: string, botName: string) =>
+      router.push({ pathname: "/computer", params: { botId: id, name: botName } }),
+    [router],
+  );
+
   const speak = useCallback(
     (message: MobileMessage) => {
       const startIndex = visibleMessages.findIndex((candidate) => candidate.id === message.id);
@@ -1930,6 +1937,7 @@ function Thread() {
               canAnswer={message.id === answerableAskMessageId}
               onAnswer={answerMessage}
               onOpenBot={openBot}
+              onOpenComputer={openComputer}
               onPreviewMarkdown={setMarkdownPreview}
               onPlay={onCall ? undefined : () => speak(message)}
               onPreviewImage={(target) =>
@@ -2988,6 +2996,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer,
   onAnswer,
   onOpenBot,
+  onOpenComputer,
   onPreviewMarkdown,
   onPlay,
   onPreviewImage,
@@ -3003,6 +3012,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer: boolean;
   onAnswer: (message: MobileMessage, answer: string, username?: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
+  onOpenComputer: (botId: string, name: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   onPlay?: () => void;
   onPreviewImage: (target: ImageArtifactPreviewTarget) => void;
@@ -3014,6 +3024,7 @@ const MessageBubble = memo(function MessageBubble({
   const [peerExpanded, setPeerExpanded] = useState(false);
   const artifactTarget: MobileArtifactTarget = groupId ? { groupId } : { botId };
   const cardBotId = message.botId ?? botId;
+  const computerBotId = message.botId ?? (groupId ? undefined : botId);
   const appConnectBlocks = message.blocks.filter(
     (block): block is Extract<MessageBlock, { kind: "app_connect" }> =>
       block.kind === "app_connect",
@@ -3620,6 +3631,9 @@ const MessageBubble = memo(function MessageBubble({
     message.role === "bot" ? speakerColorFor(bots, members, message.botId) : undefined;
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
   const lastContent = segments.map((segment) => segment.kind).lastIndexOf("content");
+  const computerBlocks = message.blocks.filter(
+    (block): block is Extract<MessageBlock, { kind: "computer" }> => block.kind === "computer",
+  );
   return (
     <View style={{ gap: 8, width: "100%" }}>
       {segments.map((segment, index) => (
@@ -3631,6 +3645,17 @@ const MessageBubble = memo(function MessageBubble({
           replyPreview={index === firstContent ? replyPreview : undefined}
           onPlay={message.role === "bot" && index === lastContent ? onPlay : undefined}
           actionProps={actionProps}
+        />
+      ))}
+      {computerBlocks.map((block, index) => (
+        <ComputerCard
+          key={`computer-${index}`}
+          block={block}
+          onOpen={
+            computerBotId ? () => onOpenComputer(computerBotId, speaker ?? t("Bot")) : undefined
+          }
+          accessibilityActions={actionProps.accessibilityActions}
+          onAccessibilityAction={actionProps.onAccessibilityAction}
         />
       ))}
       {appConnectBlocks.map((block, index) => (

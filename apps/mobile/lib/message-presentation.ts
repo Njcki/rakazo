@@ -18,12 +18,15 @@ export type MessagePresentationSegment = {
   blocks: MessageBlock[];
 };
 
+/** Blocks the thread draws as their own native card instead of inside the text bubble. */
+function isCardBlock(block: MessageBlock): boolean {
+  return block.kind === "app_connect" || block.kind === "computer";
+}
+
 export function messagePresentationSegments(
   blocks: readonly MessageBlock[],
 ): MessagePresentationSegment[] {
-  const content = blocks.filter(
-    (block) => block.kind !== "app_connect" && !isToolActivityBlock(block),
-  );
+  const content = blocks.filter((block) => !isCardBlock(block) && !isToolActivityBlock(block));
   return content.length > 0 ? [{ kind: "content", blocks: content }] : [];
 }
 

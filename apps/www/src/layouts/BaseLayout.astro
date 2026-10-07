@@ -4,6 +4,7 @@ import { getMarkdownAlternate } from "../agent-content";
 import {
   DEFAULT_LOCALE,
   LOCALES,
+  LOCALE_HREFLANG,
   LOCALE_HTML_LANG,
   LOCALE_OG,
   isLocale,
@@ -20,6 +21,8 @@ type Props = {
   skipLabel?: string;
   homeAlternates?: boolean;
   ogImageAlt?: string;
+  /** False on the not-found page: noindex, and no canonical URL. */
+  index?: boolean;
 };
 
 const {
@@ -29,13 +32,15 @@ const {
   skipLabel = "Skip to content",
   homeAlternates = false,
   ogImageAlt = "Rakazo. AI teammates you actually own. Your keys, your model, your machine.",
+  index = true,
 } = Astro.props;
 
 const locale: Locale = isLocale(Astro.currentLocale)
   ? Astro.currentLocale
   : (Astro.props.locale ?? DEFAULT_LOCALE);
 
-const canonical = new URL(Astro.url.pathname, SITE_URL).toString();
+const canonical = index ? new URL(Astro.url.pathname, SITE_URL).toString() : undefined;
+const robots = index ? "index, follow, max-image-preview:large" : "noindex";
 const socialImage = new URL("/og-image.png", SITE_URL).toString();
 const structuredDataJson = structuredData
   ? JSON.stringify(structuredData).replaceAll("<", "\\u003c")
@@ -54,11 +59,11 @@ const homeUrls = Object.fromEntries(
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="robots" content={robots} />
     <meta name="theme-color" content="#FDFDFD" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:url" content={canonical} />
+    {canonical && <meta property="og:url" content={canonical} />}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE_NAME} />
     <meta property="og:locale" content={ogLocale} />
@@ -75,12 +80,12 @@ const homeUrls = Object.fromEntries(
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={socialImage} />
     <meta name="twitter:image:alt" content={ogImageAlt} />
-    <link rel="canonical" href={canonical} />
+    {canonical && <link rel="canonical" href={canonical} />}
     {
       homeAlternates && (
         <>
           {LOCALES.map((l) => (
-            <link rel="alternate" hreflang={LOCALE_HTML_LANG[l]} href={homeUrls[l]} />
+            <link rel="alternate" hreflang={LOCALE_HREFLANG[l]} href={homeUrls[l]} />
           ))}
           <link rel="alternate" hreflang="x-default" href={homeUrls.en} />
         </>

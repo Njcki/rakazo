@@ -1,7 +1,7 @@
 ---
 import {
   DEFAULT_LOCALE,
-  LOCALE_HTML_LANG,
+  LOCALE_HREFLANG,
   LOCALE_LABELS,
   LOCALES,
   isLocale,
@@ -62,7 +62,7 @@ const {
         LOCALES.map((locale) => (
           <a
             href={localeHomePath(locale)}
-            hreflang={LOCALE_HTML_LANG[locale]}
+            hreflang={LOCALE_HREFLANG[locale]}
             aria-current={locale === currentLocale ? "page" : undefined}
           >
             {LOCALE_LABELS[locale]}

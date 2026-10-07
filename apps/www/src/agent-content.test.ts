@@ -65,6 +65,7 @@ describe("agent content negotiation", () => {
 
     const headResponse = markdownResponse("# Rakazo\n", "HEAD", 404);
     expect(headResponse.status).toBe(404);
+    expect(headResponse.headers.get("x-robots-tag")).toBe("noindex");
     await expect(headResponse.text()).resolves.toBe("");
   });
 });

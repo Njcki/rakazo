@@ -229,6 +229,7 @@ export function markdownResponse(
       "Content-Type": "text/markdown; charset=utf-8",
       Link: '</llms.txt>; rel="describedby"; type="text/plain"',
       Vary: "Accept, Accept-Encoding",
+      ...(status === 404 ? { "X-Robots-Tag": "noindex" } : {}),
     },
   });
 }

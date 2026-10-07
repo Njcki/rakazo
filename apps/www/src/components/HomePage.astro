@@ -16,11 +16,11 @@ import {
 } from "../i18n/locales";
 import { fetchGithubStars, formatStarCount } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { homeStructuredData } from "../structured-data";
 import {
   DOCS_URL,
   GITHUB_URL,
   SETUP_PROMPT_URL,
-  SITE_NAME,
   SITE_URL,
 } from "../site";
 
@@ -39,75 +39,15 @@ const starsLabel = stars === null ? copy.starFallback : formatStarCount(stars);
 const setupAgentPrompt = `Set up Rakazo for me. Follow the setup prompt at ${SETUP_PROMPT_URL}`;
 const pageUrl = `${SITE_URL}${homeHref === "/" ? "/" : homeHref}`;
 
-const structuredData = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": `${SITE_URL}/#organization`,
-      name: "Inbox Zero Inc.",
-      alternateName: "Rakazo",
-      url: `${SITE_URL}/`,
-      logo: `${SITE_URL}/brand/rakazo-mark.svg`,
-      email: "hello@rakazo.com",
-      contactPoint: {
-        "@type": "ContactPoint",
-        contactType: "customer support",
-        email: "hello@rakazo.com",
-        url: `${SITE_URL}/support/`,
-        availableLanguage: availableLanguages,
-      },
-      address: {
-        "@type": "PostalAddress",
-        streetAddress: "131 Continental Dr, Suite 305",
-        addressLocality: "Newark",
-        addressRegion: "DE",
-        postalCode: "19713",
-        addressCountry: "US",
-      },
-      sameAs: [GITHUB_URL, "https://www.getinboxzero.com/"],
-    },
-    {
-      "@type": "WebSite",
-      "@id": `${SITE_URL}/#website`,
-      url: `${SITE_URL}/`,
-      name: SITE_NAME,
-      description: enCopy.description,
-      inLanguage: LOCALE_HTML_LANG[DEFAULT_LOCALE],
-      publisher: { "@id": `${SITE_URL}/#organization` },
-    },
-    {
-      "@type": "WebPage",
-      "@id": `${pageUrl}#webpage`,
-      url: pageUrl,
-      name: copy.title,
-      description: copy.description,
-      inLanguage: LOCALE_HTML_LANG[locale],
-      isPartOf: { "@id": `${SITE_URL}/#website` },
-      about: { "@id": `${SITE_URL}/#software` },
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": `${SITE_URL}/#software`,
-      name: SITE_NAME,
-      url: `${SITE_URL}/`,
-      description: enCopy.description,
-      applicationCategory: "BusinessApplication",
-      applicationSubCategory: "AI agent platform",
-      operatingSystem: "Web, macOS, Linux, iOS, Android",
-      isAccessibleForFree: true,
-      codeRepository: GITHUB_URL,
-      license: `${GITHUB_URL}/blob/main/LICENSE`,
-      provider: { "@id": `${SITE_URL}/#organization` },
-      inLanguage: availableLanguages,
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "USD",
-      },
-    },
-  ],
-};
+const structuredData = homeStructuredData({
+  pageUrl,
+  title: copy.title,
+  description: copy.description,
+  siteDescription: enCopy.description,
+  inLanguage: LOCALE_HTML_LANG[locale],
+  defaultInLanguage: LOCALE_HTML_LANG[DEFAULT_LOCALE],
+  availableLanguages,
+});
 ---
 
 <BaseLayout

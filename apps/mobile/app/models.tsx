@@ -34,12 +34,13 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { NativeActionButton } from "../components/native-action-button";
+import { NativeSwitch } from "../components/native-switch";
 import { type MobileMe, type MobileModel, type MobileModelCredential, rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
@@ -782,18 +783,14 @@ export default function Models() {
       {showEndpointHelp ? (
         <Text style={styles.hint}>{t(OPENAI_COMPATIBLE_BASE_URL_HINT)}</Text>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
+      <NativeActionButton
         disabled={busy || probing || !effectiveBaseUrl}
+        fill
+        label={probing ? t("Finding…") : t("Find models")}
         onPress={() => void probeServerModels()}
-        style={({ pressed }) => [
-          styles.outlineButton,
-          (busy || probing || !effectiveBaseUrl) && styles.disabled,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Text style={styles.outlineLabel}>{probing ? t("Finding…") : t("Find models")}</Text>
-      </Pressable>
+        prominence="secondary"
+        style={{ marginTop: 12 }}
+      />
       {feedbackAnchor === "probe" ? feedback : null}
       <Text style={[styles.sectionTitle, { marginTop: 12 }]}>{t("Model")}</Text>
       {probeModels.length && probeModels.includes(modelId) ? (
@@ -863,7 +860,7 @@ export default function Models() {
           <View style={styles.card}>
             <View style={styles.modelRow}>
               <Text style={styles.modelLabel}>{t("Supports thinking")}</Text>
-              <Switch
+              <NativeSwitch
                 accessibilityLabel={t("Supports thinking")}
                 value={reasoning}
                 onValueChange={(value) => {
@@ -905,7 +902,7 @@ export default function Models() {
             ) : null}
             <View style={[styles.modelRow, styles.singleRow]}>
               <Text style={styles.modelLabel}>{t("Supports images")}</Text>
-              <Switch
+              <NativeSwitch
                 accessibilityLabel={t("Supports images")}
                 value={supportsImages}
                 onValueChange={setSupportsImages}
@@ -950,29 +947,22 @@ export default function Models() {
           />
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
+        <NativeActionButton
           disabled={
             busy || (isOpenAiCompatible ? !openAiCompatibleReady : apiKey.trim().length < 8)
           }
-          onPress={() => void connectKey()}
-          style={({ pressed }) => [
-            styles.primaryButton,
-            (busy || (isOpenAiCompatible ? !openAiCompatibleReady : apiKey.trim().length < 8)) &&
-              styles.disabled,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.primaryLabel}>
-            {pending === "connect"
+          label={
+            pending === "connect"
               ? t("Saving…")
               : isOpenAiCompatible
                 ? t("Save")
                 : credential
                   ? t("Replace API key")
-                  : t("Connect API key")}
-          </Text>
-        </Pressable>
+                  : t("Connect API key")
+          }
+          onPress={() => void connectKey()}
+          style={{ marginTop: 12 }}
+        />
       </View>
     ) : null;
 
@@ -1102,18 +1092,14 @@ export default function Models() {
                     placeholderTextColor={native.secondaryLabel}
                     style={styles.keyInput}
                   />
-                  <Pressable
-                    accessibilityRole="button"
+                  <NativeActionButton
                     disabled={!pasteCode.trim()}
+                    fill
+                    label={t("Submit")}
                     onPress={() => void submitOAuthCode()}
-                    style={({ pressed }) => [
-                      styles.outlineButton,
-                      pressed && styles.pressed,
-                      !pasteCode.trim() && styles.disabled,
-                    ]}
-                  >
-                    <Text style={styles.outlineLabel}>{t("Submit")}</Text>
-                  </Pressable>
+                    prominence="secondary"
+                    style={{ marginTop: 12 }}
+                  />
                   <Text style={styles.secondary}>
                     {t("Waiting for sign-in — the link expires in about {minutes} minutes.", {
                       minutes: Math.ceil(oauth.expiresInSeconds / 60),
@@ -1129,13 +1115,13 @@ export default function Models() {
                     <Text style={styles.link}>{oauth.verificationUri}</Text>
                   </Pressable>
                   <Text style={styles.code}>{oauth.userCode}</Text>
-                  <Pressable
-                    accessibilityRole="button"
+                  <NativeActionButton
+                    fill
+                    label={codeCopied ? t("Copied") : t("Copy")}
                     onPress={() => copyOAuthCode(oauth.userCode)}
-                    style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.outlineLabel}>{codeCopied ? t("Copied") : t("Copy")}</Text>
-                  </Pressable>
+                    prominence="secondary"
+                    style={{ marginTop: 12 }}
+                  />
                   <Text style={styles.secondary}>
                     {t("Waiting for sign-in — the code expires in about {minutes} minutes.", {
                       minutes: Math.ceil(oauth.expiresInSeconds / 60),
@@ -1143,33 +1129,29 @@ export default function Models() {
                   </Text>
                 </>
               )}
-              <Pressable
-                accessibilityRole="button"
+              <NativeActionButton
+                fill
+                label={t("Cancel")}
                 onPress={() => cancelOAuth()}
-                style={({ pressed }) => [styles.outlineButton, pressed && styles.pressed]}
-              >
-                <Text style={styles.outlineLabel}>{t("Cancel")}</Text>
-              </Pressable>
+                prominence="secondary"
+                style={{ marginTop: 12 }}
+              />
             </View>
           ) : (
-            <Pressable
-              accessibilityRole="button"
+            <NativeActionButton
               disabled={busy}
-              onPress={() => void startSubscriptionSignIn()}
-              style={({ pressed }) => [
-                styles.outlineButton,
-                pressed && styles.pressed,
-                busy && styles.disabled,
-              ]}
-            >
-              <Text style={styles.outlineLabel}>
-                {oauthPending
+              fill
+              label={
+                oauthPending
                   ? t("Starting…")
                   : credential
                     ? t("Sign in again")
-                    : (selected.oauthLabel ?? t("Sign in"))}
-              </Text>
-            </Pressable>
+                    : (selected.oauthLabel ?? t("Sign in"))
+              }
+              onPress={() => void startSubscriptionSignIn()}
+              prominence="secondary"
+              style={{ marginTop: 12 }}
+            />
           )
         ) : null}
         {acceptsKey || builtinLimitSave ? (
@@ -1227,31 +1209,22 @@ export default function Models() {
               </>
             ) : null}
 
-            <Pressable
-              accessibilityRole="button"
+            <NativeActionButton
               disabled={
                 busy || !cloudflareRoutingReady || (!builtinLimitSave && apiKey.trim().length < 8)
               }
-              onPress={() => void connectKey()}
-              style={({ pressed }) => [
-                styles.primaryButton,
-                (busy ||
-                  !cloudflareRoutingReady ||
-                  (!builtinLimitSave && apiKey.trim().length < 8)) &&
-                  styles.disabled,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.primaryLabel}>
-                {pending === "connect"
+              label={
+                pending === "connect"
                   ? t("Saving…")
                   : builtinLimitSave
                     ? t("Save limits")
                     : credential
                       ? t("Replace API key")
-                      : t("Connect API key")}
-              </Text>
-            </Pressable>
+                      : t("Connect API key")
+              }
+              onPress={() => void connectKey()}
+              style={{ marginTop: 12 }}
+            />
           </View>
         ) : null}
         {selected.auth === "oauth" && !subscriptionSignIn ? (
@@ -1266,20 +1239,12 @@ export default function Models() {
 
   const saveRow =
     credential && (!isActive || thinkingDirty) ? (
-      <Pressable
-        accessibilityRole="button"
+      <NativeActionButton
         disabled={busy || (isOpenAiCompatible && !modelId.trim())}
+        label={pending === "default" ? t("Switching…") : isActive ? t("Save") : t("Use this model")}
         onPress={() => void setModelDefault()}
-        style={({ pressed }) => [
-          styles.primaryButton,
-          busy && styles.disabled,
-          pressed && styles.pressed,
-        ]}
-      >
-        <Text style={styles.primaryLabel}>
-          {pending === "default" ? t("Switching…") : isActive ? t("Save") : t("Use this model")}
-        </Text>
-      </Pressable>
+        style={{ marginTop: 12 }}
+      />
     ) : null;
 
   const connectedStatusRow = credential ? (

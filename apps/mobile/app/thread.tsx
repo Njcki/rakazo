@@ -98,6 +98,7 @@ import {
   type MarkdownArtifactPreviewTarget,
 } from "../components/markdown-artifact-preview";
 import { MessageContextMenu } from "../components/message-context-menu";
+import { NativeActionButton } from "../components/native-action-button";
 import { NativeSymbol } from "../components/native-symbol";
 import { SelectTextSheet } from "../components/select-text-sheet";
 import { VoiceChatCard } from "../components/VoiceChatCard";
@@ -2925,26 +2926,14 @@ function QuoteSheet({
             paddingBottom: 12,
           }}
         >
-          <Pressable accessibilityRole="button" onPress={onCancel} hitSlop={8}>
-            <Text style={{ color: tokens.mutedForeground, fontSize: 17 }}>{t("Cancel")}</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !excerpt }}
+          <NativeActionButton label={t("Cancel")} onPress={onCancel} prominence="plain" />
+          <NativeActionButton
             disabled={!excerpt}
+            fill={false}
+            label={t("Quote")}
             onPress={() => onQuote(excerpt)}
-            hitSlop={8}
-          >
-            <Text
-              style={{
-                color: excerpt ? tokens.primary : tokens.mutedForeground,
-                fontSize: 17,
-                fontWeight: "600",
-              }}
-            >
-              {t("Quote")}
-            </Text>
-          </Pressable>
+            prominence={excerpt ? "primary" : "plain"}
+          />
         </View>
         <ScrollView style={{ flex: 1, paddingHorizontal: 20 }}>
           {segments.map((text, index) => (

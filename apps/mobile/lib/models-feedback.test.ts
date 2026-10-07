@@ -29,7 +29,7 @@ describe("Models save feedback", () => {
     expect(screen).not.toContain("tokens.success");
     expect(screen).not.toContain("selected.billing");
     expect(screen).toMatch(
-      /t\("Find models"\)\}<\/Text>\s*<\/Pressable>\s*\{feedbackAnchor === "probe" \? feedback : null\}/,
+      /t\("Find models"\)\}[\s\S]*?prominence="secondary"[\s\S]*?\/>\s*\{feedbackAnchor === "probe" \? feedback : null\}/,
     );
     expect(screen).toMatch(
       /\{compatKeySection\}\s*\{saveRow\}\s*\{feedbackAnchor === "probe" \? null : feedback\}/,

@@ -11,7 +11,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -19,6 +18,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAvatarStyle } from "../components/avatar-style";
 import { BotAvatar } from "../components/bot-avatar";
+import { NativeActionButton } from "../components/native-action-button";
+import { NativeSegmentedControl } from "../components/native-segmented-control";
+import { NativeSwitch } from "../components/native-switch";
 import type { MobileBot, MobileMe } from "../lib/api";
 import {
   currentApiBase,
@@ -297,34 +299,16 @@ export default function Account() {
 
         <View accessibilityLabel={t("Appearance")} style={styles.avatarSection}>
           <Text style={styles.settingsTitle}>{t("Appearance")}</Text>
-          <View style={styles.appearanceOptions}>
-            {(
-              [
-                ["system", "System"],
-                ["light", "Light"],
-                ["dark", "Dark"],
-              ] as const
-            ).map(([value, label]) => {
-              const selected = appearance === value;
-              const translated = t(label);
-              return (
-                <Pressable
-                  key={value}
-                  accessibilityLabel={translated}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  onPress={() => void setAppearancePreference(value)}
-                  style={({ pressed }) => [
-                    styles.appearanceOption,
-                    selected && styles.appearanceOptionSelected,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <Text style={styles.appearanceLabel}>{translated}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <NativeSegmentedControl
+            accessibilityLabel={t("Appearance")}
+            onChange={(value) => void setAppearancePreference(value)}
+            options={[
+              { value: "system", label: t("System") },
+              { value: "light", label: t("Light") },
+              { value: "dark", label: t("Dark") },
+            ]}
+            value={appearance}
+          />
         </View>
 
         <View accessibilityLabel={t("Avatar style")} style={styles.avatarSection}>
@@ -493,34 +477,33 @@ export default function Account() {
           <View style={styles.avatarSection}>
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>{t("Stream replies")}</Text>
-              <Switch
+              <NativeSwitch
                 accessibilityLabel={t("Stream replies")}
-                value={streamReplies}
                 onValueChange={(checked) =>
                   void setResponseStreamingPreference(checked ? "on" : "off")
                 }
+                value={streamReplies}
               />
             </View>
             <View style={styles.switchRow}>
               <Text style={styles.switchLabel}>{loadRemoteImagesLabel}</Text>
-              <Switch
+              <NativeSwitch
                 accessibilityLabel={loadRemoteImagesLabel}
-                value={loadRemoteImages}
                 onValueChange={(checked) => void setRemoteImagesPreference(checked ? "on" : "off")}
+                value={loadRemoteImages}
               />
             </View>
           </View>
         ) : null}
 
         <View>
-          <Pressable
-            accessibilityRole="button"
+          <NativeActionButton
             disabled={pending}
+            fill
+            label={t("Sign out")}
             onPress={() => void handleSignOut()}
-            style={({ pressed }) => [styles.button, pressed && styles.pressed]}
-          >
-            <Text style={styles.buttonLabel}>{t("Sign out")}</Text>
-          </Pressable>
+            prominence="secondary"
+          />
           {signOutError ? (
             <Text accessibilityRole="alert" style={styles.error}>
               {signOutError}
@@ -688,12 +671,12 @@ function NotificationSwitch({
         <Text style={{ color: native.label, fontSize: 15 }}>{label}</Text>
         <Text style={{ color: native.secondaryLabel, fontSize: 12.5, marginTop: 2 }}>{detail}</Text>
       </View>
-      <Switch
-        accessibilityLabel={label}
+      <NativeSwitch
         accessibilityHint={detail}
+        accessibilityLabel={label}
         disabled={disabled}
-        value={value}
         onValueChange={onChange}
+        value={value}
       />
     </View>
   );
@@ -725,18 +708,6 @@ function createAccountStyles() {
     email: {
       color: native.secondaryLabel,
       fontSize: 15,
-    },
-    button: {
-      minHeight: 50,
-      borderRadius: 14,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: native.fill,
-    },
-    buttonLabel: {
-      color: native.label,
-      fontSize: 17,
-      fontWeight: "600",
     },
     archivedSection: {
       borderRadius: 16,
@@ -783,28 +754,6 @@ function createAccountStyles() {
       backgroundColor: native.fill,
       padding: 18,
       gap: 14,
-    },
-    appearanceOptions: {
-      flexDirection: "row",
-      gap: 8,
-    },
-    appearanceOption: {
-      flex: 1,
-      minHeight: 44,
-      borderRadius: 12,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: native.tertiaryLabel,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    appearanceOptionSelected: {
-      borderColor: native.label,
-      backgroundColor: native.fillPressed,
-    },
-    appearanceLabel: {
-      color: native.label,
-      fontSize: 14,
-      fontWeight: "600",
     },
     avatarOptions: {
       flexDirection: "row",

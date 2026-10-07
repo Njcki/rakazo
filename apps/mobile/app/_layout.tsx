@@ -147,6 +147,16 @@ export default function Layout() {
                         headerTransparent: false,
                       }}
                     />
+                    <Stack.Screen
+                      name="server"
+                      options={{
+                        title: t("Server"),
+                        presentation: "formSheet",
+                        sheetAllowedDetents: [0.6, 1],
+                        sheetGrabberVisible: true,
+                        headerTransparent: false,
+                      }}
+                    />
                     <Stack.Screen name="models" options={{ title: t("Models") }} />
                     <Stack.Screen name="voice" options={{ title: t("Voice") }} />
                     <Stack.Screen name="integrations" options={{ title: t("Integrations") }} />

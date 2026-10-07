@@ -31,11 +31,11 @@ import {
   createRunExecutor,
   createRunSandbox,
   createRunSecretWriter,
+  createSecretStore,
   createWebProvider,
   deletePushToken,
   destroyBot,
   EmailEmulator,
-  EncryptedSecretStore,
   ExpoPushProvider,
   endSessionPushToken,
   GraphileJobPublisher,
@@ -67,6 +67,7 @@ import {
   sandboxProviderOptionsFromEnv,
   stripeBillingConfigFromEnv,
   toTeamChatInbound,
+  withSecretPersistence,
 } from "@rakazo/adapters";
 import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@rakazo/auth";
 import type { Actor } from "@rakazo/contracts";
@@ -184,7 +185,7 @@ export async function createApp(
         poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
         applicationName: "rakazo-api",
       });
-  const { prisma } = created;
+  let { prisma } = created;
   const realtime =
     realtimeOverride ??
     (created.pool
@@ -193,7 +194,11 @@ export async function createApp(
           publisher: created.pool,
         })
       : new InMemoryRealtimeFanout());
-  const secrets = new EncryptedSecretStore(env.encryptionKey);
+  const secrets = createSecretStore(env.encryptionKey, process.env, realtime);
+  await secrets.start();
+  if (secrets.describe().capabilities.degraded)
+    logger.warn("Secret storage degraded; encrypted credentials remain available");
+  prisma = withSecretPersistence(prisma, secrets);
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
   });
@@ -913,6 +918,8 @@ export async function createApp(
       billing: billingProvider?.describe().id ?? null,
       jobs: jobKind,
       realtime: realtime.describe().id,
+      secrets: secrets.describe(),
+      degraded: secrets.describe().capabilities.degraded ?? false,
       revision: env.gitSha ?? null,
     })),
   );
@@ -951,6 +958,7 @@ export async function createApp(
       await email?.drain?.();
       await reconciler?.stop();
       await jobs.close();
+      await secrets.close();
       await realtime.close();
       await connector.stop();
       await mcp.close();

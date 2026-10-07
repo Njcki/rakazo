@@ -2,6 +2,7 @@ import {
   resolveCloudAgentProvider,
   resolveDeploymentModel,
   resolveSandboxProvider,
+  secretStoreOptionsFromEnv,
 } from "@rakazo/adapters";
 import {
   resolveAuthSecret,
@@ -100,6 +101,7 @@ export interface AppEnv {
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+  secretStoreOptionsFromEnv(source);
   const authSecret = resolveAuthSecret(source);
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);

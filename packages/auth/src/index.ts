@@ -279,20 +279,20 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             )
             .map(({ organizationId }) => organizationId);
 
-          await prisma.$transaction([
-            prisma.deploymentSettings.updateMany({
+          await prisma.$transaction(async (tx) => {
+            await tx.deploymentSettings.updateMany({
               where: { ownerUserId: user.id },
               data: { ownerUserId: null },
-            }),
+            });
             // Messaging identities are deliberately FK-free, so clear them
             // here or the unique address would point at a deleted bot forever.
-            prisma.messagingIdentity.deleteMany({
+            await tx.messagingIdentity.deleteMany({
               where: { userId: user.id },
-            }),
-            prisma.organization.deleteMany({
+            });
+            await tx.organization.deleteMany({
               where: { id: { in: personalOrganizationIds } },
-            }),
-          ]);
+            });
+          });
         },
       },
     },

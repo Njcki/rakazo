@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@expo/metro-runtime": "57.0.16",
+    "@expo/ui": "57.0.22",
     "@rakazo/chat-ui": "workspace:*",
     "@rakazo/contracts": "workspace:*",
     "@rakazo/core": "workspace:*",

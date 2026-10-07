@@ -9,9 +9,19 @@ const linking = vi.hoisted(() => ({
   openURL: vi.fn(async () => undefined),
 }));
 
+const tableEvents = vi.hoisted(() => ({
+  onLayout: undefined as
+    | ((event: { nativeEvent: { layout: { width: number; height: number } } }) => void)
+    | undefined,
+  onScroll: undefined as
+    | ((event: { nativeEvent: { contentOffset: { x: number } } }) => void)
+    | undefined,
+}));
+
 // react-native ships uncompiled Flow source that node cannot load, so tests mock
 // its component surface as marker elements that expose the layout props the
-// render rules set (horizontal scrolling, per-row minimum width).
+// render rules set (horizontal scrolling, per-row minimum width, cell width) and
+// the color and hairline size of rules drawn inside a message.
 vi.mock("react-native", async () => {
   const { createElement } = await import("react");
 
@@ -40,6 +50,12 @@ vi.mock("react-native", async () => {
           data[`data-${kebab(key)}`] = value === true ? "true" : value;
         }
       }
+      if (tag === "rn-view" && typeof rest.onLayout === "function") {
+        tableEvents.onLayout = rest.onLayout as typeof tableEvents.onLayout;
+      }
+      if (tag === "rn-scroll-view" && typeof rest.onScroll === "function") {
+        tableEvents.onScroll = rest.onScroll as typeof tableEvents.onScroll;
+      }
       return createElement(
         tag,
         {
@@ -52,9 +68,26 @@ vi.mock("react-native", async () => {
     };
 
   return {
-    View: mockComponent("rn-view", ["minWidth", "flex", "flexGrow"]),
-    Text: mockComponent("rn-text", ["accessibilityRole", "textDecorationLine"]),
-    ScrollView: mockComponent("rn-scroll-view", ["horizontal"]),
+    View: mockComponent("rn-view", [
+      "minWidth",
+      "width",
+      "maxWidth",
+      "borderColor",
+      "borderLeftColor",
+      "backgroundColor",
+      "borderWidth",
+      "borderBottomWidth",
+      "height",
+      "gap",
+      "marginTop",
+      "marginBottom",
+      "flexShrink",
+      "flex",
+      "flexGrow",
+      "overflow",
+    ]),
+    Text: mockComponent("rn-text", ["accessibilityRole", "textDecorationLine", "fontWeight"]),
+    ScrollView: mockComponent("rn-scroll-view", ["horizontal", "borderColor", "borderWidth"]),
     Pressable: mockComponent("rn-pressable", ["accessibilityRole", "borderBottomWidth"]),
     TextInput: mockComponent("rn-text-input"),
     Image: mockComponent("rn-image"),
@@ -83,7 +116,7 @@ vi.mock("react-native", async () => {
   };
 });
 
-import { darkTokens } from "@rakazo/ui-tokens";
+import { darkTokens, lightTokens } from "@rakazo/ui-tokens";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { Pressable } from "react-native";
@@ -98,6 +131,24 @@ const SIX_COLUMN_TABLE = `| A | B | C | D | E | F |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 2 | 3 | 4 | 5 | 6 |`;
 
+const CONTENT_SIZED_TABLE = `| ID | City | Notes |
+| --- | --- | --- |
+| AL | Montgomery | This note is long enough to wrap inside the column instead of stretching the table without limit and turning the notes into a one letter strip. |`;
+
+function numericWidths(html: string) {
+  return [...html.matchAll(/data-width="(\d+(?:\.\d+)?)"/g)].map((match) => Number(match[1]));
+}
+
+function tableRows(html: string) {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  return [...document.querySelectorAll("rn-view[data-border-bottom-width]")].map((row) => ({
+    width: Number(row.getAttribute("data-width")),
+    cells: [...row.querySelectorAll("rn-view[data-max-width]")].map((cell) =>
+      Number(cell.getAttribute("data-width")),
+    ),
+  }));
+}
+
 describe("native markdown tables", () => {
   it("wraps the table in a horizontal scroll view", () => {
     const html = renderToStaticMarkup(<ChatMarkdown>{THREE_COLUMN_TABLE}</ChatMarkdown>);
@@ -105,14 +156,19 @@ describe("native markdown tables", () => {
     expect(html).toContain('data-horizontal="true"');
   });
 
-  it("sizes each row from its cell count so wide tables scroll instead of collapsing", () => {
-    // Rows get a minimum width of TABLE_MIN_COLUMN_WIDTH (96) per cell.
-    const narrow = renderToStaticMarkup(<ChatMarkdown>{THREE_COLUMN_TABLE}</ChatMarkdown>);
-    expect(narrow).toContain('data-min-width="288"');
-    expect(narrow).not.toContain('data-min-width="576"');
-
-    const wide = renderToStaticMarkup(<ChatMarkdown>{SIX_COLUMN_TABLE}</ChatMarkdown>);
-    expect(wide).toContain('data-min-width="576"');
+  it("sizes each row from its columns so wide tables scroll instead of collapsing", () => {
+    const narrow = tableRows(
+      renderToStaticMarkup(<ChatMarkdown>{THREE_COLUMN_TABLE}</ChatMarkdown>),
+    );
+    const wide = tableRows(renderToStaticMarkup(<ChatMarkdown>{SIX_COLUMN_TABLE}</ChatMarkdown>));
+    expect(narrow.length).toBeGreaterThan(0);
+    expect(wide.length).toBeGreaterThan(0);
+    for (const row of [...narrow, ...wide]) {
+      expect(row.width).toBeGreaterThan(0);
+      expect(row.width).toBe(row.cells.reduce((total, width) => total + width, 0));
+    }
+    const narrowWidth = narrow[0]?.width ?? 0;
+    for (const row of wide) expect(row.width).toBeGreaterThan(narrowWidth);
   });
 
   it("renders cell text and keeps inline links tappable inside cells", () => {
@@ -124,10 +180,138 @@ describe("native markdown tables", () => {
     expect(html).toContain("docs");
   });
 
+  it("sizes columns to their content, keeps a column one width, and caps long text", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown>{CONTENT_SIZED_TABLE}</ChatMarkdown>);
+    const rows = tableRows(html);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.cells).toHaveLength(3);
+      expect(row.width).toBe(row.cells.reduce((total, width) => total + width, 0));
+    }
+    const [header, body] = rows;
+    expect(header?.cells).toEqual(body?.cells);
+    const [id, city, notes] = header?.cells ?? [];
+    expect(id).toBeLessThan(city ?? 0);
+    expect(city).toBeGreaterThan(96);
+    expect(city).toBeLessThan(notes ?? 0);
+    expect(notes).toBeLessThan(400);
+    expect(html.match(/data-font-weight="600"/g)).toHaveLength(3);
+    expect(html).toContain('data-flex-shrink="0"');
+  });
+
+  it("keeps an offscreen column from stretching the row, and lets it back in when scrolled", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<ChatMarkdown>{CONTENT_SIZED_TABLE}</ChatMarkdown>);
+    });
+    await act(async () => {
+      tableEvents.onLayout?.({ nativeEvent: { layout: { width: 70, height: 40 } } });
+    });
+
+    const rows = () => tableRows(container.innerHTML);
+    const notesHeights = () =>
+      [
+        ...new DOMParser()
+          .parseFromString(container.innerHTML, "text/html")
+          .querySelectorAll("rn-view[data-border-bottom-width]"),
+      ].map(
+        (view) =>
+          view.querySelector("rn-view[data-max-width]:last-child")?.getAttribute("data-height") ??
+          null,
+      );
+    expect(rows()).toHaveLength(2);
+    expect(notesHeights()).toEqual(["33", "33"]);
+
+    const notesStart = (rows()[0]?.cells ?? [])
+      .slice(0, -1)
+      .reduce((total, width) => total + width, 0);
+    await act(async () => {
+      tableEvents.onScroll?.({ nativeEvent: { contentOffset: { x: notesStart } } });
+    });
+    expect(notesHeights()).toEqual([null, null]);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it.each([
+    ["light", lightTokens],
+    ["dark", darkTokens],
+  ] as const)(
+    "draws table, quote and divider rules that show on the %s bot bubble",
+    (scheme, palette) => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown palette={palette} colorScheme={scheme}>
+          {`${THREE_COLUMN_TABLE}\n\n> A quote\n\n---`}
+        </ChatMarkdown>,
+      );
+      const rule = palette.mutedForeground;
+      const hairline = "1";
+      expect(html).toMatch(
+        new RegExp(
+          `<rn-scroll-view[^>]*data-border-color="${rule}"[^>]*data-border-width="${hairline}"`,
+        ),
+      );
+      const rows = html.match(
+        new RegExp(
+          `<rn-view[^>]*data-border-color="${rule}"[^>]*data-border-bottom-width="${hairline}"`,
+          "g",
+        ),
+      );
+      expect(rows).toHaveLength(3);
+      expect(html).toContain(`data-border-left-color="${rule}"`);
+      expect(html).toMatch(
+        new RegExp(`<rn-view[^>]*data-background-color="${rule}"[^>]*data-height="${hairline}"`),
+      );
+      // The bubble is filled with `muted`; a rule in that color is invisible.
+      expect(html).not.toContain(`data-border-color="${palette.muted}"`);
+      expect(html).not.toContain(`data-border-left-color="${palette.muted}"`);
+    },
+  );
+
   it("applies the same table layout while streaming", () => {
     const html = renderToStaticMarkup(<ChatMarkdown streaming>{SIX_COLUMN_TABLE}</ChatMarkdown>);
     expect(html).toContain("<rn-scroll-view");
-    expect(html).toContain('data-min-width="576"');
+    expect(html).toContain('data-horizontal="true"');
+    const widths = numericWidths(html);
+    expect(widths[0]).toBeGreaterThan(0);
+  });
+
+  it("separates top-level blocks with one gap and no leading or trailing margin", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>
+        {[
+          "## Rollout",
+          "",
+          "Intro paragraph.",
+          "",
+          "- One",
+          "- Two",
+          "",
+          CONTENT_SIZED_TABLE,
+          "",
+          "> First quoted paragraph.",
+          ">",
+          "> Second quoted paragraph.",
+          "",
+          "---",
+          "",
+          "Trailing paragraph.",
+        ].join("\n")}
+      </ChatMarkdown>,
+    );
+    expect(html).toContain('data-gap="10"');
+    expect(html).toMatch(/data-border-left-color="[^"]+"[^>]*data-gap="10"/);
+    expect(html).not.toContain('data-margin-top="10"');
+    expect(html).not.toContain('data-margin-bottom="9"');
+    expect(html).not.toContain('data-margin-bottom="5"');
+    expect(html).toContain('data-margin-top="0"');
+    expect(html).toContain('data-margin-bottom="0"');
   });
 });
 

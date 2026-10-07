@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page, TestInfo } from "@playwright/test";
+import { visibleInlineCode } from "../src/inline-code";
 
 async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
@@ -23,7 +24,9 @@ async function expectFaqMatchesVisibleCopy(page: Page) {
   expect(data.mainEntity.length).toBeGreaterThan(0);
   for (const item of data.mainEntity) {
     await expect(page.getByRole("heading", { level: 3, name: item.name })).toBeVisible();
-    await expect(page.getByText(item.acceptedAnswer.text, { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText(visibleInlineCode(item.acceptedAnswer.text), { exact: true }).first(),
+    ).toBeVisible();
   }
 }
 

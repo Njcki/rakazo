@@ -3,6 +3,7 @@ import type { Alternative } from "../alternatives";
 import { COMPARED_ON, GET_STARTED, OPEN_SOURCE_REASONS } from "../alternatives";
 import { DOCS_URL, GITHUB_URL } from "../site";
 import Button from "./Button.astro";
+import InlineCode from "./InlineCode.astro";
 import SiteFrame from "./SiteFrame.astro";
 
 type Props = {
@@ -15,7 +16,19 @@ const { page } = Astro.props;
 <SiteFrame title={page.title} description={page.description} faq={page.faq}>
   <p class="alt-crumb"><a href="/alternatives/">Alternatives</a></p>
   <h1>{page.h1}</h1>
-  {page.intro.map((paragraph) => <p>{paragraph}</p>)}
+  {page.intro.map((paragraph) => <p><InlineCode text={paragraph} /></p>)}
+  {
+    page.sections?.map((section) => (
+      <section>
+        <h2>{section.heading}</h2>
+        {section.paragraphs.map((paragraph) => (
+          <p>
+            <InlineCode text={paragraph} />
+          </p>
+        ))}
+      </section>
+    ))
+  }
   <p class="alt-note">Public descriptions as of {COMPARED_ON}.</p>
 
   <div class="alt-table-wrap">
@@ -33,8 +46,8 @@ const { page } = Astro.props;
           page.rows.map((row) => (
             <tr>
               <th scope="row">{row.topic}</th>
-              <td>{row.rakazo}</td>
-              <td>{row.other}</td>
+              <td><InlineCode text={row.rakazo} /></td>
+              <td><InlineCode text={row.other} /></td>
             </tr>
           ))
         }
@@ -59,7 +72,7 @@ const { page } = Astro.props;
     page.faq.map((item, index) => (
       <section aria-labelledby={`${page.slug}-faq-${index}`}>
         <h3 id={`${page.slug}-faq-${index}`}>{item.question}</h3>
-        <p>{item.answer}</p>
+        <p><InlineCode text={item.answer} /></p>
       </section>
     ))
   }

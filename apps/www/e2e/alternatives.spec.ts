@@ -1,6 +1,7 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { ALTERNATIVES, ALTERNATIVES_HUB, HUB_CARDS } from "../src/alternatives";
+import { visibleInlineCode } from "../src/inline-code";
 
 async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
@@ -138,7 +139,7 @@ test.describe("alternatives", () => {
       );
       for (const item of alternative.faq) {
         await expect(page.getByRole("heading", { name: item.question })).toBeVisible();
-        await expect(page.getByText(item.answer)).toBeVisible();
+        await expect(page.getByText(visibleInlineCode(item.answer))).toBeVisible();
       }
 
       await captureScreenshot(page, testInfo, `06-alternative-${index}-${alternative.slug}`);

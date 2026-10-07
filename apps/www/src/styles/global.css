@@ -2430,7 +2430,8 @@ button.button--secondary:focus-visible {
   color: var(--ink);
 }
 
-.guide :not(pre) > code {
+.guide :not(pre) > code,
+.alt-page :not(pre) > code {
   border-radius: 6px;
   background: var(--surface-soft);
   padding: 0.1em 0.35em;

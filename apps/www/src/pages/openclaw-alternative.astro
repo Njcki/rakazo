@@ -1,19 +1,23 @@
 ---
 import Button from "../components/Button.astro";
 import FaqSection from "../components/FaqSection.astro";
+import InlineCode from "../components/InlineCode.astro";
 import Footer from "../components/Footer.astro";
 import GetStartedDialog from "../components/GetStartedDialog.astro";
 import Header from "../components/Header.astro";
 import {
   COMPARISON_ROWS,
   faqPageStructuredData,
+  OPENCLAW_DAY_TO_DAY_PARAGRAPHS,
   OPENCLAW_DESCRIPTION,
   OPENCLAW_DOCS_URL,
   OPENCLAW_FAQS,
   OPENCLAW_FEATURES_URL,
+  OPENCLAW_GETTING_STARTED_URL,
   OPENCLAW_H1,
   OPENCLAW_GITHUB_URL,
   OPENCLAW_SANDBOX_URL,
+  OPENCLAW_SETUP_PARAGRAPHS,
   OPENCLAW_TITLE,
 } from "../guide";
 import { fetchGithubStars, formatStarCount } from "../github";
@@ -39,14 +43,32 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
     <main id="main" class="privacy-copy guide">
       <h1>{OPENCLAW_H1}</h1>
       <p>
-        Rakazo and OpenClaw both run an AI agent on hardware you operate. They are not the same
-        product, and Rakazo does not import an OpenClaw setup. Use this page to compare the shape of
-        each one.
+        The main difference is simplicity. Like Grok Bot, Rakazo is just chat: you set up the bot
+        and manage it from that chat. OpenClaw is also
+        open source and self-hosted. Its{" "}
+        <a href={OPENCLAW_GETTING_STARTED_URL}>getting-started guide</a> is a longer path: a CLI
+        installer, an onboarding wizard, a Gateway you run in the terminal or install as a background
+        service, and a config file.
       </p>
       <p>
-        OpenClaw details below follow <a href={OPENCLAW_DOCS_URL}>OpenClaw's documentation</a>. Rakazo
-        details follow this project. Both change. The linked docs are the place to confirm a detail.
+        They are not the same product, and Rakazo does not import an OpenClaw setup. OpenClaw details
+        below follow <a href={OPENCLAW_DOCS_URL}>OpenClaw's documentation</a>. Rakazo details follow
+        this project. Both change. The linked docs are the place to confirm a detail.
       </p>
+
+      <h2>Setup</h2>
+      {OPENCLAW_SETUP_PARAGRAPHS.map((paragraph) => (
+        <p>
+          <InlineCode text={paragraph} />
+        </p>
+      ))}
+
+      <h2>Day-to-day management</h2>
+      {OPENCLAW_DAY_TO_DAY_PARAGRAPHS.map((paragraph) => (
+        <p>
+          <InlineCode text={paragraph} />
+        </p>
+      ))}
 
       <h2>Comparison</h2>
       <div class="guide-table-wrap">
@@ -64,8 +86,8 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
               COMPARISON_ROWS.map((row) => (
                 <tr>
                   <th scope="row">{row.aspect}</th>
-                  <td>{row.rakazo}</td>
-                  <td>{row.openclaw}</td>
+                  <td><InlineCode text={row.rakazo} /></td>
+                  <td><InlineCode text={row.openclaw} /></td>
                 </tr>
               ))
             }
@@ -130,6 +152,7 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
       <h2>Sources</h2>
       <ul class="source-list">
         <li><a href={OPENCLAW_DOCS_URL}>OpenClaw docs</a></li>
+        <li><a href={OPENCLAW_GETTING_STARTED_URL}>OpenClaw getting started</a></li>
         <li><a href={OPENCLAW_FEATURES_URL}>OpenClaw features</a></li>
         <li><a href={OPENCLAW_SANDBOX_URL}>OpenClaw sandboxing</a></li>
         <li><a href={OPENCLAW_GITHUB_URL}>OpenClaw source</a></li>

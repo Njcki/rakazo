@@ -15,6 +15,8 @@ describe("alternative pages", () => {
     expect(ALTERNATIVES.map((page) => page.slug)).toEqual([
       "muse-alternative",
       "dots-alternative",
+      "instinct-alternative",
+      "hermes-alternative",
     ]);
     expect(new Set(ALTERNATIVES.map((page) => page.slug)).size).toBe(ALTERNATIVES.length);
 
@@ -23,6 +25,8 @@ describe("alternative pages", () => {
     expect(HUB_CARDS.map((card) => card.href)).toEqual([
       "/muse-alternative/",
       "/dots-alternative/",
+      "/instinct-alternative/",
+      "/hermes-alternative/",
       "/grok-bot-alternative/",
       "/openclaw-alternative/",
     ]);
@@ -63,9 +67,23 @@ describe("alternative pages", () => {
     expect(getMarkdownDocument("/alternatives/")).toContain(`# ${ALTERNATIVES_HUB.h1}`);
     expect(getMarkdownAlternate("/alternatives/")).toBe("/alternatives.md");
 
+    const hermes = ALTERNATIVES.find((page) => page.slug === "hermes-alternative");
+    expect(hermes?.sections?.map((section) => section.heading)).toEqual([
+      "Setup",
+      "Day-to-day management",
+    ]);
+    expect(hermes?.intro.join(" ")).toContain("just chat");
+    expect(hermes?.sections?.[0]?.paragraphs.join(" ")).toContain("Choose provider later");
+    expect(hermes?.sources.some((source) => source.href.endsWith("/docs/user-guide/desktop"))).toBe(
+      true,
+    );
+
     for (const page of ALTERNATIVES) {
       const markdown = alternativeMarkdown(page);
       expect(markdown.startsWith(`# ${page.h1}\n`)).toBe(true);
+      for (const section of page.sections ?? []) {
+        expect(markdown).toContain(`## ${section.heading}`);
+      }
       expect(getMarkdownDocument(alternativePath(page))).toBe(markdown);
       expect(getMarkdownAlternate(`/${page.slug}`)).toBe(`/${page.slug}.md`);
       for (const item of page.faq) {

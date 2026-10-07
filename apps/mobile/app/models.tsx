@@ -120,7 +120,6 @@ export default function Models() {
   const [pending, setPending] = useState<"connect" | "default" | "disconnect" | null>(null);
   const [oauthPending, setOauthPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [feedbackAnchor, setFeedbackAnchor] = useState<FeedbackAnchor>("connection");
   const oauthAbortRef = useRef<AbortController | null>(null);
   const oauthLoginIdRef = useRef<string | null>(null);
@@ -133,19 +132,17 @@ export default function Models() {
     next: { error?: string | null; notice?: string | null },
   ) {
     const nextError = next.error ?? null;
-    const nextNotice = next.error ? null : (next.notice ?? null);
     setFeedbackAnchor(anchor);
     setError(nextError);
-    setNotice(nextNotice);
-    const message = nextError ?? nextNotice;
+    const message = nextError ?? next.notice ?? null;
     // VoiceOver keeps focus on the tapped button, so speak the result from here.
+    // Success is spoken only: the selection already shows the active model.
     if (message) AccessibilityInfo.announceForAccessibility(message);
   }
 
   function clearFeedback() {
     setFeedbackAnchor("connection");
     setError(null);
-    setNotice(null);
   }
 
   const copyOAuthCode = useCallback((code: string) => {
@@ -344,6 +341,10 @@ export default function Models() {
     !isOpenAiCompatible && selected
       ? (selected.thinkingLevels ?? []).filter((level) => level !== "off")
       : [];
+  const reasoningEffortValue = thinkingLevel ? thinkingLevelLabel(thinkingLevel, t) : t("Default");
+  const catalogThinkingValue = thinkingLevel
+    ? thinkingLevelLabel(thinkingLevel, t)
+    : t("Default ({level})", { level: thinkingLevelLabel("medium", t) });
   const selectedStoredLevel =
     !isOpenAiCompatible && credential?.modelId === selected?.id
       ? (credential?.thinkingLevel ?? null)
@@ -716,12 +717,45 @@ export default function Models() {
     }
   }
 
-  const feedback = (
-    <>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-    </>
-  );
+  const feedback = error ? <Text style={styles.error}>{error}</Text> : null;
+
+  function disclosureRow(label: string, expanded: boolean, onPress: () => void) {
+    return (
+      <View style={styles.card}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={onPress}
+          style={({ pressed }) => [styles.modelRow, styles.singleRow, pressed && styles.pressed]}
+        >
+          <Text style={styles.modelLabel}>{label}</Text>
+          <Text style={styles.chevron}>{expanded ? "⌄" : "›"}</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  function limitField(
+    label: string,
+    value: string,
+    onChangeText: (next: string) => void,
+    maxLength: number,
+  ) {
+    return (
+      <View>
+        <Text style={styles.sectionTitle}>{label}</Text>
+        <TextInput
+          accessibilityLabel={label}
+          editable={!busy}
+          keyboardType="number-pad"
+          maxLength={maxLength}
+          onChangeText={onChangeText}
+          style={styles.keyInput}
+          value={value}
+        />
+      </View>
+    );
+  }
 
   const compatConfig = isOpenAiCompatible ? (
     <>
@@ -741,8 +775,9 @@ export default function Models() {
         accessibilityRole="button"
         accessibilityState={{ expanded: showEndpointHelp }}
         onPress={() => setShowEndpointHelp((visible) => !visible)}
+        style={({ pressed }) => [pressed && styles.pressed]}
       >
-        <Text style={styles.helpLabel}>{t("Setup help")}</Text>
+        <Text style={styles.textAction}>{t("Setup help")}</Text>
       </Pressable>
       {showEndpointHelp ? (
         <Text style={styles.hint}>{t(OPENAI_COMPATIBLE_BASE_URL_HINT)}</Text>
@@ -815,116 +850,80 @@ export default function Models() {
             <Pressable
               accessibilityRole="button"
               onPress={() => stageCompatibleModelId(probeModels[0] ?? "")}
+              style={({ pressed }) => [pressed && styles.pressed]}
             >
-              <Text style={styles.helpLabel}>{t("Use a found model")}</Text>
+              <Text style={styles.textAction}>{t("Use a found model")}</Text>
             </Pressable>
           ) : null}
         </>
       )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: showAdvanced }}
-        onPress={() => setShowAdvanced((visible) => !visible)}
-      >
-        <Text style={styles.helpLabel}>{t("Advanced")}</Text>
-      </Pressable>
+      {disclosureRow(t("Advanced"), showAdvanced, () => setShowAdvanced((visible) => !visible))}
       {showAdvanced ? (
-        <View style={styles.modelRow}>
-          <Text style={styles.modelLabel}>{t("Supports thinking")}</Text>
-          <Switch
-            accessibilityLabel={t("Supports thinking")}
-            value={reasoning}
-            onValueChange={(value) => {
-              setReasoning(value);
-              if (!value) setThinkingLevel(null);
-            }}
-            disabled={busy}
-          />
-        </View>
-      ) : null}
-      {showAdvanced && reasoning ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t("Reasoning effort")}
-          disabled={busy}
-          onPress={() => {
-            presentMessageActionSheet({
-              title: t("Reasoning effort"),
-              cancel: t("Cancel"),
-              more: t("More"),
-              colorScheme,
-              actions: [
-                {
-                  text: t("Default"),
-                  onPress: () => setThinkingLevel(null),
-                },
-                ...THINKING_LEVEL_OPTIONS.map((level) => ({
-                  text: thinkingLevelLabel(level, t),
-                  onPress: () => setThinkingLevel(level),
-                })),
-              ],
-            });
-          }}
-          style={styles.modelRow}
-        >
-          <Text style={styles.modelLabel}>{t("Reasoning effort")}</Text>
-          <Text style={styles.helpLabel}>
-            {thinkingLevel ? thinkingLevelLabel(thinkingLevel, t) : t("Default")}
-          </Text>
-        </Pressable>
-      ) : null}
-      {showAdvanced ? (
-        <View style={styles.modelRow}>
-          <Text style={styles.modelLabel}>{t("Context limit")}</Text>
-          <TextInput
-            accessibilityLabel={t("Context limit")}
-            editable={!busy}
-            keyboardType="number-pad"
-            maxLength={7}
-            onChangeText={setContextWindow}
-            style={[styles.keyInput, styles.maxImagesInput]}
-            value={contextWindow}
-          />
-        </View>
-      ) : null}
-      {showAdvanced ? (
-        <View style={styles.modelRow}>
-          <Text style={styles.modelLabel}>{t("Maximum output tokens")}</Text>
-          <TextInput
-            accessibilityLabel={t("Maximum output tokens")}
-            editable={!busy}
-            keyboardType="number-pad"
-            maxLength={6}
-            onChangeText={setMaxTokens}
-            style={[styles.keyInput, styles.maxImagesInput]}
-            value={maxTokens}
-          />
-        </View>
-      ) : null}
-      {showAdvanced ? (
-        <View style={styles.modelRow}>
-          <Text style={styles.modelLabel}>{t("Supports images")}</Text>
-          <Switch
-            accessibilityLabel={t("Supports images")}
-            value={supportsImages}
-            onValueChange={setSupportsImages}
-            disabled={busy}
-          />
-        </View>
-      ) : null}
-      {showAdvanced && supportsImages ? (
-        <View style={styles.modelRow}>
-          <Text style={styles.modelLabel}>{t("Maximum images per request")}</Text>
-          <TextInput
-            accessibilityLabel={t("Maximum images per request")}
-            editable={!busy}
-            keyboardType="number-pad"
-            maxLength={4}
-            onChangeText={setMaxImagesPerPrompt}
-            style={[styles.keyInput, styles.maxImagesInput]}
-            value={maxImagesPerPrompt}
-          />
-        </View>
+        <>
+          <View style={styles.card}>
+            <View style={styles.modelRow}>
+              <Text style={styles.modelLabel}>{t("Supports thinking")}</Text>
+              <Switch
+                accessibilityLabel={t("Supports thinking")}
+                value={reasoning}
+                onValueChange={(value) => {
+                  setReasoning(value);
+                  if (!value) setThinkingLevel(null);
+                }}
+                disabled={busy}
+              />
+            </View>
+            {reasoning ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Reasoning effort")}
+                accessibilityValue={{ text: reasoningEffortValue }}
+                disabled={busy}
+                onPress={() => {
+                  presentMessageActionSheet({
+                    title: t("Reasoning effort"),
+                    cancel: t("Cancel"),
+                    more: t("More"),
+                    colorScheme,
+                    actions: [
+                      {
+                        text: t("Default"),
+                        onPress: () => setThinkingLevel(null),
+                      },
+                      ...THINKING_LEVEL_OPTIONS.map((level) => ({
+                        text: thinkingLevelLabel(level, t),
+                        onPress: () => setThinkingLevel(level),
+                      })),
+                    ],
+                  });
+                }}
+                style={({ pressed }) => [styles.modelRow, pressed && styles.pressed]}
+              >
+                <Text style={styles.modelLabel}>{t("Reasoning effort")}</Text>
+                <Text style={styles.rowValue}>{reasoningEffortValue}</Text>
+              </Pressable>
+            ) : null}
+            <View style={[styles.modelRow, styles.singleRow]}>
+              <Text style={styles.modelLabel}>{t("Supports images")}</Text>
+              <Switch
+                accessibilityLabel={t("Supports images")}
+                value={supportsImages}
+                onValueChange={setSupportsImages}
+                disabled={busy}
+              />
+            </View>
+          </View>
+          {limitField(t("Context limit"), contextWindow, setContextWindow, 7)}
+          {limitField(t("Maximum output tokens"), maxTokens, setMaxTokens, 6)}
+          {supportsImages
+            ? limitField(
+                t("Maximum images per request"),
+                maxImagesPerPrompt,
+                setMaxImagesPerPrompt,
+                4,
+              )
+            : null}
+        </>
       ) : null}
     </>
   ) : null;
@@ -932,13 +931,7 @@ export default function Models() {
   const compatKeySection =
     isOpenAiCompatible && acceptsKey ? (
       <View style={styles.keySection}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: showApiKey }}
-          onPress={() => setShowApiKey((visible) => !visible)}
-        >
-          <Text style={styles.helpLabel}>{t("API key")}</Text>
-        </Pressable>
+        {disclosureRow(t("API key"), showApiKey, () => setShowApiKey((visible) => !visible))}
         {showApiKey ? (
           <TextInput
             accessibilityLabel={t("API key")}
@@ -1042,72 +1035,45 @@ export default function Models() {
               <Text style={[styles.modelLabel, styles.mutedLabel]}>{t("No matching models")}</Text>
             </View>
           ) : null}
+          {catalogThinkingLevels.length ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Thinking")}
+              accessibilityValue={{ text: catalogThinkingValue }}
+              disabled={busy}
+              onPress={() => {
+                presentMessageActionSheet({
+                  title: t("Thinking"),
+                  cancel: t("Cancel"),
+                  more: t("More"),
+                  colorScheme,
+                  actions: [
+                    {
+                      text: t("Default ({level})", {
+                        level: thinkingLevelLabel("medium", t),
+                      }),
+                      onPress: () => setThinkingLevel(null),
+                    },
+                    ...catalogThinkingLevels.map((level) => ({
+                      text: thinkingLevelLabel(level, t),
+                      onPress: () => setThinkingLevel(level),
+                    })),
+                  ],
+                });
+              }}
+              style={({ pressed }) => [
+                styles.modelRow,
+                styles.singleRow,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.modelLabel}>{t("Thinking")}</Text>
+              <Text style={styles.rowValue}>{catalogThinkingValue}</Text>
+            </Pressable>
+          ) : null}
         </View>
-        {catalogThinkingLevels.length ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("Thinking")}
-            disabled={busy}
-            onPress={() => {
-              presentMessageActionSheet({
-                title: t("Thinking"),
-                cancel: t("Cancel"),
-                more: t("More"),
-                colorScheme,
-                actions: [
-                  {
-                    text: t("Default ({level})", {
-                      level: thinkingLevelLabel("medium", t),
-                    }),
-                    onPress: () => {
-                      setThinkingLevel(null);
-                      setNotice(null);
-                    },
-                  },
-                  ...catalogThinkingLevels.map((level) => ({
-                    text: thinkingLevelLabel(level, t),
-                    onPress: () => {
-                      setThinkingLevel(level);
-                      setNotice(null);
-                    },
-                  })),
-                ],
-              });
-            }}
-            style={styles.modelRow}
-          >
-            <Text style={styles.modelLabel}>{t("Thinking")}</Text>
-            <Text style={styles.helpLabel}>
-              {thinkingLevel
-                ? thinkingLevelLabel(thinkingLevel, t)
-                : t("Default ({level})", { level: thinkingLevelLabel("medium", t) })}
-            </Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded: showAdvanced }}
-          onPress={() => setShowAdvanced((visible) => !visible)}
-        >
-          <Text style={styles.helpLabel}>{t("Advanced")}</Text>
-        </Pressable>
-        {showAdvanced ? (
-          <View style={styles.modelRow}>
-            <Text style={styles.modelLabel}>{t("Maximum output tokens")}</Text>
-            <TextInput
-              accessibilityLabel={t("Maximum output tokens")}
-              editable={!busy}
-              keyboardType="number-pad"
-              maxLength={6}
-              onChangeText={setMaxTokens}
-              style={[styles.keyInput, styles.maxImagesInput]}
-              value={maxTokens}
-            />
-          </View>
-        ) : null}
-        {!isOpenAiCompatible && selected.billing ? (
-          <Text style={styles.billing}>{selected.billing}</Text>
-        ) : null}
+        {disclosureRow(t("Advanced"), showAdvanced, () => setShowAdvanced((visible) => !visible))}
+        {showAdvanced ? limitField(t("Maximum output tokens"), maxTokens, setMaxTokens, 6) : null}
       </>
     ) : null;
 
@@ -1322,7 +1288,6 @@ export default function Models() {
         <Text style={styles.providerName}>
           {t("Connected · {label}", { label: credential.label })}
         </Text>
-        <Text style={styles.secondary}>{t("Stored securely. Never shown here.")}</Text>
       </View>
       <Pressable
         accessibilityRole="button"
@@ -1474,9 +1439,6 @@ export default function Models() {
             </>
           ) : (
             <>
-              <Text style={styles.secondary}>
-                {t("Connect this provider to use it as your personal model.")}
-              </Text>
               {catalogConnectionControls}
               {feedback}
               <Text style={styles.sectionTitle}>{t("Model")}</Text>
@@ -1621,11 +1583,12 @@ function createModelsStyles() {
     selectedRow: {
       backgroundColor: tokens.accent,
     },
-    billing: {
+    singleRow: {
+      borderBottomWidth: 0,
+    },
+    rowValue: {
       color: native.secondaryLabel,
-      fontSize: 13,
-      lineHeight: 19,
-      marginTop: 2,
+      fontSize: 15,
     },
     hint: {
       color: native.secondaryLabel,
@@ -1633,11 +1596,15 @@ function createModelsStyles() {
       lineHeight: 19,
       marginTop: 4,
     },
-    helpLabel: {
+    textAction: {
       color: native.secondaryLabel,
-      fontSize: 13,
+      fontSize: 15,
       marginTop: 8,
-      textDecorationLine: "underline",
+    },
+    chevron: {
+      color: native.secondaryLabel,
+      fontSize: 22,
+      fontWeight: "300",
     },
     oauthCard: {
       borderRadius: 14,
@@ -1673,13 +1640,6 @@ function createModelsStyles() {
       marginTop: 4,
       fontSize: 16,
     },
-    maxImagesInput: {
-      width: 72,
-      minHeight: 40,
-      paddingVertical: 8,
-      marginTop: 0,
-      textAlign: "center",
-    },
     primaryButton: {
       minHeight: 48,
       borderRadius: 12,
@@ -1711,11 +1671,6 @@ function createModelsStyles() {
     },
     error: {
       color: tokens.destructive,
-      fontSize: 14,
-      marginTop: 4,
-    },
-    notice: {
-      color: tokens.success,
       fontSize: 14,
       marginTop: 4,
     },

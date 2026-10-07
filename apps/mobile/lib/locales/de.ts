@@ -292,8 +292,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "Configured by deployment": "Durch die Bereitstellung konfiguriert",
   "Connect API key": "API-Schlüssel verbinden",
   "Connect MCP server {name}": "MCP-Server „{name}“ verbinden",
-  "Connect this provider to use it as your personal model.":
-    "Verbinde diesen Anbieter, um ihn als persönliches Modell zu verwenden.",
   "Connected and using {label}.": "Verbunden, {label} ist aktiv.",
   "Connected · {label}": "Verbunden · {label}",
   "Connected. Its tools are available from your next message.":
@@ -342,7 +340,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "Show less": "Weniger anzeigen",
   "Sign in": "Anmelden",
   "Starting…": "Wird gestartet…",
-  "Stored securely. Never shown here.": "Sicher gespeichert. Hier nie angezeigt.",
   Submit: "Absenden",
   "Supports images": "Unterstützt Bilder",
   "Supports thinking": "Unterstützt Denkmodus",

@@ -37,6 +37,7 @@ describe("agent content negotiation", () => {
     expect(getMarkdownDocument("/about/")).toContain("# About Rakazo");
     expect(getMarkdownAlternate("/")).toBe("/index.md");
     expect(getMarkdownAlternate("/support/")).toBe("/support.md");
+    expect(getMarkdownDocument("/terms/")).toContain("# Rakazo terms");
     expect(getMarkdownDocument("/missing")).toBeUndefined();
     expect(getMarkdownAlternate("/missing")).toBeUndefined();
     expect(getMarkdownAlternate("/changelog")).toBeUndefined();

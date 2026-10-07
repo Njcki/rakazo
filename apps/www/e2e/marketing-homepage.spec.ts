@@ -77,4 +77,14 @@ test.describe("marketing homepage", () => {
     );
     await captureScreenshot(page, testInfo, "04-marketing-zh-get-started");
   });
+
+  test("footer links to the terms with billing and refunds", async ({ page }, testInfo) => {
+    await page.goto("/");
+    await page.getByRole("contentinfo").getByRole("link", { name: "Terms" }).click();
+    await expect(page).toHaveURL(/\/terms\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cancellation and refunds" })).toBeVisible();
+    await expect(page.getByRole("contentinfo")).toContainText("Inbox Zero Inc.");
+    await captureScreenshot(page, testInfo, "05-marketing-terms");
+  });
 });

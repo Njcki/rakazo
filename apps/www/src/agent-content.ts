@@ -22,6 +22,7 @@ Rakazo is an open source Grok Bot alternative that gives each bot a sandboxed br
 - [About](https://rakazo.com/about/)
 - [Support](https://rakazo.com/support/)
 - [Privacy](https://rakazo.com/privacy/)
+- [Terms](https://rakazo.com/terms/)
 - [Sitemap](https://rakazo.com/sitemap-index.xml)
 `;
 
@@ -66,6 +67,21 @@ Hosted users can delete their account and associated personal Space data from Ac
 Read the [complete privacy policy](https://rakazo.com/privacy/) for account information, other service providers, retention, deletion, security, international transfers, children, and your rights.
 `;
 
+export const TERMS_MARKDOWN = `# Rakazo terms
+
+Last updated: October 7, 2026
+
+These terms are an agreement between you and Inbox Zero Inc. for the Rakazo service we host, the Rakazo apps, and rakazo.com. The Rakazo source code is governed by the Apache License 2.0, which does not grant rights to the Rakazo name or logo, and self-hosted deployments are the operator's responsibility.
+
+You are responsible for your account and for actions your bots take on your behalf, including in scheduled routines; give bots only the access they need and require approval for actions that are hard to undo. AI output can be wrong, so review it before relying on it, and do not use the Service where an error could cause serious harm. Do not use the Service to break the law, send spam or malware, access systems without authorization, abuse its computers, or violate the terms of connected providers. You keep ownership of your content and bot output, and you pay any fees charged by third-party services, including usage on your own API keys.
+
+Free trials convert to a paid plan when they end unless cancelled before then. Plans may include usage limits, and we may slow or pause usage that exceeds them. Paid plans renew automatically until cancelled and are charged through Stripe. Cancel at any time from billing settings or by emailing [hello@rakazo.com](mailto:hello@rakazo.com); access continues until the end of the paid period. Payments are non-refundable and not prorated except where required by law. Charges made in error are refunded when reported within 30 days. If we close your account or stop offering the Service for reasons other than a violation of these terms, we refund prepaid fees for the unused period. Consumers in the EU and UK can withdraw from a new subscription within 14 days and are refunded less the value of the Service already provided.
+
+The Service is provided as is. Our liability is limited to the greater of what you paid us in the previous 12 months or US$100, except where the law does not allow a limit. Delaware law governs these terms.
+
+Read the [complete terms](https://rakazo.com/terms/) for acceptable use, termination and data deletion, disclaimers, indemnity, app store terms, changes, and contact details.
+`;
+
 export const AGENT_INSTRUCTIONS = `# Rakazo
 
 > Open source Grok Bot alternative with sandboxed browser and shell access. Your keys, your model, your machine.
@@ -94,6 +110,7 @@ Do not present Rakazo as a zero-configuration hosted service. Self-hosting is av
 - [Releases](https://github.com/elie222/rakazo/releases)
 - [Support](https://rakazo.com/support/)
 - [Privacy](https://rakazo.com/privacy/)
+- [Terms](https://rakazo.com/terms/)
 - [Sitemap](https://rakazo.com/sitemap-index.xml)
 `;
 
@@ -112,6 +129,7 @@ const MARKDOWN_DOCUMENTS = new Map<string, string>([
   ["/about", ABOUT_MARKDOWN],
   ["/privacy", PRIVACY_MARKDOWN],
   ["/support", SUPPORT_MARKDOWN],
+  ["/terms", TERMS_MARKDOWN],
 ]);
 
 type MediaPreference = {

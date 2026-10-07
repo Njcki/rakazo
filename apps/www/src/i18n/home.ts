@@ -100,6 +100,7 @@ export type HomeCopy = {
       about: string;
       support: string;
       privacy: string;
+      terms: string;
     };
   };
 };
@@ -388,6 +389,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         about: "About",
         support: "Support",
         privacy: "Privacy",
+        terms: "Terms",
       },
     },
   },
@@ -520,6 +522,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         about: "Über uns",
         support: "Support",
         privacy: "Datenschutz",
+        terms: "AGB",
       },
     },
   },
@@ -651,6 +654,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         about: "소개",
         support: "지원",
         privacy: "개인정보 처리방침",
+        terms: "이용약관",
       },
     },
   },
@@ -782,6 +786,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
         about: "关于",
         support: "支持",
         privacy: "隐私",
+        terms: "条款",
       },
     },
   },

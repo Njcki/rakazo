@@ -85,6 +85,8 @@ type ModelSelection = {
   modelId?: string;
 };
 
+type FeedbackAnchor = "probe" | "model" | "connection";
+
 export default function Models() {
   const styles = useThemedStyles(createModelsStyles);
   const { t } = useI18n();
@@ -119,11 +121,32 @@ export default function Models() {
   const [oauthPending, setOauthPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [feedbackAnchor, setFeedbackAnchor] = useState<FeedbackAnchor>("connection");
   const oauthAbortRef = useRef<AbortController | null>(null);
   const oauthLoginIdRef = useRef<string | null>(null);
   const oauthCodeSubmittingRef = useRef(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const codeCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function publishFeedback(
+    anchor: FeedbackAnchor,
+    next: { error?: string | null; notice?: string | null },
+  ) {
+    const nextError = next.error ?? null;
+    const nextNotice = next.error ? null : (next.notice ?? null);
+    setFeedbackAnchor(anchor);
+    setError(nextError);
+    setNotice(nextNotice);
+    const message = nextError ?? nextNotice;
+    // VoiceOver keeps focus on the tapped button, so speak the result from here.
+    if (message) AccessibilityInfo.announceForAccessibility(message);
+  }
+
+  function clearFeedback() {
+    setFeedbackAnchor("connection");
+    setError(null);
+    setNotice(null);
+  }
 
   const copyOAuthCode = useCallback((code: string) => {
     void Clipboard.setStringAsync(code)
@@ -212,7 +235,9 @@ export default function Models() {
     useCallback(() => {
       void load()
         .catch((err: unknown) =>
-          setError(err instanceof Error ? err.message : t("Could not load model settings")),
+          publishFeedback("connection", {
+            error: err instanceof Error ? err.message : t("Could not load model settings"),
+          }),
         )
         .finally(() => setLoading(false));
       return () => {
@@ -335,8 +360,7 @@ export default function Models() {
   function updateBaseUrl(nextBaseUrl: string) {
     setBaseUrl(nextBaseUrl);
     resetOpenAiCompatibleProbe();
-    setError(null);
-    setNotice(null);
+    clearFeedback();
   }
 
   function updateApiKey(nextApiKey: string) {
@@ -380,14 +404,13 @@ export default function Models() {
     setAccountId(nextCredential?.accountId ?? "");
     setGatewayId(nextCredential?.gatewayId ?? "");
     resetOpenAiCompatibleProbe();
-    setError(null);
-    setNotice(null);
+    clearFeedback();
   }
 
   async function probeServerModels() {
     if (!baseUrl.trim()) return;
-    setError(null);
-    setNotice(null);
+    Keyboard.dismiss();
+    clearFeedback();
     await modelProbe.probe({
       baseUrl,
       apiKey,
@@ -396,16 +419,19 @@ export default function Models() {
         const next = modelId.trim() || models[0] || "";
         if (next !== modelId) stageCompatibleModelId(next);
         else setModelId(next);
-        setNotice(
-          models.length === 0
-            ? t("Server found. Enter a model name.")
-            : models.length === 1
-              ? t("Found {count} model.", { count: 1 })
-              : t("Found {count} models.", { count: models.length }),
-        );
+        publishFeedback("probe", {
+          notice:
+            models.length === 0
+              ? t("Server found. Enter a model name.")
+              : models.length === 1
+                ? t("Found {count} model.", { count: 1 })
+                : t("Found {count} models.", { count: models.length }),
+        });
       },
       onError: (err) =>
-        setError(err instanceof Error ? err.message : t("Could not reach this model server")),
+        publishFeedback("probe", {
+          error: err instanceof Error ? err.message : t("Could not reach this model server"),
+        }),
     });
   }
 
@@ -413,8 +439,8 @@ export default function Models() {
     if (!selected || !credential) return;
     const activeModelId = isOpenAiCompatible ? modelId.trim() : selected.id;
     if (isOpenAiCompatible && !activeModelId) return;
-    setError(null);
-    setNotice(null);
+    Keyboard.dismiss();
+    clearFeedback();
     setPending("default");
     try {
       await rpc("models/setDefault", {
@@ -432,13 +458,15 @@ export default function Models() {
           : {}),
       });
       await load({ provider, modelId: activeModelId });
-      setNotice(
-        isOpenAiCompatible
+      publishFeedback("model", {
+        notice: isOpenAiCompatible
           ? t("Model updated.")
           : t("Now using {label}.", { label: selected.label }),
-      );
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not change the default model"));
+      publishFeedback("model", {
+        error: err instanceof Error ? err.message : t("Could not change the default model"),
+      });
     } finally {
       setPending(null);
     }
@@ -447,19 +475,22 @@ export default function Models() {
   async function disconnectCredential() {
     if (!selected || !credential) return;
     cancelOAuth();
-    setError(null);
-    setNotice(null);
+    clearFeedback();
     setPending("disconnect");
     try {
       await rpc("models/disconnect", { provider: selected.provider });
       setApiKey("");
       setThinkingLevel(null);
       await load({ provider });
-      setNotice(
-        t("Disconnected {provider}.", { provider: selected.providerName ?? selected.provider }),
-      );
+      publishFeedback("connection", {
+        notice: t("Disconnected {provider}.", {
+          provider: selected.providerName ?? selected.provider,
+        }),
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not disconnect this provider"));
+      publishFeedback("connection", {
+        error: err instanceof Error ? err.message : t("Could not disconnect this provider"),
+      });
     } finally {
       setPending(null);
     }
@@ -496,13 +527,16 @@ export default function Models() {
     } else if (apiKey.trim().length < 8) {
       return;
     }
+    // Drop the previous result before the limit check so it cannot sit beside the new one.
+    Keyboard.dismiss();
+    clearFeedback();
     const parsedMaxTokens = maxTokens.trim() ? parseModelMaxTokens(maxTokens) : undefined;
     if ((isOpenAiCompatible || maxTokens.trim()) && parsedMaxTokens === undefined) {
-      setError(
-        t("Enter a whole number from 1 to {max} for maximum output tokens.", {
+      publishFeedback("connection", {
+        error: t("Enter a whole number from 1 to {max} for maximum output tokens.", {
           max: MAX_MODEL_MAX_TOKENS,
         }),
-      );
+      });
       return;
     }
     const parsedMaxImagesPerPrompt = isOpenAiCompatible
@@ -514,7 +548,9 @@ export default function Models() {
       maxImagesPerPrompt.trim() &&
       parsedMaxImagesPerPrompt === undefined
     ) {
-      setError(t("Enter a whole number from 1 to 1000 for the image limit."));
+      publishFeedback("connection", {
+        error: t("Enter a whole number from 1 to 1000 for the image limit."),
+      });
       return;
     }
     const maxImagesPerPromptInput =
@@ -523,16 +559,14 @@ export default function Models() {
       ? parseModelContextWindow(contextWindow)
       : undefined;
     if (isOpenAiCompatible && parsedContextWindow === undefined) {
-      setError(
-        t("Enter a whole number from 1 to {max} for the context limit.", {
+      publishFeedback("connection", {
+        error: t("Enter a whole number from 1 to {max} for the context limit.", {
           max: MAX_MODEL_CONTEXT_WINDOW,
         }),
-      );
+      });
       return;
     }
     if (isOpenAiCompatible && parsedMaxTokens === undefined) return;
-    setError(null);
-    setNotice(null);
     setPending("connect");
     try {
       await rpc(
@@ -568,13 +602,16 @@ export default function Models() {
       );
       setApiKey("");
       await load({ provider, modelId });
-      setNotice(
-        isOpenAiCompatible || savingLimitOnly
-          ? t("Saved.")
-          : t("Connected and using {label}.", { label: selected.label }),
-      );
+      publishFeedback("connection", {
+        notice:
+          isOpenAiCompatible || savingLimitOnly
+            ? t("Saved.")
+            : t("Connected and using {label}.", { label: selected.label }),
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not connect this provider"));
+      publishFeedback("connection", {
+        error: err instanceof Error ? err.message : t("Could not connect this provider"),
+      });
     } finally {
       setPending(null);
     }
@@ -589,13 +626,14 @@ export default function Models() {
     setOauth(null);
     await load({ provider, modelId });
     if (controller.signal.aborted) return;
-    setNotice(t("Connected and using {label}.", { label: selected?.label ?? t("this model") }));
+    publishFeedback("connection", {
+      notice: t("Connected and using {label}.", { label: selected?.label ?? t("this model") }),
+    });
   }
 
   async function startSubscriptionSignIn() {
     if (!selected) return;
-    setError(null);
-    setNotice(null);
+    clearFeedback();
     setOauthPending(true);
     const controller = new AbortController();
     oauthAbortRef.current = controller;
@@ -626,7 +664,9 @@ export default function Models() {
       const loginId = oauthLoginIdRef.current;
       oauthLoginIdRef.current = null;
       if (loginId) void rpc("models/cancelOAuth", { loginId }).catch(() => undefined);
-      setError(err instanceof Error ? err.message : t("Could not start sign-in"));
+      publishFeedback("connection", {
+        error: err instanceof Error ? err.message : t("Could not start sign-in"),
+      });
       setOauth(null);
     } finally {
       if (!waitingForCode) {
@@ -642,7 +682,7 @@ export default function Models() {
     if (!controller || !code) return;
     oauthCodeSubmittingRef.current = true;
     setPasteCode("");
-    setError(null);
+    clearFeedback();
     let submitted = false;
     let retryable = false;
     try {
@@ -665,7 +705,9 @@ export default function Models() {
         retryable = true;
         setPasteCode(code);
       }
-      setError(err instanceof Error ? err.message : t("Could not finish sign-in"));
+      publishFeedback("connection", {
+        error: err instanceof Error ? err.message : t("Could not finish sign-in"),
+      });
     } finally {
       oauthCodeSubmittingRef.current = false;
       if (!retryable) {
@@ -673,6 +715,13 @@ export default function Models() {
       }
     }
   }
+
+  const feedback = (
+    <>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+    </>
+  );
 
   const compatConfig = isOpenAiCompatible ? (
     <>
@@ -710,6 +759,7 @@ export default function Models() {
       >
         <Text style={styles.outlineLabel}>{probing ? t("Finding…") : t("Find models")}</Text>
       </Pressable>
+      {feedbackAnchor === "probe" ? feedback : null}
       <Text style={[styles.sectionTitle, { marginTop: 12 }]}>{t("Model")}</Text>
       {probeModels.length && probeModels.includes(modelId) ? (
         <View style={styles.card}>
@@ -965,8 +1015,7 @@ export default function Models() {
                       entry.thinkingLevels,
                     ) as ThinkingLevel | null,
                   );
-                  setError(null);
-                  setNotice(null);
+                  clearFeedback();
                 }}
                 style={({ pressed }) => [
                   styles.modelRow,
@@ -1329,9 +1378,6 @@ export default function Models() {
           </Text>
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
         <Text style={styles.sectionTitle}>{t("Providers")}</Text>
         <View style={styles.card}>
           {connectedGroups.length ? (
@@ -1414,6 +1460,7 @@ export default function Models() {
               {compatConfig}
               {compatKeySection}
               {saveRow}
+              {feedbackAnchor === "probe" ? null : feedback}
             </>
           ) : credential ? (
             <>
@@ -1421,7 +1468,9 @@ export default function Models() {
               <Text style={styles.sectionTitle}>{t("Model")}</Text>
               {catalogModelCard}
               {saveRow}
+              {feedbackAnchor === "model" ? feedback : null}
               <View style={styles.maintenanceSection}>{catalogConnectionControls}</View>
+              {feedbackAnchor === "model" ? null : feedback}
             </>
           ) : (
             <>
@@ -1429,11 +1478,14 @@ export default function Models() {
                 {t("Connect this provider to use it as your personal model.")}
               </Text>
               {catalogConnectionControls}
+              {feedback}
               <Text style={styles.sectionTitle}>{t("Model")}</Text>
               {catalogModelCard}
             </>
           )
-        ) : null}
+        ) : (
+          feedback
+        )}
       </ScrollView>
     </SafeAreaView>
   );

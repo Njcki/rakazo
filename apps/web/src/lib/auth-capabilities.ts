@@ -1,10 +1,8 @@
+import type { AuthCapabilities } from "@rakazo/contracts";
+import { authCapabilitiesSchema, legacyAuthCapabilitiesSchema } from "@rakazo/contracts";
 import { readBoundedJsonResponse } from "@rakazo/core";
 
-export interface AuthCapabilities {
-  passwordReset: boolean;
-  resetUrl: string | null;
-  billing?: boolean;
-}
+export type { AuthCapabilities } from "@rakazo/contracts";
 
 const TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
@@ -16,11 +14,11 @@ export async function fetchAuthCapabilities(): Promise<AuthCapabilities> {
   try {
     const response = await fetch("/api/auth/capabilities", { signal: controller.signal });
     if (!response.ok) throw new Error("Could not load authentication capabilities");
-    return await readBoundedJsonResponse<AuthCapabilities>(
-      response,
-      MAX_RESPONSE_BYTES,
-      controller.signal,
-    );
+    return authCapabilitiesSchema
+      .or(legacyAuthCapabilitiesSchema)
+      .parse(
+        await readBoundedJsonResponse<unknown>(response, MAX_RESPONSE_BYTES, controller.signal),
+      );
   } finally {
     clearTimeout(timer);
   }

@@ -173,28 +173,6 @@ export const GROK_ALTERNATIVE_FAQ = [
   },
 ] as const;
 
-export function grokVisibleText(): string {
-  return [
-    GROK_ALTERNATIVE_H1,
-    GROK_ALTERNATIVE_DESCRIPTION,
-    ...GROK_INTRO,
-    ...GROK_SECTIONS.flatMap((section) => [section.heading, ...section.paragraphs]),
-    ...COMPARE_ROWS.flatMap((row) => [row.topic, row.rakazo, row.grok]),
-    COMPARE_NOTE,
-    ...GROK_SOURCES.map((source) => source.label),
-    SELF_HOST_LEAD,
-    INSTALL_COMMAND,
-    ...SELF_HOST_AFTER,
-    ...GROK_OTHER_ALTERNATIVES.flatMap((item) => [item.label, item.note]),
-    ...GROK_ALTERNATIVE_FAQ.flatMap((item) => [item.question, item.answer]),
-    `Updated ${GROK_UPDATED}.`,
-  ].join(" ");
-}
-
-export function grokWordCount(): number {
-  return grokVisibleText().split(/\s+/).filter(Boolean).length;
-}
-
 export function grokAlternativeStructuredData(pageUrl: string) {
   return {
     "@context": "https://schema.org",

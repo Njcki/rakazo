@@ -552,9 +552,7 @@ describe("mobile API authentication", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ json: { ok: true } }))
-      .mockResolvedValueOnce(
-        jsonResponse({ error: { message: "Bot does not exist" } }, { status: 404 }),
-      );
+      .mockResolvedValueOnce(rpcErrorResponse(404, "NOT_FOUND", "Bot does not exist"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(rpc<{ ok: boolean }>("bots/get", { botId: "bot-1" })).resolves.toEqual({
@@ -569,6 +567,54 @@ describe("mobile API authentication", () => {
       }),
     );
     await expect(rpc("bots/get", { botId: "missing" })).rejects.toThrow("Bot does not exist");
+  });
+
+  it("shows the server's message instead of the procedure name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => rpcErrorResponse(400, "BAD_REQUEST", "Connect a model to start a run.")),
+    );
+
+    await expect(rpc("bots/create", { name: "Ada" })).rejects.toThrow(
+      new Error("Connect a model to start a run."),
+    );
+  });
+
+  it.each([
+    ["an empty", new Response(null, { status: 404 })],
+    [
+      "an HTML",
+      new Response("<html>Bad Gateway</html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      }),
+    ],
+  ])("reports a failure with %s body without a parser error", async (_body, response) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response),
+    );
+
+    await expect(rpc("bots/create", { name: "Ada" })).rejects.toThrow(
+      new Error("rpc bots/create failed"),
+    );
+  });
+
+  it("keeps the Space when a non-401 failure mentions unauthorized", async () => {
+    const store = new Map<string, string>();
+    mockSecureStore(store);
+    await selectSpace("space-support");
+    const fetchMock = vi.fn(async () =>
+      rpcErrorResponse(400, "BAD_REQUEST", "Model server returned 401 Unauthorized"),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(rpc("models/probeOpenAiCompatible", {})).rejects.toThrow(
+      "Model server returned 401 Unauthorized",
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(selectedSpaceId()).toBe("space-support");
+    expect(store.get("rakazo.space_id")).toBe("space-support");
   });
 
   it("blocks mobile message and attachment submission when AI sharing is declined", async () => {
@@ -600,7 +646,7 @@ describe("mobile API authentication", () => {
   it.each([true, false])("explains the mobile upgrade requirement with JSON=%s", async (json) => {
     const fetchMock = vi.fn(async () =>
       json
-        ? jsonResponse({ error: { message: "Not found" } }, { status: 404 })
+        ? rpcErrorResponse(404, "NOT_FOUND", "Not found")
         : new Response("404 Not Found", { status: 404 }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -1199,7 +1245,7 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1305,8 +1351,8 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }));
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(rpc("spaces/list")).rejects.toThrow("Unauthorized");
@@ -1331,7 +1377,7 @@ describe("mobile API authentication", () => {
     let resolveRetry!: (value: Response) => void;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
@@ -1364,7 +1410,7 @@ describe("mobile API authentication", () => {
     let resolveRetry!: (value: Response) => void;
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockImplementationOnce(
         () =>
           new Promise<Response>((resolve) => {
@@ -1376,7 +1422,7 @@ describe("mobile API authentication", () => {
     const pending = rpc("spaces/list");
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     await expect(selectSpace("space-new")).resolves.toBe(true);
-    resolveRetry(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }));
+    resolveRetry(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
 
     await expect(pending).rejects.toThrow("Unauthorized");
     expect(selectedSpaceId()).toBe("space-new");
@@ -1408,7 +1454,7 @@ describe("mobile API authentication", () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     expect(fetchMock.mock.calls[0]![1].headers["x-rakazo-space-id"]).toBe("space-a");
     await expect(selectSpace("space-b")).resolves.toBe(true);
-    resolveStale(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }));
+    resolveStale(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
 
     // The stale request fails without probing or touching the new selection;
     // Space B's own requests run recovery if B is itself inaccessible.
@@ -1444,7 +1490,7 @@ describe("mobile API authentication", () => {
     expect(fetchMock.mock.calls[0]![1].headers["x-rakazo-space-id"]).toBe("space-a");
     await expect(selectSpace("space-b")).resolves.toBe(true);
     await expect(selectSpace("space-a")).resolves.toBe(true);
-    resolveStale(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }));
+    resolveStale(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
 
     // ID-only matching would treat this obsolete Space A response as current
     // after A → B → A; the selection epoch must keep recovery from clearing
@@ -1628,7 +1674,7 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1661,7 +1707,7 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1684,7 +1730,7 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
       .mockResolvedValueOnce(jsonResponse({ json: { spaces: [] } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -1714,8 +1760,8 @@ describe("mobile API authentication", () => {
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }))
-      .mockResolvedValueOnce(jsonResponse({ error: { message: "Unauthorized" } }, { status: 401 }));
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"))
+      .mockResolvedValueOnce(rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(rpc("bots/create", { name: "Should not land" })).rejects.toThrow("Unauthorized");
@@ -2696,6 +2742,11 @@ function jsonResponse(body: unknown, init?: ResponseInit) {
     headers: { "content-type": "application/json" },
     ...init,
   });
+}
+
+/** A failed procedure as the oRPC server sends it. */
+function rpcErrorResponse(status: number, code: string, message: string) {
+  return jsonResponse({ json: { defined: false, code, status, message } }, { status });
 }
 
 function snapshot(

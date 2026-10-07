@@ -698,16 +698,22 @@ export async function rpc<T>(
       cancelResponseBody(res);
       throw new Error(t("Update your server to use AI data sharing in this mobile version."));
     }
-    const parsed = await readBoundedJsonResponse<{ json?: T; error?: { message?: string } }>(
+    const parsed: { json?: T } = await readBoundedJsonResponse<{ json?: T }>(
       res,
       MAX_MOBILE_RPC_RESPONSE_BYTES,
       controller.signal,
     ).catch((error: unknown) => {
+      // A proxy, or a server without this procedure, can fail with a body that is not JSON.
+      if (!res.ok && error instanceof SyntaxError) return {};
       throw abortReason(error);
     });
-    if (!res.ok || parsed.error) {
-      const message = parsed.error?.message ?? `rpc ${proc} failed`;
-      const unauthorized = res.status === 401 || /unauthorized/i.test(message);
+    if (!res.ok) {
+      // oRPC sends a failure as `{ json: { code, status, message } }`; the message is the
+      // server's user-facing copy.
+      const error = parsed.json as { message?: unknown } | undefined;
+      const message =
+        typeof error?.message === "string" && error.message ? error.message : `rpc ${proc} failed`;
+      const unauthorized = res.status === 401;
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:
       // success means the selection was inaccessible (clear it); failure means

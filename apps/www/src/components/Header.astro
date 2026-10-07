@@ -8,7 +8,7 @@ import {
   type Locale,
 } from "../i18n/locales";
 import { GROK_ALTERNATIVE_PATH } from "../grok-alternative";
-import { DOCS_URL, GITHUB_URL } from "../site";
+import { GITHUB_URL, SELF_HOST_GUIDE_PATH } from "../site";
 import Button from "./Button.astro";
 import Logo from "./Logo.astro";
 
@@ -24,13 +24,13 @@ const locale = Astro.props.locale ?? DEFAULT_LOCALE;
 const copy = Astro.props.copy ?? getHomeCopy(locale).nav;
 const homeHref = Astro.props.homeHref ?? localeHomePath(locale);
 
-const NAV_LINKS = [
+const NAV_LINKS: Array<{ href: string; label: string; external?: boolean }> = [
   { href: localeHashPath(locale, "demo"), label: copy.product },
   { href: localeHashPath(locale, "roster"), label: copy.bots },
   { href: localeHashPath(locale, "selfhost"), label: copy.selfHost },
   { href: localeHashPath(locale, "open-source"), label: copy.openSource },
+  { href: SELF_HOST_GUIDE_PATH, label: copy.docs },
   { href: GROK_ALTERNATIVE_PATH, label: copy.grokBot },
-  { href: DOCS_URL, label: copy.docs, external: true },
 ];
 
 const currentPath = Astro.url.pathname.replace(/\/+$/, "") || "/";

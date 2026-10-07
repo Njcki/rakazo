@@ -1,5 +1,6 @@
 import { ALTERNATIVES, alternativeMarkdown, alternativesIndexMarkdown } from "./alternatives";
 import { GROK_ALTERNATIVE_MARKDOWN } from "./grok-alternative";
+import { OPENCLAW_MARKDOWN, SELF_HOST_MARKDOWN } from "./guide";
 
 export const HOME_MARKDOWN = `# Rakazo
 
@@ -16,12 +17,16 @@ Rakazo is an open source Grok Bot alternative that gives each bot a sandboxed br
 ## Get started
 
 - [Agent setup prompt](https://github.com/elie222/rakazo/blob/main/SETUP_PROMPT.md)
-- [Self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [Self-hosting guide](https://rakazo.com/self-hosted-ai-agent/)
+- [Full self-hosting reference](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [OpenClaw comparison](https://rakazo.com/openclaw-alternative/)
 - [Source code](https://github.com/elie222/rakazo)
 
 ## Site index
 
 - [Agent instructions](https://rakazo.com/llms.txt)
+- [Self-hosted AI agent](https://rakazo.com/self-hosted-ai-agent/)
+- [OpenClaw comparison](https://rakazo.com/openclaw-alternative/)
 - [Alternatives](https://rakazo.com/alternatives/)
 - [Open source Grok Bot alternative](https://rakazo.com/grok-bot-alternative/)
 - [About](https://rakazo.com/about/)
@@ -40,7 +45,8 @@ The project started from a simple premise: useful agents should be understandabl
 Rakazo targets the web, macOS, Linux, iOS, and Android. The source is available under the Apache-2.0 license and accepts public issues and contributions on GitHub. Inbox Zero Inc. maintains the project and offers support at hello@rakazo.com.
 
 - [Source code](https://github.com/elie222/rakazo)
-- [Self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [Self-hosting guide](https://rakazo.com/self-hosted-ai-agent/)
+- [Full self-hosting reference](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
 - [Support](https://rakazo.com/support/)
 `;
 
@@ -48,7 +54,7 @@ export const SUPPORT_MARKDOWN = `# Rakazo support
 
 For help with the Rakazo mobile app or a hosted Rakazo account, email [hello@rakazo.com](mailto:hello@rakazo.com). Include the email address on the account, what you expected to happen, and any error message you saw. Never send passwords, API keys, access tokens, or other secrets.
 
-For self-hosted Rakazo, start with the [self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md). Open reproducible bugs and feature requests in the [public GitHub repository](https://github.com/elie222/rakazo/issues). Report vulnerabilities only to [security@rakazo.com](mailto:security@rakazo.com).
+For self-hosted Rakazo, start with the [self-hosting guide](https://rakazo.com/self-hosted-ai-agent/). The [full reference](https://github.com/elie222/rakazo/blob/main/docs/self-host.md) is on GitHub. Open reproducible bugs and feature requests in the [public GitHub repository](https://github.com/elie222/rakazo/issues). Report vulnerabilities only to [security@rakazo.com](mailto:security@rakazo.com).
 
 Hosted users can permanently delete their account and associated personal Space data from the Account screen in the Rakazo app.
 `;
@@ -102,7 +108,7 @@ Do not present Rakazo as a zero-configuration hosted service. Self-hosting is av
 ## How an agent should use Rakazo
 
 1. Read the [setup prompt](https://github.com/elie222/rakazo/blob/main/SETUP_PROMPT.md) before changing the user's machine.
-2. Use the [self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md) as the canonical installation reference.
+2. Use the [self-hosting guide](https://rakazo.com/self-hosted-ai-agent/) for setup. The [GitHub guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md) is the full reference for backups, upgrades, and production layout.
 3. Confirm deployment choices and any host-level commands with the user, and keep secrets in local environment configuration rather than tracked files.
 4. Use the [public issue tracker](https://github.com/elie222/rakazo/issues) for reproducible bugs. Send vulnerabilities only to [security@rakazo.com](mailto:security@rakazo.com).
 
@@ -113,7 +119,9 @@ Do not present Rakazo as a zero-configuration hosted service. Self-hosting is av
 - [Open source Grok Bot alternative](https://rakazo.com/grok-bot-alternative/)
 - [About](https://rakazo.com/about/)
 - [Source](https://github.com/elie222/rakazo)
-- [Self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [Self-hosting guide](https://rakazo.com/self-hosted-ai-agent/)
+- [Full self-hosting reference](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [OpenClaw comparison](https://rakazo.com/openclaw-alternative/)
 - [Releases](https://github.com/elie222/rakazo/releases)
 - [Support](https://rakazo.com/support/)
 - [Privacy](https://rakazo.com/privacy/)
@@ -128,14 +136,16 @@ The requested Rakazo page does not exist.
 - [Agent instructions](https://rakazo.com/llms.txt)
 - [Site map](https://rakazo.com/sitemap-index.xml)
 - [Home](https://rakazo.com/)
-- [Self-hosting guide](https://github.com/elie222/rakazo/blob/main/docs/self-host.md)
+- [Self-hosting guide](https://rakazo.com/self-hosted-ai-agent/)
 `;
 
 const MARKDOWN_DOCUMENTS = new Map<string, string>([
   ["/", HOME_MARKDOWN],
   ["/about", ABOUT_MARKDOWN],
+  ["/openclaw-alternative", OPENCLAW_MARKDOWN],
   ["/grok-bot-alternative", GROK_ALTERNATIVE_MARKDOWN],
   ["/privacy", PRIVACY_MARKDOWN],
+  ["/self-hosted-ai-agent", SELF_HOST_MARKDOWN],
   ["/support", SUPPORT_MARKDOWN],
   ["/alternatives", alternativesIndexMarkdown()],
   ...ALTERNATIVES.map((page) => [`/${page.slug}`, alternativeMarkdown(page)] as const),

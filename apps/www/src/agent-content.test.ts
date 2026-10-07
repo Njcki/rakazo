@@ -35,10 +35,20 @@ describe("agent content negotiation", () => {
   it("maps canonical and trailing-slash page paths to Markdown documents", () => {
     expect(getMarkdownDocument("/")).toContain("# Rakazo");
     expect(getMarkdownDocument("/about/")).toContain("# About Rakazo");
+    expect(getMarkdownDocument("/self-hosted-ai-agent/")).toContain(
+      "# Self-hosted AI agent",
+    );
+    expect(getMarkdownDocument("/openclaw-alternative")).toContain("OpenClaw");
     expect(getMarkdownDocument("/grok-bot-alternative/")).toContain(
       "Is Grok Bot open source?",
     );
     expect(getMarkdownAlternate("/")).toBe("/index.md");
+    expect(getMarkdownAlternate("/self-hosted-ai-agent/")).toBe(
+      "/self-hosted-ai-agent.md",
+    );
+    expect(getMarkdownAlternate("/openclaw-alternative/")).toBe(
+      "/openclaw-alternative.md",
+    );
     expect(getMarkdownAlternate("/support/")).toBe("/support.md");
     expect(getMarkdownAlternate("/grok-bot-alternative/")).toBe(
       "/grok-bot-alternative.md",

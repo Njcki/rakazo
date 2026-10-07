@@ -9,7 +9,13 @@ import {
   type Locale,
 } from "../i18n/locales";
 import { GROK_ALTERNATIVE_PATH } from "../grok-alternative";
-import { CHANGELOG_URL, DOCS_URL, GITHUB_URL, INBOX_ZERO_URL } from "../site";
+import {
+  CHANGELOG_URL,
+  GITHUB_URL,
+  INBOX_ZERO_URL,
+  OPENCLAW_ALTERNATIVE_PATH,
+  SELF_HOST_GUIDE_PATH,
+} from "../site";
 import Logo from "./Logo.astro";
 
 type Props = {
@@ -20,6 +26,7 @@ type Props = {
   homeLabel?: string;
   linkLabels?: {
     docs: string;
+    openClaw: string;
     changelog: string;
     alternatives: string;
     about: string;
@@ -41,6 +48,7 @@ const {
   homeLabel = "Rakazo home",
   linkLabels = {
     docs: "Docs",
+    openClaw: "OpenClaw alternative",
     changelog: "Changelog",
     alternatives: "Alternatives",
     about: "About",
@@ -83,7 +91,15 @@ function isCurrentPage(href: string): boolean {
     </nav>
     <nav class="site-footer__links" aria-label={navLabel}>
       <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
-      <a href={DOCS_URL} target="_blank" rel="noreferrer">{linkLabels.docs}</a>
+      <a href={SELF_HOST_GUIDE_PATH} aria-current={isCurrentPage(SELF_HOST_GUIDE_PATH) ? "page" : undefined}>
+        {linkLabels.docs}
+      </a>
+      <a
+        href={OPENCLAW_ALTERNATIVE_PATH}
+        aria-current={isCurrentPage(OPENCLAW_ALTERNATIVE_PATH) ? "page" : undefined}
+      >
+        {linkLabels.openClaw}
+      </a>
       <a href={CHANGELOG_URL} target="_blank" rel="noreferrer">{linkLabels.changelog}</a>
       <a href="/alternatives/" aria-current={isCurrentPage("/alternatives/") ? "page" : undefined}>
         {linkLabels.alternatives}

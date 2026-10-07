@@ -4,6 +4,7 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import type {
   AgentRuntime,
+  BillingProvider,
   JobPublisher,
   ManagedConnectorProvider,
   MessagingSurface,
@@ -62,7 +63,9 @@ import {
   ScriptedAgentRuntime,
   SmtpEmailProvider,
   SpaceMemoryProviderResolver,
+  StripeBillingProvider,
   sandboxProviderOptionsFromEnv,
+  stripeBillingConfigFromEnv,
   toTeamChatInbound,
 } from "@rakazo/adapters";
 import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@rakazo/auth";
@@ -88,6 +91,8 @@ import { requestLogging } from "@rakazo/logging/hono";
 import { MarkdownMemoryStore } from "@rakazo/memory";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { createBillingService } from "./billing.js";
+import { mountBillingRoutes } from "./billing-webhook.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
@@ -149,6 +154,7 @@ export async function createApp(
     pipedream?: ManagedConnectorProvider;
     messaging?: MessagingSurface;
     email?: TransactionalEmailProvider;
+    billing?: BillingProvider;
     remoteConnectors?: RemoteConnectorDependencies;
     logger?: Logger;
   } = {},
@@ -161,6 +167,7 @@ export async function createApp(
     pipedream: pipedreamOverride,
     messaging: messagingOverride,
     email: emailOverride,
+    billing: billingOverride,
     remoteConnectors,
     logger: loggerOverride,
     ...envOverrides
@@ -318,6 +325,12 @@ export async function createApp(
     (env.smtpUrl
       ? new SmtpEmailProvider({ url: env.smtpUrl, from: env.emailFrom ?? "" })
       : localEmailEmulator);
+  const stripeBilling = stripeBillingConfigFromEnv(env);
+  const billingProvider: BillingProvider | undefined =
+    billingOverride ?? (stripeBilling ? new StripeBillingProvider(stripeBilling) : undefined);
+  const billing = billingProvider
+    ? createBillingService({ prisma, provider: billingProvider, webOrigin: env.webOrigin })
+    : undefined;
   const installed = new InstalledConnectorProvider(
     prisma,
     secrets,
@@ -359,6 +372,8 @@ export async function createApp(
     onEmailError: (error) => getLogger().error("transactional email delivery failed", error),
     extraOrigins: MOBILE_AUTH_ORIGINS,
     beforeDeleteUser: async (userId) => {
+      // First, so a provider failure aborts deletion before anything is destroyed.
+      await billing?.cancelForDeletedUser(userId);
       const bots = await prisma.bot.findMany({
         where: { userId },
         select: { id: true, userId: true, spaceId: true, name: true, archivedAt: true },
@@ -486,6 +501,7 @@ export async function createApp(
     remoteConnectors,
     artifacts,
     dataDir: env.dataDir,
+    billing,
     messaging: {
       enabled: Boolean(messaging),
       providers: messaging?.platforms().map((platform) => platform.provider) ?? [],
@@ -529,6 +545,7 @@ export async function createApp(
     c.json({
       passwordReset: Boolean(email),
       resetUrl: email ? new URL("/reset-password", env.webOrigin).href : null,
+      billing: Boolean(billing),
     }),
   );
   if (localEmailEmulator && env.nodeEnv === "development") {
@@ -587,6 +604,14 @@ export async function createApp(
     return actor;
   });
   mountWebhookHttpRoutes(app, { prisma, secrets, events, jobs });
+  if (billing && billingProvider) {
+    mountBillingRoutes(app, {
+      billing,
+      provider: billingProvider,
+      webOrigin: env.webOrigin,
+      authenticate: sessionActor,
+    });
+  }
   // Shared with stop so a shutdown during retry delays does not restart polling.
   let messagingStopped = false;
   let clearMessagingRetryDelay: (() => void) | undefined;
@@ -864,6 +889,7 @@ export async function createApp(
       pipedream: Boolean(pipedream),
       messaging: Boolean(messaging),
       email: email?.describe().id ?? null,
+      billing: billingProvider?.describe().id ?? null,
       jobs: jobKind,
       realtime: realtime.describe().id,
       revision: env.gitSha ?? null,

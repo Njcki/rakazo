@@ -2,8 +2,9 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { LOCAL_SETTINGS_PAGE } from "@rakazo/contracts";
 import { Button, Skeleton } from "@rakazo/ui-web";
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
+import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import {
@@ -94,10 +95,6 @@ function SessionApp() {
           />
           <Route path="/reset-password" element={<PasswordResetPage />} />
           <Route
-            path="/onboarding"
-            element={user ? <OnboardingPage /> : <Navigate to="/sign-in" replace />}
-          />
-          <Route
             path="/mcp/oauth/callback"
             element={user ? <McpOAuthCallbackPage /> : <Navigate to="/sign-in" replace />}
           />
@@ -111,23 +108,24 @@ function SessionApp() {
               )
             }
           />
-          <Route path="/app" element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />} />
           <Route
-            path="/app/g/:groupId"
-            element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />}
-          />
-          <Route
-            path="/app/artifacts"
-            element={user ? <ArtifactsPage /> : <Navigate to="/sign-in" replace />}
-          />
-          <Route
-            path="/app/artifacts/:artifactId"
-            element={user ? <ArtifactsPage /> : <Navigate to="/sign-in" replace />}
-          />
-          <Route
-            path="/app/:botId"
-            element={user ? <ShellPage /> : <Navigate to="/sign-in" replace />}
-          />
+            element={
+              user ? (
+                <SubscriptionGate fallback={<GateFallback />}>
+                  <Outlet />
+                </SubscriptionGate>
+              ) : (
+                <Navigate to="/sign-in" replace />
+              )
+            }
+          >
+            <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/app" element={<ShellPage />} />
+            <Route path="/app/g/:groupId" element={<ShellPage />} />
+            <Route path="/app/artifacts" element={<ArtifactsPage />} />
+            <Route path="/app/artifacts/:artifactId" element={<ArtifactsPage />} />
+            <Route path="/app/:botId" element={<ShellPage />} />
+          </Route>
         </Routes>
       </Suspense>
     </div>
@@ -184,6 +182,14 @@ function SessionUnavailable({ refetch }: { refetch: () => Promise<void> }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function GateFallback() {
+  return window.location.pathname.startsWith("/app") ? (
+    <ShellSkeleton />
+  ) : (
+    <div className="h-full bg-background" />
   );
 }
 

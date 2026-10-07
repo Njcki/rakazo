@@ -17,6 +17,7 @@ describe("alternative pages", () => {
       "dots-alternative",
       "instinct-alternative",
       "hermes-alternative",
+      "hark-alternative",
     ]);
     expect(new Set(ALTERNATIVES.map((page) => page.slug)).size).toBe(ALTERNATIVES.length);
 
@@ -27,6 +28,7 @@ describe("alternative pages", () => {
       "/dots-alternative/",
       "/instinct-alternative/",
       "/hermes-alternative/",
+      "/hark-alternative/",
       "/grok-bot-alternative/",
       "/openclaw-alternative/",
     ]);
@@ -76,6 +78,30 @@ describe("alternative pages", () => {
     expect(hermes?.sections?.[0]?.paragraphs.join(" ")).toContain("Choose provider later");
     expect(hermes?.sources.some((source) => source.href.endsWith("/docs/user-guide/desktop"))).toBe(
       true,
+    );
+    expect(hermes?.title).toBe("Open Source Hermes Agent Alternative – Rakazo");
+    expect(hermes?.h1).toBe("Open source Hermes Agent alternative");
+
+    const hark = ALTERNATIVES.find((page) => page.slug === "hark-alternative");
+    expect(hark?.title).toBe("Open Source Hark Pro Alternative – Rakazo");
+    expect(hark?.h1).toBe("Open source Hark Pro alternative");
+    expect(hark?.intro.join(" ")).toContain("just chat");
+    expect(hark?.sources.map((source) => source.href)).toEqual([
+      "https://hark.com/",
+      "https://hark.com/articles/introducing-hark-pro",
+      "https://hark.com/articles/introducing-hark-handoff",
+      "https://hark.com/privacy-policy",
+      "https://hark.com/terms",
+      "https://hark.com/security",
+    ]);
+    expect(ALTERNATIVES.find((page) => page.slug === "muse-alternative")?.h1).toBe(
+      "Open source Meta Muse alternative",
+    );
+    expect(ALTERNATIVES.find((page) => page.slug === "dots-alternative")?.h1).toBe(
+      "Open source OpenAI Dots alternative",
+    );
+    expect(ALTERNATIVES.find((page) => page.slug === "instinct-alternative")?.h1).toBe(
+      "Open source Instinct AI alternative",
     );
 
     for (const page of ALTERNATIVES) {

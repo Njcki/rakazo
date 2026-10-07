@@ -64,7 +64,7 @@ export type Alternative = {
 export const ALTERNATIVES_HUB = {
   title: "Open Source AI Assistant Alternatives – Rakazo",
   description:
-    "Open source comparisons of Rakazo with other AI assistants, including Grok Bot, OpenClaw, Hermes Agent, Meta's Muse, OpenAI's Dots, and Instinct.",
+    "Open source comparisons of Rakazo with other AI assistants, including Grok Bot, OpenClaw, Hermes Agent, Meta's Muse, OpenAI's Dots, Instinct AI, and Hark Pro.",
   h1: "Open source alternatives",
   intro:
     "Rakazo is an open source platform for persistent AI teammates you can run yourself. These pages compare it with other AI assistants using their public descriptions.",
@@ -129,6 +129,27 @@ const HERMES_SOURCES = [
   { label: "Hermes Agent source", href: "https://github.com/NousResearch/hermes-agent" },
 ] as const satisfies readonly SourceLink[];
 
+const HARK_SOURCES = [
+  { label: "Hark homepage", href: "https://hark.com/" },
+  {
+    label: "Introducing Hark Pro (October 6, 2026)",
+    href: "https://hark.com/articles/introducing-hark-pro",
+  },
+  {
+    label: "Introducing Hark Handoff (August 5, 2026)",
+    href: "https://hark.com/articles/introducing-hark-handoff",
+  },
+  {
+    label: "Hark privacy policy (last updated October 1, 2026)",
+    href: "https://hark.com/privacy-policy",
+  },
+  {
+    label: "Hark terms of service (posted June 30, 2026)",
+    href: "https://hark.com/terms",
+  },
+  { label: "Hark security", href: "https://hark.com/security" },
+] as const satisfies readonly SourceLink[];
+
 /**
  * Comparison pages. Add an entry here to publish `/${slug}/` and a hub card.
  */
@@ -137,10 +158,10 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "muse-alternative",
     name: "Muse",
     summary: "Meta's personal AI agent, and what is different when you host Rakazo yourself.",
-    title: "Open Source Muse Alternative – Rakazo",
+    title: "Open Source Meta Muse Alternative – Rakazo",
     description:
       "Rakazo is an open source, self-hostable platform for persistent AI teammates. Compare it with Meta's Muse personal agent.",
-    h1: "Open source Muse alternative",
+    h1: "Open source Meta Muse alternative",
     otherName: "Muse",
     intro: [
       "Muse is Meta's personal AI agent, introduced on September 8, 2026. It runs on a virtual machine Meta operates, and you talk to it in the Muse app or WhatsApp. Meta says it can keep working after you close the app.",
@@ -235,10 +256,10 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "dots-alternative",
     name: "Dots",
     summary: "OpenAI's always-on agents, in a shorter comparison.",
-    title: "Open Source Dots Alternative – Rakazo",
+    title: "Open Source OpenAI Dots Alternative – Rakazo",
     description:
       "Rakazo is an open source, self-hostable platform for persistent AI teammates. Compare it with OpenAI's Dots agents.",
-    h1: "Open source Dots alternative",
+    h1: "Open source OpenAI Dots alternative",
     otherName: "Dots",
     intro: [
       "Dots are OpenAI's always-on agents, announced on September 29, 2026. OpenAI says they use GPT-6 Astra, have their own cloud computer, and are rolling out on eligible Pro, Business Premium, and Enterprise plans.",
@@ -313,10 +334,10 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "instinct-alternative",
     name: "Instinct",
     summary: "A hosted personal assistant you text or call, and what is different when you host Rakazo yourself.",
-    title: "Open Source Instinct Alternative – Rakazo",
+    title: "Open Source Instinct AI Alternative – Rakazo",
     description:
       "Rakazo is an open source, self-hostable platform for persistent AI teammates. Compare it with Instinct, the personal assistant you text or call.",
-    h1: "Open source Instinct alternative",
+    h1: "Open source Instinct AI alternative",
     otherName: "Instinct",
     intro: [
       "Instinct is a personal assistant operated by Spear Street Technology, Inc. The homepage says there are no new interfaces: you text or call it, and it can use a phone and a computer the way a person does. Examples on that page include disputing a bill, sending gifts, ordering groceries, scheduling a doctor's appointment, and planning a trip.",
@@ -412,10 +433,10 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "hermes-alternative",
     name: "Hermes Agent",
     summary: "Nous Research's open source agent. Rakazo keeps setup and daily use in chat.",
-    title: "Open Source Hermes Alternative – Rakazo",
+    title: "Open Source Hermes Agent Alternative – Rakazo",
     description:
       "Rakazo is an open source, self-hosted AI agent with a chat interface. Compare its setup with Hermes Agent, the MIT-licensed agent from Nous Research.",
-    h1: "Open source Hermes alternative",
+    h1: "Open source Hermes Agent alternative",
     otherName: "Hermes Agent",
     intro: [
       "Hermes Agent is Nous Research's open source AI agent, released under the MIT license. You can run it on your own machine. The project site also offers optional Nous Portal credits and cloud hosting.",
@@ -531,6 +552,120 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
     ],
     sources: HERMES_SOURCES,
+  },
+  {
+    slug: "hark-alternative",
+    name: "Hark Pro",
+    summary: "A hosted personal agent. After install, Rakazo stays in chat on a stack you run.",
+    title: "Open Source Hark Pro Alternative – Rakazo",
+    description:
+      "Rakazo is an open source, self-hosted AI agent with a chat interface. Compare it with Hark Pro, the hosted personal agent at hark.com.",
+    h1: "Open source Hark Pro alternative",
+    otherName: "Hark Pro",
+    intro: [
+      "Hark Pro is the personal agent at hark.com, launched October 6, 2026. It is a hosted app on the web, iOS, and Android. The launch article says every feature stays free, with $20 a month for twice the usage and $100 a month for ten times the usage.",
+      "Like Grok Bot, Rakazo is just chat: you set up the bot and manage it from that chat. Hark Pro is a conversation too. The same article also describes Home, Action Buttons, Panels, and Projects around that thread, and a cloud computer called Handoff that Hark operates.",
+      "Hark introduced Handoff, its computer-use agent, on August 5, 2026. This comparison uses Hark's public pages. It is not a measured benchmark.",
+    ],
+    rows: [
+      {
+        topic: "Product",
+        rakazo: "Open source platform for persistent AI teammates. Rakazo is in beta.",
+        other:
+          "Hark Pro, a hosted personal agent launched October 6, 2026, on the web, iOS, and Android. Hark says it remembers what you tell it and can act on the web.",
+      },
+      {
+        topic: "Who runs it",
+        rakazo:
+          "You do. Self-host with Docker, or point the desktop and mobile apps at a server you operate. Hosted Rakazo Cloud is not generally available.",
+        other:
+          "The terms name Hark Labs, Inc. as the operator of the hosted service. They do not describe a self-host install, and they restrict reverse engineering the service.",
+      },
+      {
+        topic: "Price",
+        rakazo:
+          "No seat fee for the open source software. You pay the model and computer providers you use.",
+        other:
+          "Free, including the features named in the launch article. $20 a month is twice the usage. $100 a month is ten times the usage.",
+      },
+      {
+        topic: "Day-to-day management",
+        rakazo:
+          "After you connect a model, Rakazo is just chat. You manage the bot from that chat on the web, desktop, and mobile apps. Routines are readable Markdown.",
+        other:
+          "You talk in one thread. Home, Action Buttons, Panels, and Projects sit beside that thread. The privacy policy says you can review, edit, or delete memory by asking the agent.",
+      },
+      {
+        topic: "Model",
+        rakazo:
+          "Bring your own model credentials. Multiple providers are supported, including a custom model server. Each bot can use a different model.",
+        other:
+          "The launch article says Hark is training models. The security page says Hark prioritizes its own models, and that models from vetted third parties keep no data. The terms do not name a public model you can swap. They say Hark may train on what you submit unless you opt out, though feedback and material flagged for safety review can still be used.",
+      },
+      {
+        topic: "Computer",
+        rakazo:
+          "Sandboxed browser, terminal, files, and a graphical desktop. Docker is the default local computer, with optional E2B, Daytona, CreateOS, Box, or a trusted local computer.",
+        other:
+          "Handoff, introduced August 5, 2026, is a virtual computer with a browser, files, and a terminal. The October 6 launch article says it can run up to 6 browsers at once and log in on your behalf. Hark operates that computer.",
+      },
+      {
+        topic: "Connected apps",
+        rakazo:
+          "Composio or Pipedream Connect, or a Treg, remote MCP, or OpenAPI source you install. Connector credentials are encrypted on the server and are not returned by the API.",
+        other:
+          "The launch article names Google and Outlook APIs, files, external databases, and MCP. Passwords and cards sit in Secured by Hark, which Hark says it cannot see inside.",
+      },
+      {
+        topic: "Ongoing work",
+        rakazo:
+          "Each bot keeps conversations, memory, routines, and history. A bot can delegate to a peer bot or a short-lived subagent.",
+        other:
+          "Memory persists unless you ask Hark to forget. You can create scheduled tasks. Action Buttons are suggested from what Hark knows, and a tap runs that action.",
+      },
+      {
+        topic: "Approval",
+        rakazo:
+          "A bot can pause for approval when a task crosses a boundary you set. Actions are recorded in an audit log.",
+        other:
+          "The homepage says Hark checks in before an action that needs approval. The security page says tasks start from consent, you can watch the computer-use agent, and you can cancel. The launch article says that if you allow it, Hark can finish some tasks on its own.",
+      },
+      {
+        topic: "Where you use it",
+        rakazo:
+          "The Rakazo web, desktop, and mobile apps. Optional connectors can attach Slack, WhatsApp, Telegram, iMessage via Sendblue, and Feishu/Lark.",
+        other:
+          "The web app, iOS, and Android. The privacy policy says you work through one ongoing conversation, and that inputs can include chat, voice, and file uploads. You must be 18 or older.",
+      },
+    ],
+    faq: [
+      {
+        question: "Is Rakazo a replacement for Hark Pro?",
+        answer:
+          "No. Hark Pro is a hosted personal agent at hark.com, operated by Hark Labs, Inc. Rakazo is open source software for persistent AI teammates on infrastructure you control. Both can take on tasks from a conversation. They differ on hosting, model choice, and who operates the computer.",
+      },
+      {
+        question: "Can I self-host Rakazo?",
+        answer:
+          "Yes. Self-hosting is available now with published Docker images or a source checkout. Hosted Rakazo Cloud is not generally available.",
+      },
+      {
+        question: "How do you manage each one day to day?",
+        answer:
+          "After a Docker or desktop install and a model connection, Rakazo is just chat, like Grok Bot, and you manage the bot from that chat. Hark Pro is also a conversation. The launch article adds Home, Action Buttons, Panels, and Projects around that thread.",
+      },
+      {
+        question: "Does Rakazo order things or run Handoff the way Hark describes?",
+        answer:
+          "No. Ordering, bill pay, and Handoff are Hark behaviors described on its site. Rakazo's clients are the web app, the Electron desktop app, and the Expo mobile app. A bot can use a browser, terminal, files, and a desktop you run, and it can pause for approval at a boundary you set.",
+      },
+      {
+        question: "Where do the Hark Pro details come from?",
+        answer:
+          "The Hark Pro column summarizes the homepage, the Introducing Hark Pro article published October 6, 2026, the Introducing Hark Handoff article published August 5, 2026, the privacy policy last updated October 1, 2026, the terms posted June 30, 2026, and the security page. This page is about Hark Pro at hark.com. Check those pages before you rely on a specific capability.",
+      },
+    ],
+    sources: HARK_SOURCES,
   },
 ];
 

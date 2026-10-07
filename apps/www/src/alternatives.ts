@@ -1,4 +1,6 @@
-import { DOCS_URL, GITHUB_URL, SITE_URL } from "./site";
+import { OPENCLAW_H1 } from "./guide";
+import { GROK_ALTERNATIVE_H1, GROK_ALTERNATIVE_PATH } from "./grok-alternative";
+import { DOCS_URL, GITHUB_URL, OPENCLAW_ALTERNATIVE_PATH, SITE_URL } from "./site";
 
 /** Public descriptions were read on this date. */
 export const COMPARED_ON = "October 7, 2026";
@@ -55,7 +57,7 @@ export type Alternative = {
 export const ALTERNATIVES_HUB = {
   title: "Open Source AI Assistant Alternatives – Rakazo",
   description:
-    "Open source comparisons of Rakazo with other AI assistants, including Meta's Muse and OpenAI's Dots.",
+    "Open source comparisons of Rakazo with other AI assistants, including Grok Bot, OpenClaw, Meta's Muse, and OpenAI's Dots.",
   h1: "Open source alternatives",
   intro:
     "Rakazo is an open source platform for persistent AI teammates you can run yourself. These pages compare it with other AI assistants using their public descriptions.",
@@ -273,6 +275,39 @@ export function alternativePath(alternative: Pick<Alternative, "slug">): string 
   return `/${alternative.slug}/`;
 }
 
+export type HubCard = {
+  href: string;
+  name: string;
+  h1: string;
+  summary: string;
+};
+
+/** Pages that already have their own route. They stay out of `ALTERNATIVES` so `[slug]` does not publish them again. */
+const DEDICATED_HUB_CARDS: readonly HubCard[] = [
+  {
+    href: GROK_ALTERNATIVE_PATH,
+    name: "Grok Bot",
+    h1: GROK_ALTERNATIVE_H1,
+    summary: "xAI's hosted bots, and what is different when you host Rakazo yourself.",
+  },
+  {
+    href: OPENCLAW_ALTERNATIVE_PATH,
+    name: "OpenClaw",
+    h1: OPENCLAW_H1,
+    summary: "An open source agent you run yourself, and what is different in Rakazo.",
+  },
+];
+
+export const HUB_CARDS: readonly HubCard[] = [
+  ...ALTERNATIVES.map((page) => ({
+    href: alternativePath(page),
+    name: page.name,
+    h1: page.h1,
+    summary: page.summary,
+  })),
+  ...DEDICATED_HUB_CARDS,
+];
+
 export function faqPageSchema(faq: readonly FaqItem[]) {
   return {
     "@context": "https://schema.org",
@@ -330,9 +365,8 @@ export function alternativeMarkdown(alternative: Alternative): string {
 }
 
 export function alternativesIndexMarkdown(): string {
-  const pages = ALTERNATIVES.map(
-    (alternative) =>
-      `- [${alternative.h1}](${SITE_URL}${alternativePath(alternative)}) — ${alternative.name}`,
+  const pages = HUB_CARDS.map(
+    (card) => `- [${card.h1}](${SITE_URL}${card.href}) — ${card.name}`,
   );
   return [
     `# ${ALTERNATIVES_HUB.h1}`,

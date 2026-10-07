@@ -1,5 +1,5 @@
 ---
-import { ALTERNATIVES, ALTERNATIVES_HUB, COMPARED_ON, GET_STARTED, alternativePath } from "../alternatives";
+import { ALTERNATIVES_HUB, COMPARED_ON, GET_STARTED, HUB_CARDS } from "../alternatives";
 import { DOCS_URL, GITHUB_URL } from "../site";
 import Button from "./Button.astro";
 import SiteFrame from "./SiteFrame.astro";
@@ -11,11 +11,11 @@ import SiteFrame from "./SiteFrame.astro";
   <p class="alt-note">Public descriptions as of {COMPARED_ON}.</p>
   <ul class="alt-index">
     {
-      ALTERNATIVES.map((page) => (
+      HUB_CARDS.map((card) => (
         <li>
-          <a class="alt-card" href={alternativePath(page)}>
-            <h2>{page.h1}</h2>
-            <p>{page.summary}</p>
+          <a class="alt-card" href={card.href}>
+            <h2>{card.h1}</h2>
+            <p>{card.summary}</p>
           </a>
         </li>
       ))

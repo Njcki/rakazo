@@ -1,6 +1,6 @@
 import type { Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { ALTERNATIVES, ALTERNATIVES_HUB } from "../src/alternatives";
+import { ALTERNATIVES, ALTERNATIVES_HUB, HUB_CARDS } from "../src/alternatives";
 
 async function captureScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const screenshotPath = testInfo.outputPath(`${name}.png`);
@@ -39,12 +39,18 @@ test.describe("alternatives", () => {
       /^https:\/\/rakazo\.com\/alternatives\/?$/,
     );
 
-    for (const alternative of ALTERNATIVES) {
-      await expect(page.getByRole("link", { name: alternative.h1 })).toHaveAttribute(
-        "href",
-        `/${alternative.slug}/`,
-      );
+    for (const card of HUB_CARDS) {
+      await expect(page.getByRole("link", { name: card.h1 })).toHaveAttribute("href", card.href);
     }
+
+    const footerHrefs = await page
+      .locator(".site-footer__links a")
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    expect(new Set(footerHrefs).size).toBe(footerHrefs.length);
+    const headerHrefs = await page
+      .locator(".site-nav a")
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    expect(new Set(headerHrefs).size).toBe(headerHrefs.length);
 
     const footerAlternatives = page
       .locator(".site-footer__links")

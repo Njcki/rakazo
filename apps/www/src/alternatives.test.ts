@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ALTERNATIVES,
   ALTERNATIVES_HUB,
+  HUB_CARDS,
   alternativeMarkdown,
   alternativePath,
   alternativesIndexMarkdown,
@@ -19,6 +20,16 @@ describe("alternative pages", () => {
 
     const index = alternativesIndexMarkdown();
     expect(index.startsWith(`# ${ALTERNATIVES_HUB.h1}\n`)).toBe(true);
+    expect(HUB_CARDS.map((card) => card.href)).toEqual([
+      "/muse-alternative/",
+      "/dots-alternative/",
+      "/grok-bot-alternative/",
+      "/openclaw-alternative/",
+    ]);
+    expect(new Set(HUB_CARDS.map((card) => card.href)).size).toBe(HUB_CARDS.length);
+    for (const card of HUB_CARDS) {
+      expect(index.split(card.href).length - 1).toBe(1);
+    }
     for (const page of ALTERNATIVES) {
       expect(page.title).toContain("Rakazo");
       expect(page.h1.length).toBeGreaterThan(0);

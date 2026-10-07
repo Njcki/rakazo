@@ -55,6 +55,7 @@ export const SELF_HOST_TITLE = "Self-Hosted AI Agent (Open Source) – Rakazo";
 export const SELF_HOST_DESCRIPTION =
   "Run Rakazo yourself: an open source AI agent with your data, your model, and your costs. Requirements and the setup steps for Docker or a source checkout.";
 
+export const OPENCLAW_H1 = "Open source OpenClaw alternative";
 export const OPENCLAW_TITLE = "Open Source OpenClaw Alternative – Rakazo";
 export const OPENCLAW_DESCRIPTION =
   "Rakazo and OpenClaw are both open source, self-hosted AI agents. Compare licensing, interfaces, models, and computers, and see which shape fits.";

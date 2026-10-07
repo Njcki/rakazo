@@ -11,6 +11,7 @@ import {
   OPENCLAW_DOCS_URL,
   OPENCLAW_FAQS,
   OPENCLAW_FEATURES_URL,
+  OPENCLAW_H1,
   OPENCLAW_GITHUB_URL,
   OPENCLAW_SANDBOX_URL,
   OPENCLAW_TITLE,
@@ -36,7 +37,7 @@ const structuredData = faqPageStructuredData(OPENCLAW_FAQS);
     <Header starsLabel={starsLabel} />
     <GetStartedDialog copy={home.getStartedDialog} waitlist={home.waitlist} />
     <main id="main" class="privacy-copy guide">
-      <h1>Open source OpenClaw alternative</h1>
+      <h1>{OPENCLAW_H1}</h1>
       <p>
         Rakazo and OpenClaw both run an AI agent on hardware you operate. They are not the same
         product, and Rakazo does not import an OpenClaw setup. Use this page to compare the shape of

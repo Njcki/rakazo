@@ -24,8 +24,11 @@ import type { ChatMarkdownProps } from "./markdown";
 import {
   inlineMarkdownImageSrc,
   linkifyExplicitUrls,
+  markRemoteImageLoaded,
   plainTextLinkParts,
-  sanitizeMarkdownImageUrl,
+  RemoteImagesContext,
+  remoteImageRenders,
+  remoteMarkdownImage,
   sanitizeMarkdownUrl,
 } from "./markdown";
 
@@ -131,6 +134,48 @@ function markdownStyles(palette: ColorTokens) {
       backgroundColor: palette.mutedForeground,
       height: StyleSheet.hairlineWidth,
     },
+    // Custom keys. An image label outside a text node inherits no color, so it carries the body color.
+    plain_text: {
+      color: palette.foreground,
+    },
+    // The tap-to-load placeholder for a remote image: a filled, bordered chip that reads as a
+    // control on the muted bot bubble in both themes.
+    image_placeholder: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "flex-start",
+      gap: 6,
+      minHeight: 32,
+      maxWidth: "100%",
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: palette.border,
+      backgroundColor: palette.background,
+    },
+    image_placeholder_icon: {
+      width: 14,
+      height: 11,
+      borderWidth: 1.5,
+      borderRadius: 2,
+      borderColor: palette.mutedForeground,
+    },
+    image_placeholder_alt: {
+      flexShrink: 1,
+      color: palette.foreground,
+      fontSize: 14,
+    },
+    image_placeholder_host: {
+      flexShrink: 1,
+      color: palette.mutedForeground,
+      fontSize: 13,
+    },
+    linked_image: {
+      width: "100%",
+      maxWidth: "100%",
+      alignItems: "flex-start",
+      gap: 4,
+    },
   });
 }
 
@@ -138,6 +183,36 @@ async function openSafeLink(url: string) {
   const safeUrl = sanitizeMarkdownUrl(url);
   if (!safeUrl) return;
   if (await Linking.canOpenURL(safeUrl)) await Linking.openURL(safeUrl);
+}
+
+function openMarkdownLink(href: string, event: { defaultPrevented: boolean }) {
+  if (event.defaultPrevented) return;
+  void openSafeLink(href);
+}
+
+function linkHost(href: string): string {
+  try {
+    return new URL(href).host || href;
+  } catch {
+    return href;
+  }
+}
+
+function soleRemoteImage(node: ASTNode):
+  | {
+      remote: { href: string; host: string };
+      alt?: string;
+      title?: string;
+    }
+  | undefined {
+  const parts = node.children.filter(
+    (child) => child.type !== "text" || child.content.trim() !== "",
+  );
+  const only = parts.length === 1 && parts[0]?.type === "image" ? parts[0] : undefined;
+  if (!only) return undefined;
+  const remote = remoteMarkdownImage(only.attributes.src ?? "");
+  if (!remote) return undefined;
+  return { remote, alt: only.attributes.alt, title: only.attributes.title };
 }
 
 function enclosingLink(parents: readonly ASTNode[]) {
@@ -480,38 +555,9 @@ const renderRules: RenderRules = {
       {children}
     </TableCell>
   ),
-  link: (node, children, _parent, styleMap) => {
-    const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
-    if (!href) return <Text key={node.key}>{children}</Text>;
-    return (
-      <Text
-        accessibilityRole="link"
-        key={node.key}
-        style={styleMap.link}
-        onPress={() => {
-          void openSafeLink(href);
-        }}
-      >
-        {children}
-      </Text>
-    );
-  },
-  blocklink: (node, children, _parent, styleMap) => {
-    const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
-    if (!href) return <Text key={node.key}>{children}</Text>;
-    return (
-      <Pressable
-        accessibilityRole="link"
-        key={node.key}
-        onPress={() => {
-          void openSafeLink(href);
-        }}
-        style={styleMap.blocklink}
-      >
-        <View style={styleMap.image}>{children}</View>
-      </Pressable>
-    );
-  },
+  link: (node, children, _parent, styleMap) => renderMarkdownLink(node, children, styleMap, false),
+  blocklink: (node, children, _parent, styleMap) =>
+    renderMarkdownLink(node, children, styleMap, true),
   // Replaces the library rule, which loads any http(s) image and prefixes https:// to the rest.
   image: (node, _children, parents, styleMap) => {
     const src = node.attributes.src ?? "";
@@ -529,37 +575,199 @@ const renderRules: RenderRules = {
         />
       );
     }
-    const label = alt || src;
-    const href = sanitizeMarkdownImageUrl(src);
     const linkParent = enclosingLink(parents);
-    // Inside a link the label joins the link text, so a badge still opens its link target.
-    // A blocklink wraps a view, so the label carries the link style itself.
-    if (linkParent) {
-      if (!sanitizeMarkdownUrl(linkParent.attributes.href ?? "")) {
-        return <Text key={node.key}>{label}</Text>;
-      }
+    const linkOpens = Boolean(linkParent && sanitizeMarkdownUrl(linkParent.attributes.href ?? ""));
+    const labelStyle = linkOpens ? styleMap.link : styleMap.plain_text;
+    const remote = remoteMarkdownImage(src);
+    if (remote) {
       return (
-        <Text key={node.key} style={styleMap.link}>
-          {label}
-        </Text>
+        <RemoteMarkdownImage
+          key={node.key}
+          image={remote}
+          alt={alt}
+          title={node.attributes.title}
+          insideLink={Boolean(linkParent)}
+          rejectedLink={Boolean(linkParent) && !linkOpens}
+          labelStyle={labelStyle}
+          styleMap={styleMap}
+        />
       );
     }
-    if (!href) return <Text key={node.key}>{label}</Text>;
+    return (
+      <Text key={node.key} style={labelStyle}>
+        {alt || src}
+      </Text>
+    );
+  },
+};
+
+function renderMarkdownLink(
+  node: ASTNode,
+  children: ReactNode[],
+  styleMap: MarkdownStyleMap,
+  block: boolean,
+) {
+  const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
+  if (!href) return <Text key={node.key}>{children}</Text>;
+  const image = soleRemoteImage(node);
+  if (image) {
+    return (
+      <LinkedRemoteImage
+        key={node.key}
+        href={href}
+        image={image.remote}
+        alt={image.alt}
+        title={image.title}
+        styleMap={styleMap}
+      />
+    );
+  }
+  if (!block) {
     return (
       <Text
         accessibilityRole="link"
-        accessibilityHint={node.attributes.title}
         key={node.key}
+        style={styleMap.link}
+        onPress={(event) => openMarkdownLink(href, event)}
+      >
+        {children}
+      </Text>
+    );
+  }
+  return (
+    <Pressable
+      accessibilityRole="link"
+      key={node.key}
+      onPress={(event) => openMarkdownLink(href, event)}
+      style={styleMap.blocklink}
+    >
+      <View style={styleMap.image}>{children}</View>
+    </Pressable>
+  );
+}
+
+function LinkedRemoteImage({
+  href,
+  image,
+  alt,
+  title,
+  styleMap,
+}: {
+  href: string;
+  image: { href: string; host: string };
+  alt?: string;
+  title?: string;
+  styleMap: MarkdownStyleMap;
+}) {
+  const loadRemote = useContext(RemoteImagesContext);
+  const [, setRevision] = useState(0);
+  if (remoteImageRenders(image.href, loadRemote, false)) {
+    return (
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => {
+          void openSafeLink(href);
+        }}
+        style={styleMap.blocklink}
+      >
+        <View style={styleMap.image}>
+          <FitImage
+            indicator
+            style={styleMap._VIEW_SAFE_image}
+            source={{ uri: image.href }}
+            accessible={Boolean(alt)}
+            accessibilityLabel={alt}
+          />
+        </View>
+      </Pressable>
+    );
+  }
+  return (
+    <View style={styleMap.linked_image}>
+      <RemoteMarkdownImage
+        image={image}
+        alt={alt}
+        title={title}
+        rejectedLink={false}
+        labelStyle={styleMap.plain_text}
+        styleMap={styleMap}
+        onLoad={() => setRevision((revision) => revision + 1)}
+      />
+      <Text
+        accessibilityRole="link"
         style={styleMap.link}
         onPress={() => {
           void openSafeLink(href);
         }}
       >
-        {label}
+        {linkHost(href)}
       </Text>
+    </View>
+  );
+}
+
+export function RemoteMarkdownImage({
+  image,
+  alt,
+  title,
+  insideLink = false,
+  rejectedLink,
+  labelStyle,
+  styleMap,
+  onLoad,
+}: {
+  image: { href: string; host: string };
+  alt?: string;
+  title?: string;
+  insideLink?: boolean;
+  rejectedLink: boolean;
+  labelStyle: MarkdownStyleMap[string] | undefined;
+  styleMap: MarkdownStyleMap;
+  onLoad?: () => void;
+}) {
+  const loadRemote = useContext(RemoteImagesContext);
+  // Bumping this redraws after a tap. Whether the image shows is read from the current URL.
+  const [, setRevision] = useState(0);
+  if (remoteImageRenders(image.href, loadRemote, rejectedLink)) {
+    return (
+      <FitImage
+        indicator
+        style={styleMap._VIEW_SAFE_image}
+        source={{ uri: image.href }}
+        accessible={Boolean(alt)}
+        accessibilityLabel={alt}
+      />
     );
-  },
-};
+  }
+  if (rejectedLink || insideLink) return <Text style={labelStyle}>{alt || image.host}</Text>;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={alt ? `${alt}, ${image.host}` : image.host}
+      accessibilityHint={title}
+      // A 32pt chip with 6pt slop on each side keeps the 44pt touch target.
+      hitSlop={6}
+      onPress={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        markRemoteImageLoaded(image.href);
+        onLoad?.();
+        setRevision((revision) => revision + 1);
+      }}
+      style={styleMap.image_placeholder}
+    >
+      <View style={styleMap.image_placeholder_icon} />
+      {alt ? (
+        <Text numberOfLines={1} style={styleMap.image_placeholder_alt}>
+          {alt}
+        </Text>
+      ) : null}
+      <Text numberOfLines={1} style={styleMap.image_placeholder_host}>
+        {image.host}
+      </Text>
+    </Pressable>
+  );
+}
 
 type LinkifiedTextProps = {
   children: string;
@@ -640,3 +848,4 @@ const layout = StyleSheet.create({
 });
 
 export type { ChatMarkdownProps } from "./markdown";
+export { RemoteImagesContext } from "./markdown";

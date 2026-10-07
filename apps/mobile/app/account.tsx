@@ -48,6 +48,11 @@ import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
 import { registerPushToken } from "../lib/push";
 import {
+  getCachedRemoteImagesEnabled,
+  setRemoteImagesPreference,
+  subscribeRemoteImages,
+} from "../lib/remote-images-preference";
+import {
   getCachedResponseStreamingEnabled,
   setResponseStreamingPreference,
   subscribeResponseStreaming,
@@ -88,6 +93,12 @@ export default function Account() {
     getCachedResponseStreamingEnabled,
     () => false,
   );
+  const loadRemoteImages = useSyncExternalStore(
+    subscribeRemoteImages,
+    getCachedRemoteImagesEnabled,
+    () => false,
+  );
+  const loadRemoteImagesLabel = t("Load web images automatically");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const styles = useThemedStyles(createAccountStyles);
   const versionInfo = getAppVersionInfo();
@@ -475,6 +486,14 @@ export default function Account() {
                 onValueChange={(checked) =>
                   void setResponseStreamingPreference(checked ? "on" : "off")
                 }
+              />
+            </View>
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>{loadRemoteImagesLabel}</Text>
+              <Switch
+                accessibilityLabel={loadRemoteImagesLabel}
+                value={loadRemoteImages}
+                onValueChange={(checked) => void setRemoteImagesPreference(checked ? "on" : "off")}
               />
             </View>
           </View>

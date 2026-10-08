@@ -38,14 +38,14 @@ describe("Docker sandbox", () => {
 
     for await (const event of provider.execute(
       { id: "computer", botId: "bot", kind: "docker", providerRef: "computer" },
-      { argv: ["sleep", "10"], timeoutMs: 75 },
+      { argv: ["sleep", "10"], unsetEnv: ["FAILED"], timeoutMs: 75 },
       context,
     )) {
       events.push(event);
     }
 
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
-      argv: ["sleep", "10"],
+      argv: ["env", "-u", "FAILED", "--", "sleep", "10"],
       cwd: "/home/rakazo",
       timeoutMs: 75,
     });

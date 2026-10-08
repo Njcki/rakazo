@@ -103,6 +103,10 @@ msgstr ""
 msgid "{botName}’s computer"
 msgstr "{botName} 的电脑"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
+msgstr "{commandVariable} 是保留名称，不能用作命令变量。请选择其他名称。"
+
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr ""
@@ -638,6 +642,10 @@ msgstr ""
 msgid "Available after the routine is saved"
 msgstr "保存例行任务后可用"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "Available to this bot's shell commands as {commandVariable}"
+msgstr "此机器人的 Shell 命令可通过 {commandVariable} 使用"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "头像工作室"
@@ -1011,6 +1019,11 @@ msgstr "即将推出"
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "命令"
+
+#: src/components/AskCard.tsx
+#: src/pages/shell/bot-credentials.tsx
+msgid "Command variable"
+msgstr "命令变量"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2437,10 +2450,6 @@ msgstr "保留记忆"
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
-
-#: src/pages/shell/bot-credentials.tsx
-msgid "Keys and passwords this bot can use, each for one site only. Values are encrypted and never shown again."
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -4512,6 +4521,10 @@ msgstr "使用此服务器自己的 {hostCredentialSource} 凭据访问 {selecte
 #: src/pages/shell/bot-credentials.tsx
 msgid "Value"
 msgstr ""
+
+#: src/pages/shell/bot-credentials.tsx
+msgid "Values are encrypted and never shown again."
+msgstr "值会加密保存，之后不再显示。"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

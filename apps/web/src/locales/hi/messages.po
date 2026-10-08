@@ -103,6 +103,10 @@ msgstr ""
 msgid "{botName}’s computer"
 msgstr "{botName} का कंप्यूटर"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
+msgstr "{commandVariable} आरक्षित है और कमांड वेरिएबल के रूप में इस्तेमाल नहीं हो सकता। दूसरा नाम चुनें।"
+
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr ""
@@ -638,6 +642,10 @@ msgstr ""
 msgid "Available after the routine is saved"
 msgstr ""
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "Available to this bot's shell commands as {commandVariable}"
+msgstr "इस बॉट के शेल कमांड के लिए {commandVariable} के रूप में उपलब्ध"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "अवतार स्टूडियो"
@@ -1011,6 +1019,11 @@ msgstr ""
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "कमांड"
+
+#: src/components/AskCard.tsx
+#: src/pages/shell/bot-credentials.tsx
+msgid "Command variable"
+msgstr "कमांड वेरिएबल"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2436,10 +2449,6 @@ msgstr "मेमोरी रखें"
 
 #: src/pages/RoutineEditor.tsx
 msgid "key"
-msgstr ""
-
-#: src/pages/shell/bot-credentials.tsx
-msgid "Keys and passwords this bot can use, each for one site only. Values are encrypted and never shown again."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -4512,6 +4521,10 @@ msgstr "{selectedProviderName} तक पहुँचने के लिए इ
 #: src/pages/shell/bot-credentials.tsx
 msgid "Value"
 msgstr ""
+
+#: src/pages/shell/bot-credentials.tsx
+msgid "Values are encrypted and never shown again."
+msgstr "मान एन्क्रिप्ट किए जाते हैं और दोबारा नहीं दिखाए जाते।"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

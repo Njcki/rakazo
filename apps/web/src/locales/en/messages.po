@@ -103,6 +103,10 @@ msgstr "{amount} / {period}"
 msgid "{botName}’s computer"
 msgstr "{botName}’s computer"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
+msgstr "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
+
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr "{count} days"
@@ -638,6 +642,10 @@ msgstr "Automated senders will appear after they post here."
 msgid "Available after the routine is saved"
 msgstr "Available after the routine is saved"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "Available to this bot's shell commands as {commandVariable}"
+msgstr "Available to this bot's shell commands as {commandVariable}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "Avatar Studio"
@@ -1011,6 +1019,11 @@ msgstr "Coming soon"
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Command"
+
+#: src/components/AskCard.tsx
+#: src/pages/shell/bot-credentials.tsx
+msgid "Command variable"
+msgstr "Command variable"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2437,10 +2450,6 @@ msgstr "Keep memories"
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "key"
-
-#: src/pages/shell/bot-credentials.tsx
-msgid "Keys and passwords this bot can use, each for one site only. Values are encrypted and never shown again."
-msgstr "Keys and passwords this bot can use, each for one site only. Values are encrypted and never shown again."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -4512,6 +4521,10 @@ msgstr "Uses this server's own {hostCredentialSource} credentials to access {sel
 #: src/pages/shell/bot-credentials.tsx
 msgid "Value"
 msgstr "Value"
+
+#: src/pages/shell/bot-credentials.tsx
+msgid "Values are encrypted and never shown again."
+msgstr "Values are encrypted and never shown again."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

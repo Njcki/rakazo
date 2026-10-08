@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
 import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
 import {
@@ -30,7 +31,7 @@ export const ThinkingLevelSchema = z.enum([
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
 
-export const AGENT_SECRET_NAME_PATTERN = /^[A-Z_][A-Z0-9_]{0,63}$/;
+export { AGENT_SECRET_NAME_PATTERN };
 
 export const AgentSecretSchema = z.object({
   id: Id,

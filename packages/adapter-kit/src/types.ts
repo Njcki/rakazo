@@ -91,6 +91,8 @@ export interface CommandRequest {
   argv: string[];
   cwd?: string;
   env?: Record<string, string>;
+  /** Remove these variables after all environment overlays, including inherited values. */
+  unsetEnv?: string[];
   pty?: boolean;
   /** Maximum wall-clock runtime before the command and its descendants are terminated. */
   timeoutMs?: number;

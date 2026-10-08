@@ -173,6 +173,7 @@ import {
   getCachedResponseStreamingEnabled,
   subscribeResponseStreaming,
 } from "../lib/response-streaming";
+import { secretDestinationLabel } from "../lib/secret-destination";
 import { selectableTextFromMarkdown } from "../lib/selectable-text";
 import type { ComposerSnapshot, SendAttempt } from "../lib/thread-feedback";
 import { deliverSend, settleComposer, useThreadFeedback } from "../lib/thread-feedback";
@@ -4059,7 +4060,7 @@ function AskBlock({
       </Text>
       {secretInput && ask.credential ? (
         <Text style={{ color: tokens.mutedForeground, fontSize: 13.5 }}>
-          {ask.credential.origin}
+          {secretDestinationLabel(ask.credential)}
         </Text>
       ) : null}
       {ask.detail && !secretInput ? (

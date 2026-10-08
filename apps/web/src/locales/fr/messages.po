@@ -103,6 +103,10 @@ msgstr ""
 msgid "{botName}’s computer"
 msgstr "Ordinateur de {botName}"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "{commandVariable} is reserved and cannot be used as a command variable. Choose another name."
+msgstr "{commandVariable} est réservée et ne peut pas être utilisée comme variable de commande. Choisissez un autre nom."
+
 #: src/lib/billing.ts
 msgid "{count} days"
 msgstr ""
@@ -638,6 +642,10 @@ msgstr "Les expéditeurs automatisés apparaîtront après avoir publié ici."
 msgid "Available after the routine is saved"
 msgstr "Disponible après l'enregistrement de la routine"
 
+#: src/pages/shell/bot-credentials.tsx
+msgid "Available to this bot's shell commands as {commandVariable}"
+msgstr "Disponible pour les commandes shell de ce bot sous le nom {commandVariable}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "Studio d'avatars"
@@ -1011,6 +1019,11 @@ msgstr "Bientôt disponible"
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
 msgstr "Commande"
+
+#: src/components/AskCard.tsx
+#: src/pages/shell/bot-credentials.tsx
+msgid "Command variable"
+msgstr "Variable de commande"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2437,10 +2450,6 @@ msgstr "Conserver les mémoires"
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "clé"
-
-#: src/pages/shell/bot-credentials.tsx
-msgid "Keys and passwords this bot can use, each for one site only. Values are encrypted and never shown again."
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -4512,6 +4521,10 @@ msgstr "Utilise les identifiants {hostCredentialSource} propres à ce serveur po
 #: src/pages/shell/bot-credentials.tsx
 msgid "Value"
 msgstr ""
+
+#: src/pages/shell/bot-credentials.tsx
+msgid "Values are encrypted and never shown again."
+msgstr "Les valeurs sont chiffrées et ne sont plus affichées."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

@@ -277,6 +277,30 @@ describe("lingui catalogs", () => {
     );
   });
 
+  it("translates command credential controls in every locale", () => {
+    const messages = [
+      "Command variable",
+      "Available to this bot's shell commands as {commandVariable}",
+      "{commandVariable} is reserved and cannot be used as a command variable. Choose another name.",
+      "Values are encrypted and never shown again.",
+    ];
+    for (const locale of ["en", "de", "es", "fr", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const message of messages) {
+        const entry = catalog
+          .split("\n\n")
+          .find((block) => block.includes(`msgid ${JSON.stringify(message)}\n`));
+        expect(entry, `${locale}: ${message}`).toMatch(/msgstr ".+"/);
+        if (message.includes("{commandVariable}")) {
+          expect(entry?.split("msgstr ")[1]).toContain("{commandVariable}");
+        }
+      }
+    }
+  });
+
   it("translates model connection preflight feedback in every non-English catalog", () => {
     const locales = ["de", "es", "fr", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"];
     const messages = [

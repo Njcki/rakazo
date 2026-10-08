@@ -25,6 +25,7 @@ import {
   computerObservation,
   normalizeWorkspacePath,
 } from "./computer-support.js";
+import { sandboxCommandArgv } from "./sandbox-command-environment.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
 export const MAX_SANDBOX_ERROR_RESPONSE_BYTES = 8 * 1024;
@@ -191,6 +192,7 @@ export class DockerSandboxProvider implements SandboxProvider {
       headers: { ...this.headers(context, computer.botId), "content-type": "application/json" },
       body: JSON.stringify({
         ...request,
+        argv: sandboxCommandArgv(request),
         cwd: dockerCwd(request.cwd),
         timeoutMs,
       }),

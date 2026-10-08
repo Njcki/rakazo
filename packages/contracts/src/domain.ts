@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
+import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
 import {
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
   cloudflareGatewayRoutingId,
@@ -73,6 +74,7 @@ export const BotSchema = z.object({
   thinkingLevel: ThinkingLevelSchema.nullable(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
+  disabledBuiltinTools: z.array(z.string()).default([]),
   webhookConfigured: z.boolean(),
   /** Present when created with an idempotency key (e.g. onboarding:first). */
   spawnKey: z.string().nullable(),
@@ -339,6 +341,7 @@ export const UpdateBotInput = z
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
+    disabledBuiltinTools: DisabledBuiltinToolsSchema.optional(),
   })
   .superRefine((value, ctx) => {
     const providerProvided = value.modelProvider !== undefined;

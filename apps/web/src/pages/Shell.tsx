@@ -3878,8 +3878,12 @@ export function ShellPage() {
                       mode: computerMode,
                     });
                   }
-                  await rpc.bots.update({ botId: active.id, ...patch });
-                  await refreshBots();
+                  const updated = await rpc.bots.update({ botId: active.id, ...patch });
+                  setBots((current) =>
+                    current.map((bot) => (bot.id === updated.id ? updated : bot)),
+                  );
+                  // Persistence succeeded; a failed navigation refresh must not undo the tool edit.
+                  await refreshBots().catch(() => undefined);
                 }}
                 onExport={async () => {
                   const manifest = await rpc.export.bot({ botId: active.id });

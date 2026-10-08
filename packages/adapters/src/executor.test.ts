@@ -12,6 +12,7 @@ import {
   loadCurrentTurnImages,
   missingTurnImagesInstruction,
   parseUpdateBotPatch,
+  persistentComputerInstruction,
   runNotificationsEnabled,
   selectBuiltinToolsForRun,
   settleSteeringAttachmentLoads,
@@ -19,10 +20,40 @@ import {
   toolCompletionAuditPayload,
   toolCompletionFromResult,
   userTurnInstructions,
+  VOICE_CALL_INSTRUCTION,
+  voiceCallInstruction,
   withRecentTurnImages,
 } from "./executor.js";
 import { UnavailableModelForAuthError } from "./model-selection.js";
 import { RetiredModelCredentialError, serializeModelSecret } from "./pi-oauth.js";
+
+describe("bot tool permissions", () => {
+  it("never lets self-edit change disabled tools alongside an allowed field", () => {
+    expect(parseUpdateBotPatch({ name: "Scout", disabledBuiltinTools: [] }, "Bot")).toEqual({
+      patch: { name: "Scout" },
+    });
+    expect(parseUpdateBotPatch({ disabledBuiltinTools: [] }, "Scout")).toHaveProperty("error");
+  });
+
+  it("filters history tools without widening the capability-gated selection", () => {
+    const options = {
+      historyRetrievalEnabled: true,
+      graphicalToolsAllowed: false,
+      groupId: null,
+      trigger: "user",
+      semanticMemoryEnabled: false,
+      messagingChannelRun: false,
+    };
+    const baseline = selectBuiltinToolsForRun(options).map((tool) => tool.name);
+    expect(baseline).toEqual(expect.arrayContaining(["search_history", "read_history"]));
+    expect(
+      selectBuiltinToolsForRun({
+        ...options,
+        disabledBuiltinTools: ["search_history", "read_history", "unknown"],
+      }).map((tool) => tool.name),
+    ).toEqual(baseline.filter((name) => name !== "search_history" && name !== "read_history"));
+  });
+});
 
 describe("tool completion audit", () => {
   it("records result metadata without persisting tool contents", () => {
@@ -343,6 +374,31 @@ describe("run tool selection", () => {
     expect(callEnd).toContain("end_call");
     expect(callEnd).toContain("schedule_create");
     expect(toolNames("call_end")).not.toContain("end_call");
+  });
+
+  it("omits a disabled builtin and ignores unknown names", () => {
+    const offered = (disabledBuiltinTools?: readonly string[]) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: false,
+        pageBrowserAllowed: false,
+        groupId: null,
+        trigger: "message",
+        semanticMemoryEnabled: false,
+        messagingChannelRun: false,
+        disabledBuiltinTools,
+      }).map((tool) => tool.name);
+
+    const baseline = offered();
+    expect(baseline).toContain("web_search");
+    expect(baseline).toContain("web_fetch");
+    expect(baseline).not.toContain("computer_act");
+
+    const disabled = offered(["web_search", "not_a_tool", ""]);
+    expect(disabled).not.toContain("web_search");
+    expect(disabled).toContain("web_fetch");
+    expect(disabled).not.toContain("not_a_tool");
+    expect(disabled).not.toContain("computer_act");
+    expect(disabled).toEqual(baseline.filter((name) => name !== "web_search"));
   });
 
   it("keeps schedule tools in group chats and still blocks create on routines", () => {
@@ -1073,6 +1129,164 @@ describe("userTurnInstructions", () => {
       ...stableTail,
     ]);
   });
+
+  it("omits paired history guidance when either history tool is disabled", () => {
+    for (const name of ["search_history", "read_history"]) {
+      const text = userTurnInstructions({
+        ...base,
+        groupContext: undefined,
+        messagingContext: undefined,
+        redactedMemoryContext: undefined,
+        redactedScratchpadContext: undefined,
+        hasHistoricalContext: false,
+        agentEnvironmentInstruction: undefined,
+        botDirectory: undefined,
+        pluginLine: undefined,
+        agentSkillsLine: undefined,
+        taughtSkillsLine: undefined,
+        historyRetrievalEnabled: true,
+        disabledBuiltinTools: new Set([name]),
+      }).join("\n");
+      expect(text).not.toContain("search_history");
+      expect(text).not.toContain("read_history");
+    }
+  });
+
+  it("stops telling the model to use a disabled web tool", () => {
+    const instructions = userTurnInstructions({
+      ...base,
+      groupContext: undefined,
+      messagingContext: undefined,
+      redactedMemoryContext: undefined,
+      redactedScratchpadContext: undefined,
+      hasHistoricalContext: false,
+      agentEnvironmentInstruction: undefined,
+      botDirectory: undefined,
+      pluginLine: undefined,
+      agentSkillsLine: undefined,
+      taughtSkillsLine: undefined,
+      disabledBuiltinTools: new Set(["web_search"]),
+    }).filter(Boolean);
+
+    const computer = instructions.find((line) => line?.includes("persistent computer"));
+    expect(computer).toContain("web_fetch");
+    expect(computer).not.toContain("web_search");
+  });
+
+  it("stops telling the model to use other disabled built-in tools", () => {
+    const instructions = userTurnInstructions({
+      ...base,
+      groupContext: undefined,
+      messagingContext: undefined,
+      redactedMemoryContext: undefined,
+      redactedScratchpadContext: undefined,
+      hasHistoricalContext: false,
+      agentEnvironmentInstruction: undefined,
+      botDirectory: undefined,
+      pluginLine: undefined,
+      agentSkillsLine: undefined,
+      taughtSkillsLine: undefined,
+      disabledBuiltinTools: new Set([
+        "request_secret",
+        "browser_act",
+        "remember",
+        "scratchpad_add",
+        "scratchpad_update",
+        "scratchpad_complete",
+        "request_takeover",
+        "create_space",
+        "spawn_bot",
+        "update_bot",
+        "run_subagent",
+        "archive_bot",
+        "render_plot",
+        "add_mcp_server",
+        "message_user",
+        "schedule_create",
+        "schedule_list",
+        "schedule_cancel",
+      ]),
+    }).filter(Boolean);
+
+    const text = instructions.join("\n");
+    expect(text).not.toContain("request_secret");
+    expect(text).not.toContain("fill_secret");
+    expect(text).not.toContain("browser_act");
+    expect(text).not.toContain("Use remember");
+    expect(text).not.toContain("scratchpad_");
+    expect(text).not.toContain("schedule_");
+    expect(text).not.toContain("request_takeover");
+    expect(text).not.toContain("create_space");
+    expect(text).not.toContain("spawn_bot");
+    expect(text).not.toContain("update_bot");
+    expect(text).not.toContain("run_subagent");
+    expect(text).not.toContain("archive_bot");
+    expect(text).not.toContain("render_plot");
+    expect(text).not.toContain("add_mcp_server");
+    expect(text).not.toContain("message_user");
+    expect(text).toContain("list_secrets");
+    expect(text).toContain("web_search");
+    expect(text).toContain("destination_write");
+    expect(text).toContain("Always put the complete final answer in your normal reply.");
+  });
+
+  it("keeps the credential safeguard when secret tools are off and shell stays on", () => {
+    const instructions = userTurnInstructions({
+      ...base,
+      groupContext: undefined,
+      messagingContext: undefined,
+      redactedMemoryContext: undefined,
+      redactedScratchpadContext: undefined,
+      hasHistoricalContext: false,
+      agentEnvironmentInstruction: undefined,
+      botDirectory: undefined,
+      pluginLine: undefined,
+      agentSkillsLine: undefined,
+      taughtSkillsLine: undefined,
+      disabledBuiltinTools: new Set([
+        "request_secret",
+        "list_secrets",
+        "secret_request",
+        "forget_secret",
+      ]),
+    }).filter(Boolean);
+
+    const text = instructions.join("\n");
+    expect(text).toContain(
+      "Never ask for a raw credential in chat or inject it into shell commands.",
+    );
+    expect(text).not.toContain("request_secret");
+    expect(text).not.toContain("list_secrets");
+    expect(text).not.toContain("secret_request");
+    expect(text).not.toContain("forget_secret");
+  });
+
+  it("drops the credential safeguard when secret tools and shell are off", () => {
+    const instructions = userTurnInstructions({
+      ...base,
+      groupContext: undefined,
+      messagingContext: undefined,
+      redactedMemoryContext: undefined,
+      redactedScratchpadContext: undefined,
+      hasHistoricalContext: false,
+      agentEnvironmentInstruction: undefined,
+      botDirectory: undefined,
+      pluginLine: undefined,
+      agentSkillsLine: undefined,
+      taughtSkillsLine: undefined,
+      disabledBuiltinTools: new Set([
+        "request_secret",
+        "list_secrets",
+        "secret_request",
+        "forget_secret",
+        "shell",
+      ]),
+    }).filter(Boolean);
+
+    expect(instructions.join("\n")).not.toContain(
+      "Never ask for a raw credential in chat or inject it into shell commands.",
+    );
+  });
 });
 
 describe("dockerComputerToolInstruction", () => {
@@ -1103,6 +1317,91 @@ describe("dockerComputerToolInstruction", () => {
     const instruction = dockerComputerToolInstruction("docker");
     expect(instruction).toContain("`pdftotext`, `pandoc`, and `openpyxl` are available");
     expect(instruction).toContain("PDFs, documents, and spreadsheets");
+  });
+  it("does not prescribe disabled browser or takeover tools for gh login", () => {
+    const instruction = dockerComputerToolInstruction(
+      "docker",
+      new Set(["browser_navigate", "browser_act", "request_takeover"]),
+    );
+    expect(instruction).toContain("uv tool install <package>");
+    expect(instruction).not.toContain("browser_navigate");
+    expect(instruction).not.toContain("browser_act");
+    expect(instruction).not.toContain("request_takeover");
+    expect(instruction).toContain("--with-token");
+  });
+});
+
+describe("voiceCallInstruction", () => {
+  it("preserves live-call guidance when end_call is offered", () => {
+    expect(voiceCallInstruction()).toBe(
+      "You are on a live voice call. Reply in one to three short spoken sentences. No markdown, lists, links, or option cards; do not use ask_user unless you truly cannot proceed. Answer directly from what you already know when you can; use tools or subagents only when the answer requires them. If the user asks to end the call or hang up, or the conversation is finished, call end_call with a short title and a one-sentence farewell instead of saying goodbye in text, then do any remaining work as a normal chat reply.",
+    );
+    expect(voiceCallInstruction(new Set())).toBe(VOICE_CALL_INSTRUCTION);
+    expect(voiceCallInstruction(new Set(["shell"]))).toBe(VOICE_CALL_INSTRUCTION);
+  });
+
+  it("keeps spoken guidance without prescribing an unavailable hang-up tool", () => {
+    const instruction = voiceCallInstruction(new Set(["end_call"]));
+    expect(instruction).toContain("Reply in one to three short spoken sentences.");
+    expect(instruction).not.toContain("end_call");
+  });
+});
+
+describe("persistentComputerInstruction", () => {
+  it("preserves the default sandbox guidance byte for byte", () => {
+    expect(
+      persistentComputerInstruction({
+        heldForTakeover: false,
+        graphicalToolsAllowed: false,
+        graphical: false,
+      }),
+    ).toBe(
+      "You have a persistent sandbox filesystem and shell. This backend does not provide model-visible graphical control, so use the file tools and shell.",
+    );
+  });
+
+  it.each([false, true])(
+    "names only available non-graphical capabilities (graphical: %s)",
+    (graphical) => {
+      const instruction = (disabled: string[]) =>
+        persistentComputerInstruction({
+          heldForTakeover: false,
+          graphicalToolsAllowed: false,
+          graphical,
+          disabled: new Set(disabled),
+        });
+      const filesOff = ["list_files", "read_file", "write_file", "attach_file"];
+      expect(instruction(["shell"])).not.toContain("shell");
+      expect(instruction(["shell"])).toContain("filesystem");
+      expect(instruction(filesOff)).not.toContain("filesystem");
+      expect(instruction(filesOff)).toContain("shell");
+      expect(instruction([...filesOff, "shell"])).not.toMatch(/filesystem|shell|file tools/);
+    },
+  );
+
+  it("keeps the desktop guidance when every desktop tool is offered", () => {
+    const instruction = persistentComputerInstruction({
+      heldForTakeover: false,
+      graphicalToolsAllowed: true,
+      graphical: true,
+    });
+    expect(instruction).toContain("Use computer_observe and computer_act");
+    expect(instruction).toContain("Use open_path and launch_app");
+    expect(instruction).toContain("Use the file tools and shell");
+  });
+
+  it("does not prescribe a disabled shell or observe tool", () => {
+    const instruction = persistentComputerInstruction({
+      heldForTakeover: false,
+      graphicalToolsAllowed: true,
+      graphical: true,
+      disabled: new Set(["shell", "computer_observe", "computer_act"]),
+    });
+    expect(instruction).not.toContain("shell");
+    expect(instruction).not.toContain("computer_observe");
+    expect(instruction).not.toContain("computer_act");
+    expect(instruction).toContain("Use the file tools for precise filesystem work.");
+    expect(instruction).toContain("Use open_path and launch_app");
   });
 });
 

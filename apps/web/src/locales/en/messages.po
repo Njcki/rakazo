@@ -1844,6 +1844,10 @@ msgstr "Desktop update"
 msgid "Direct MCP"
 msgstr "Direct MCP"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "Disabled tools"
+msgstr "Disabled tools"
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4279,6 +4283,10 @@ msgstr "Unavailable"
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Uninstall"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Unknown tool"
+msgstr "Unknown tool"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"

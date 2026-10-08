@@ -31,6 +31,7 @@ import {
   openThreadWindow,
   plainTextFromMarkdown,
   projectMessageReactions,
+  replyAttachment,
   resolveComposerSendPlan,
   resolvePersonaColorDef,
   SLASH_ACTIONS,
@@ -88,6 +89,7 @@ import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { ChoiceCard } from "../components/ChoiceCard";
 import { ComputerCard } from "../components/ComputerCard";
+import { ComposerReplyPreview } from "../components/composer-reply-preview";
 import { GlassSurface } from "../components/glass-surface";
 import type { ImageArtifactPreviewTarget } from "../components/image-artifact-viewer";
 import { InlineImageAttachment } from "../components/inline-image-attachment";
@@ -2080,6 +2082,7 @@ function Thread() {
           >
             {isPeerReceiptBlocks(message.blocks) ? null : (
               <ReplyLine
+                threadTarget={artifactTarget}
                 targetId={message.replyToMessageId}
                 quote={message.replyQuote}
                 preview={message.replyPreview}
@@ -2468,16 +2471,17 @@ function Thread() {
               paddingVertical: 10,
             }}
           >
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: tokens.mutedForeground, fontSize: 12 }}>
-                {replyTarget.role === "user"
+            <ComposerReplyPreview
+              author={
+                replyTarget.role === "user"
                   ? t("You")
-                  : (memberName(snap?.members, replyTarget.botId) ?? displayName ?? t("Bot"))}
-              </Text>
-              <Text style={{ color: tokens.foreground, fontSize: 13 }} numberOfLines={1}>
-                {replyQuote ? `“${replyQuote}”` : previewMessageText(replyTarget)}
-              </Text>
-            </View>
+                  : (memberName(snap?.members, replyTarget.botId) ?? displayName ?? t("Bot"))
+              }
+              quote={replyQuote}
+              text={previewMessageText(replyTarget)}
+              attachment={replyAttachment(replyTarget.blocks)}
+              threadTarget={artifactTarget}
+            />
             <ReplyDismissButton
               onPress={() => {
                 setReplyTarget(null);
@@ -3188,9 +3192,9 @@ function previewMessageText(message: MobileMessage): string {
     .join(" ")
     .trim();
   if (text) return text;
-  if (message.blocks.some((block) => block.kind === "image" || block.kind === "file")) {
-    return t("Attachment");
-  }
+  const attachment = replyAttachment(message.blocks);
+  if (attachment)
+    return attachment.kind === "image" ? t("Photo") : attachment.name || t("Attachment");
   return t("Message");
 }
 

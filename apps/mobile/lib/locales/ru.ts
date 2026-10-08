@@ -1,4 +1,5 @@
 export const RU_MESSAGES: Record<string, string> = {
+  Photo: "Фото",
   Today: "Сегодня",
   Yesterday: "Вчера",
   You: "Вы",

@@ -5,15 +5,21 @@ import { act, createElement } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ComposerReplyPreview } from "../components/composer-reply-preview";
 import { ReplyLine } from "../components/reply-line";
 import { TimeSeparator } from "../components/time-separator";
+import { imageArtifactUri } from "./artifact-open";
 
+vi.mock("./artifact-open", () => ({ imageArtifactUri: vi.fn() }));
 vi.mock("../lib/appearance", () => ({ mobileTokens: () => lightTokens }));
 vi.mock("../components/native-symbol", () => ({
   NativeSymbol: ({ ios, color, size }: { ios: string; color: string; size: number }) =>
     createElement("i", { "data-symbol": ios, "data-color": color, "data-size": size }),
 }));
 vi.mock("react-native", () => ({
+  View: ({ children }: { children?: ReactNode }) => createElement("div", {}, children),
+  Image: ({ source, resizeMode }: { source: { uri: string }; resizeMode: string }) =>
+    createElement("img", { src: source.uri, "data-resize": resizeMode }),
   Pressable: ({
     children,
     onPress,
@@ -96,4 +102,66 @@ it("exposes deleted targets as static text", () => {
   expect(container.firstElementChild?.getAttribute("role")).toBe("text");
   act(() => (container.firstElementChild as HTMLElement).click());
   expect(onJump).not.toHaveBeenCalled();
+});
+
+const photo = { kind: "image" as const, artifactId: "photo", mimeType: "image/png", name: "" };
+it.each([
+  [photo, "", "Photo", true],
+  [photo, "Caption", "Caption", true],
+  [
+    { ...photo, kind: "file" as const, name: "notes.txt", mimeType: "text/plain" },
+    "",
+    "notes.txt",
+    false,
+  ],
+])(
+  "renders attachment labels and thumbnails in the quote and composer",
+  async (attachment, text, label, image) => {
+    vi.mocked(imageArtifactUri).mockResolvedValue("file:///photo.png");
+    await act(async () =>
+      root.render(
+        <ReplyLine
+          targetId="parent"
+          author="You"
+          preview={{ role: "user", text, attachment }}
+          threadTarget={{ groupId: "group" }}
+        />,
+      ),
+    );
+    expect(container.textContent).toBe(`You: ${label}`);
+    expect(container.querySelector("img")?.getAttribute("src") ?? null).toBe(
+      image ? "file:///photo.png" : null,
+    );
+    await act(async () =>
+      root.render(
+        <ComposerReplyPreview
+          author="You"
+          text={text}
+          attachment={attachment}
+          threadTarget={{ botId: "bot" }}
+        />,
+      ),
+    );
+    expect(container.textContent).toBe(`You${label}`);
+    expect(container.querySelector("img")?.getAttribute("data-resize") ?? null).toBe(
+      image ? "cover" : null,
+    );
+    if (image)
+      expect(imageArtifactUri).toHaveBeenCalledWith({ botId: "bot" }, "photo", "image/png");
+  },
+);
+it("fails softly when a reply image cannot be fetched", async () => {
+  vi.mocked(imageArtifactUri).mockRejectedValue(new Error("unavailable"));
+  await act(async () =>
+    root.render(
+      <ReplyLine
+        targetId="parent"
+        author="You"
+        preview={{ role: "user", text: "", attachment: photo }}
+        threadTarget={{ botId: "bot" }}
+      />,
+    ),
+  );
+  expect(container.textContent).toBe("You: Photo");
+  expect(container.querySelector("img")).toBeNull();
 });

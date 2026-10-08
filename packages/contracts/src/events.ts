@@ -343,6 +343,14 @@ export const ReplyPreviewSchema = z.object({
   role: MessageRole,
   botId: Id.optional(),
   text: z.string(),
+  attachment: z
+    .object({
+      kind: z.enum(["image", "file"]),
+      artifactId: Id,
+      mimeType: z.string(),
+      name: z.string(),
+    })
+    .optional(),
 });
 export type ReplyPreview = z.infer<typeof ReplyPreviewSchema>;
 

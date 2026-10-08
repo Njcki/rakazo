@@ -1,4 +1,5 @@
 export const DE_MESSAGES: Record<string, string> = {
+  Photo: "Foto",
   Today: "Heute",
   Yesterday: "Gestern",
   You: "Du",

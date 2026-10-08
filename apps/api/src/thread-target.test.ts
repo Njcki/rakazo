@@ -2647,6 +2647,121 @@ describe("sendThreadMessage", () => {
     },
   );
 
+  it.each([
+    [
+      "image only",
+      [{ kind: "image", artifactId: "photo", name: "", mimeType: "image/png" }],
+      undefined,
+      undefined,
+      "",
+      { kind: "image", artifactId: "photo", name: "", mimeType: "image/png" },
+    ],
+    [
+      "file only",
+      [{ kind: "file", artifactId: "file", name: "notes.txt", mimeType: "text/plain", size: 12 }],
+      undefined,
+      undefined,
+      "notes.txt",
+      { kind: "file", artifactId: "file", name: "notes.txt", mimeType: "text/plain" },
+    ],
+    [
+      "caption and selection",
+      [
+        { kind: "image", artifactId: "photo", name: "photo.png", mimeType: "image/png" },
+        { kind: "text", text: "Caption selected text" },
+      ],
+      "selected text",
+      "selected text",
+      "Caption selected text",
+      { kind: "image", artifactId: "photo", name: "photo.png", mimeType: "image/png" },
+    ],
+  ])(
+    "derives live reply metadata for %s from the same-thread parent",
+    async (_name, parentBlocks, requestedQuote, expectedQuote, expectedText, expectedAttachment) => {
+      let messageSeq = 0;
+      let eventSeq = 0;
+      const tx = {
+        thread: {
+          update: vi.fn(async ({ data }: { data: { nextMessageSeq?: unknown } }) =>
+            data.nextMessageSeq ? { nextMessageSeq: ++messageSeq } : { nextEventSeq: ++eventSeq },
+          ),
+        },
+        message: {
+          findFirst: vi.fn().mockResolvedValue({
+            id: "parent",
+            role: "bot",
+            blocks: parentBlocks,
+          }),
+          update: vi.fn(),
+          create: vi.fn().mockResolvedValue({
+            id: "msg-1",
+            threadId: "thread-1",
+            seq: 1,
+            role: "user",
+            blocks: [{ kind: "text", text: "why this?" }],
+            botId: null,
+            replyToMessageId: "parent",
+            replyQuote: expectedQuote,
+            runId: null,
+            createdAt: new Date(),
+          }),
+        },
+        run: {
+          findMany: vi.fn().mockResolvedValue([]),
+          findUnique: vi.fn().mockResolvedValue({ status: "queued", startedAt: null }),
+          create: vi.fn().mockResolvedValue({ id: "run-1", taskId: "task-1", status: "queued" }),
+        },
+        task: { create: vi.fn().mockResolvedValue({ id: "task-1" }) },
+        event: {
+          create: vi.fn().mockResolvedValue({ id: "event-1", seq: 1, createdAt: new Date() }),
+        },
+        steeringMessage: { create: vi.fn() },
+      };
+      const prisma = {
+        message: { findUnique: vi.fn().mockResolvedValue(null) },
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
+      const actor = { spaceId: "workspace-1", userId: "user-1" } as Actor;
+      const target = { kind: "bot", botId: "bot-1", threadId: "thread-1" } as ThreadTarget;
+
+      const result = await sendThreadMessage(
+        {
+          prisma,
+          events: { notify: vi.fn().mockResolvedValue(undefined) } as never,
+          jobs: { enqueue: vi.fn().mockResolvedValue(undefined) } as never,
+        },
+        actor,
+        target,
+        {
+          text: "why this?",
+          replyToMessageId: "parent",
+          replyQuote: requestedQuote,
+          clientNonce: "nonce-1",
+        },
+      );
+
+      expect(tx.message.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: "parent", threadId: "thread-1" } }),
+      );
+      expect(tx.event.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({
+            replyPreview: { role: "bot", text: expectedText, attachment: expectedAttachment },
+          }),
+        }),
+      });
+      expect(result).toMatchObject({ runId: "run-1", taskId: "task-1" });
+      expect(tx.message.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ replyQuote: expectedQuote }),
+      });
+      expect(tx.event.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({ replyQuote: expectedQuote }),
+        }),
+      });
+    },
+  );
+
   it("drops a quote excerpt that only matches after stripping punctuation", async () => {
     let messageSeq = 0;
     let eventSeq = 0;

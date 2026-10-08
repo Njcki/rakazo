@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveMessageQuote,
   messageReplyExcerpt,
+  messageReplyPreview,
   visibleTextFromMarkdown,
 } from "./message-quote.js";
 
@@ -288,4 +289,32 @@ it("prefers narration over attachments and bounds every block's preview", () => 
       "user",
     ),
   ).toBe("[image: ]");
+});
+
+it("keeps image metadata with caption text and avoids agent placeholders in UI", () => {
+  const image: MessageBlock = {
+    kind: "image",
+    artifactId: "photo",
+    name: "",
+    mimeType: "image/png",
+  };
+  expect(messageReplyPreview([image], "user")).toEqual({
+    role: "user",
+    text: "",
+    attachment: image,
+  });
+  expect(messageReplyPreview([image, ...textBlock("**Caption**")], "bot").text).toBe("Caption");
+  expect(messageReplyExcerpt([image], "user")).toBe("[image: ]");
+});
+
+it("keeps a filename in file-only previews for older clients", () => {
+  const file: MessageBlock = {
+    kind: "file",
+    artifactId: "notes",
+    name: "notes.txt",
+    mimeType: "text/plain",
+    size: 12,
+  };
+  expect(messageReplyPreview([file], "user").text).toBe("notes.txt");
+  expect(messageReplyPreview([file, ...textBlock("Caption")], "user").text).toBe("Caption");
 });

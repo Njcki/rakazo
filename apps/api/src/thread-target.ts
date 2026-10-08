@@ -21,7 +21,7 @@ import {
   resolveGroupTargetBotIds,
   runFailureError,
 } from "@rakazo/core";
-import { deriveMessageQuote, messageReplyExcerpt } from "@rakazo/core/message-quote";
+import { deriveMessageQuote, messageReplyPreview } from "@rakazo/core/message-quote";
 import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
 import {
   answerWaitingRunWithTextInTransaction,
@@ -645,13 +645,15 @@ export async function sendThreadMessage(
           const parsed = MessageBlockSchema.array().safeParse(reply.blocks);
           replyPreview = null;
           if (parsed.success) {
-            const text = messageReplyExcerpt(parsed.data, reply.role);
-            replyPreview = {
-              role: reply.role as ReplyPreview["role"],
-              botId: reply.botId ?? undefined,
-              text,
-            };
-            if (!requestedReplyQuote) replyQuote = text;
+            replyPreview = messageReplyPreview(
+              parsed.data,
+              reply.role as ReplyPreview["role"],
+              reply.botId ?? undefined,
+            );
+            // Attachment labels stay in the preview; only selected text is persisted as a quote.
+            if (!requestedReplyQuote && !replyPreview.attachment) {
+              replyQuote = replyPreview.text || undefined;
+            }
           }
           // Persist only text derived from the authoritative parent. A
           // mismatch or a derivation failure still sends a plain reply so

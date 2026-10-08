@@ -592,6 +592,7 @@ msgid "Attached {path}"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Attachment"
 msgstr "Anexo"
 
@@ -3172,6 +3173,11 @@ msgstr "Cole sua chave API"
 msgid "Paused"
 msgstr ""
 
+#: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
+msgid "Photo"
+msgstr "Foto"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Fixar"
@@ -4206,6 +4212,7 @@ msgid "To:"
 msgstr "Para:"
 
 #: src/pages/Artifacts.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "Hoje"
 
@@ -4498,6 +4505,7 @@ msgid "year"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Yesterday"
 msgstr "Ontem"
 

@@ -1,4 +1,5 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  Photo: "照片",
   Today: "今天",
   Yesterday: "昨天",
   You: "你",

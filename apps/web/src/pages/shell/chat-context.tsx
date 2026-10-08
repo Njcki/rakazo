@@ -1,8 +1,61 @@
 import { useLingui } from "@lingui/react/macro";
-import type { ThreadMessage } from "@rakazo/contracts";
-import { formatTimeSeparator, isPeerReceiptBlocks, replyLineText } from "@rakazo/core";
+import type { ReplyPreview, ThreadMessage } from "@rakazo/contracts";
+import { formatTimeSeparator, isPeerReceiptBlocks, replyLabel } from "@rakazo/core";
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ArtifactTarget } from "../../lib/artifact-open";
+import { useArtifactImage } from "../../lib/use-artifact-image";
+
+function ReplyThumbnail({
+  attachment,
+  target,
+  lazy = false,
+}: {
+  lazy?: boolean;
+  attachment: NonNullable<ReplyPreview["attachment"]>;
+  target: ArtifactTarget;
+}) {
+  const [visible, setVisible] = useState(!lazy);
+  const container = useRef<HTMLSpanElement>(null);
+  const src = useArtifactImage(target, attachment.artifactId, visible);
+  useEffect(() => {
+    if (!lazy) return;
+    const element = container.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "320px" },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [lazy]);
+  return (
+    <span
+      ref={container}
+      aria-hidden="true"
+      className="size-8 shrink-0 overflow-hidden rounded-md bg-muted"
+    >
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className="size-full object-cover"
+          onError={(event) => {
+            event.currentTarget.hidden = true;
+          }}
+        />
+      ) : null}
+    </span>
+  );
+}
 
 export function TimeSeparator({ createdAt, locale }: { createdAt: string; locale: string }) {
   const { t } = useLingui();
@@ -19,10 +72,16 @@ export function TimeSeparator({ createdAt, locale }: { createdAt: string; locale
 export function ComposerReplyPreview({
   author,
   text,
+  quote,
+  attachment,
+  target,
   onDismiss,
 }: {
   author: string;
   text: string;
+  quote?: string | null;
+  attachment?: ReplyPreview["attachment"];
+  target?: ArtifactTarget;
   onDismiss: () => void;
 }) {
   const { t } = useLingui();
@@ -41,8 +100,12 @@ export function ComposerReplyPreview({
       data-testid="reply-chip"
       className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-muted px-3 py-1.5 text-[13px]"
     >
+      {attachment?.kind === "image" && target ? (
+        <ReplyThumbnail attachment={attachment} target={target} />
+      ) : null}
       <span className="min-w-0 flex-1 truncate text-muted-foreground" dir="auto">
-        <span className="font-medium">{author}</span>: {text.split(/\r?\n/u)[0]}
+        <span className="font-medium">{author}</span>:{" "}
+        {replyLabel(quote, text, attachment, { photo: t`Photo`, attachment: t`Attachment` })}
       </span>
       <button
         type="button"
@@ -59,11 +122,13 @@ export function ComposerReplyPreview({
 export function ReplyLine({
   message,
   fallbackText,
+  target,
   author,
   onJump,
 }: {
   message: ThreadMessage;
   fallbackText?: string;
+  target?: ArtifactTarget;
   author: string;
   onJump?: (id: string) => void;
 }) {
@@ -79,7 +144,13 @@ export function ReplyLine({
         className="mb-1 truncate text-xs text-muted-foreground"
       >{t`Original message unavailable`}</div>
     );
-  const text = replyLineText(message.replyQuote, message.replyPreview?.text, fallbackText);
+  const attachment = message.replyPreview?.attachment;
+  const text = replyLabel(
+    message.replyQuote,
+    message.replyPreview?.text || (attachment ? undefined : fallbackText),
+    attachment,
+    { photo: t`Photo`, attachment: t`Attachment` },
+  );
   const excerpt = text.replace(/\s+/gu, " ").slice(0, 120);
   return (
     <button
@@ -89,10 +160,16 @@ export function ReplyLine({
       onClick={() => {
         if (message.replyToMessageId) onJump?.(message.replyToMessageId);
       }}
-      className="mb-1 block max-w-full truncate text-start text-xs text-muted-foreground hover:text-foreground"
+      className="mb-1 flex max-w-full items-center gap-1 text-start text-xs text-muted-foreground hover:text-foreground"
       dir="auto"
     >
-      ↩ {author}: {text}
+      <span aria-hidden="true">↩ </span>
+      {attachment?.kind === "image" && target ? (
+        <ReplyThumbnail attachment={attachment} target={target} lazy />
+      ) : null}
+      <span className="min-w-0 truncate">
+        {author}: {text}
+      </span>
     </button>
   );
 }

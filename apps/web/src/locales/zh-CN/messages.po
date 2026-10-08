@@ -592,6 +592,7 @@ msgid "Attached {path}"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Attachment"
 msgstr "附件"
 
@@ -3172,6 +3173,11 @@ msgstr "粘贴你的 API 密钥"
 msgid "Paused"
 msgstr "已暂停"
 
+#: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
+msgid "Photo"
+msgstr "照片"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "置顶"
@@ -4206,6 +4212,7 @@ msgid "To:"
 msgstr "至:"
 
 #: src/pages/Artifacts.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "今天"
 
@@ -4498,6 +4505,7 @@ msgid "year"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Yesterday"
 msgstr "昨天"
 

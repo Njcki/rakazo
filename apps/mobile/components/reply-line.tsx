@@ -1,9 +1,11 @@
 import type { ReplyPreview } from "@rakazo/contracts";
-import { replyLineText } from "@rakazo/core";
+import { replyLabel } from "@rakazo/core";
 import { Pressable, Text } from "react-native";
 import { mobileTokens } from "../lib/appearance";
+import type { MobileArtifactTarget } from "../lib/artifact-open";
 import { t } from "../lib/i18n";
 import { NativeSymbol } from "./native-symbol";
+import { ReplyThumbnail } from "./reply-thumbnail";
 
 export function ReplyLine({
   targetId,
@@ -11,6 +13,7 @@ export function ReplyLine({
   preview,
   author,
   fallbackText,
+  threadTarget,
   onJump,
 }: {
   targetId?: string;
@@ -18,11 +21,17 @@ export function ReplyLine({
   preview?: ReplyPreview | null;
   author: string;
   fallbackText?: string;
+  threadTarget?: MobileArtifactTarget;
   onJump?: (id: string) => void;
 }) {
   if (!targetId && quote == null) return null;
   const unavailable = preview === null || !targetId;
-  const text = replyLineText(quote, preview?.text, fallbackText);
+  const text = replyLabel(
+    quote,
+    preview?.text || (preview?.attachment ? undefined : fallbackText),
+    preview?.attachment,
+    { photo: t("Photo"), attachment: t("Attachment") },
+  );
   const tokens = mobileTokens();
   return (
     <Pressable
@@ -43,6 +52,9 @@ export function ReplyLine({
           size={12}
           color={tokens.mutedForeground}
         />
+      )}
+      {unavailable ? null : (
+        <ReplyThumbnail attachment={preview?.attachment} threadTarget={threadTarget} />
       )}
       <Text
         numberOfLines={1}

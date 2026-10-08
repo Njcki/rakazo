@@ -733,3 +733,25 @@ describe("reply target validation", () => {
     }
   });
 });
+
+it("derives attachment metadata from a validated parent outside the loaded page", async () => {
+  const image = { kind: "image", artifactId: "parent-photo", name: "", mimeType: "image/png" };
+  const row = {
+    id: "reply",
+    threadId: "thread",
+    seq: 100,
+    role: "user",
+    blocks: [],
+    botId: null,
+    runId: null,
+    createdAt: new Date(),
+    replyToMessageId: "parent",
+    replyQuote: null,
+    replyTo: { threadId: "thread", role: "user", botId: null, blocks: [image] },
+  };
+  const prisma = {
+    message: { findMany: vi.fn().mockResolvedValue([row]), count: vi.fn().mockResolvedValue(0) },
+  } as unknown as PrismaClient;
+  const page = await loadMessagePage(prisma, "thread", undefined, 1);
+  expect(page.messages[0]?.replyPreview).toEqual({ role: "user", text: "", attachment: image });
+});

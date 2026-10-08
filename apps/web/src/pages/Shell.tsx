@@ -51,6 +51,7 @@ import {
   plainTextFromMarkdown,
   projectMessageReactions,
   reorderBotTo,
+  replyAttachment,
   resolveComposerSendPlan,
   resolveMentionPickerKey,
   runThreadSubscription,
@@ -3649,6 +3650,7 @@ export function ShellPage() {
                   }
                 : undefined
             }
+            artifactTarget={transcriptArtifactTarget}
             replyTarget={activeReplyTarget}
             replyQuote={activeReplyQuote}
             replyTargetName={replyTargetName}
@@ -5272,6 +5274,7 @@ const QuoteSelectionButton = memo(function QuoteSelectionButton({
 });
 
 const Composer = memo(function Composer({
+  artifactTarget,
   activeName,
   running,
   disabled,
@@ -5315,6 +5318,7 @@ const Composer = memo(function Composer({
   onSend: (text: string, mentions?: ComposerMention[]) => Promise<void>;
   onStop: () => Promise<void>;
   onVoice?: () => void;
+  artifactTarget: ArtifactTarget;
   replyTarget?: ThreadMessage | null;
   replyQuote?: string | null;
   replyTargetName?: string;
@@ -5749,7 +5753,10 @@ const Composer = memo(function Composer({
       {replyTarget ? (
         <ComposerReplyPreview
           author={replyName}
-          text={replyQuote || previewMessageText(replyTarget)}
+          text={previewMessageText(replyTarget)}
+          quote={replyQuote}
+          attachment={replyAttachment(replyTarget.blocks)}
+          target={artifactTarget}
           onDismiss={() => {
             replyAnnouncementKind.current = "cancelled";
             window.clearTimeout(announceTimer.current);
@@ -6183,9 +6190,8 @@ function previewMessageText(message: ThreadMessage): string {
     .join(" ")
     .trim();
   if (text) return text;
-  if (message.blocks.some((block) => block.kind === "image" || block.kind === "file")) {
-    return t`Attachment`;
-  }
+  const attachment = replyAttachment(message.blocks);
+  if (attachment) return attachment.kind === "image" ? t`Photo` : attachment.name || t`Attachment`;
   return t`Message`;
 }
 
@@ -6453,6 +6459,7 @@ const MessageView = memo(function MessageView({
         </div>
       ) : null}
       <ReplyLine
+        target={artifactTarget}
         message={message}
         fallbackText={replyParent ? previewMessageText(replyParent) : undefined}
         author={

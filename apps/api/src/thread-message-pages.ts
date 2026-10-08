@@ -1,7 +1,7 @@
 import type { MessageBlock, ThreadMessage, ThreadMessagePage } from "@rakazo/contracts";
 import { MessageBlock as MessageBlockSchema } from "@rakazo/contracts";
 import { callIdFromClientNonce, isPeerReceiptBlocks } from "@rakazo/core";
-import { messageReplyExcerpt } from "@rakazo/core/message-quote";
+import { messageReplyPreview } from "@rakazo/core/message-quote";
 import type { Prisma, PrismaClient } from "@rakazo/db";
 
 type MessageDb = PrismaClient | Prisma.TransactionClient;
@@ -204,11 +204,11 @@ function toThreadMessage(row: {
   const parsed = parent ? MessageBlockSchema.array().safeParse(parent.blocks) : undefined;
   const replyPreview =
     parent && parsed?.success
-      ? {
-          role: parent.role as ThreadMessage["role"],
-          botId: parent.botId ?? undefined,
-          text: messageReplyExcerpt(parsed.data, parent.role),
-        }
+      ? messageReplyPreview(
+          parsed.data,
+          parent.role as ThreadMessage["role"],
+          parent.botId ?? undefined,
+        )
       : row.replyToMessageId || row.replyQuote != null
         ? null
         : undefined;

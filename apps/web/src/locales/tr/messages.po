@@ -592,6 +592,7 @@ msgid "Attached {path}"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Attachment"
 msgstr "Ek"
 
@@ -3172,6 +3173,11 @@ msgstr "API anahtarını yapıştır"
 msgid "Paused"
 msgstr ""
 
+#: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
+msgid "Photo"
+msgstr "Fotoğraf"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Sabitle"
@@ -4206,6 +4212,7 @@ msgid "To:"
 msgstr "Kime:"
 
 #: src/pages/Artifacts.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Today"
 msgstr "Bugün"
 
@@ -4498,6 +4505,7 @@ msgid "year"
 msgstr ""
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/chat-context.tsx
 msgid "Yesterday"
 msgstr "Dün"
 

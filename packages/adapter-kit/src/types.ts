@@ -83,6 +83,8 @@ export interface ComputerRef {
   providerRef: string;
   /** True when the provider created an empty replacement rather than reconnecting existing state. */
   fresh?: boolean;
+  /** True when this call started a stopped computer. Providers that cannot tell leave it unset. */
+  started?: boolean;
 }
 
 export interface CommandRequest {

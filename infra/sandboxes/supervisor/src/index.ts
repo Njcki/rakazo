@@ -237,11 +237,13 @@ app.post("/computers", async (c) => {
           controlPublishOk &&
           (!storage.homeVolume || homeVolumeMatches(info.HostConfig.Mounts, storage.homeVolume))
         ) {
-          if (!info.State.Running) await existing.start();
+          const started = !info.State.Running;
+          if (started) await existing.start();
           return c.json({
             id: existing.id,
             image: COMPUTER_IMAGE,
             resumed: true,
+            started,
           });
         }
       }

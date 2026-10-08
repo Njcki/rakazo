@@ -134,6 +134,32 @@ describe("Docker sandbox", () => {
     await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
   });
 
+  it.each([
+    [
+      { id: "computer", resumed: true, started: true },
+      { fresh: false, started: true },
+    ],
+    [{ id: "computer", resumed: true, started: false }, { fresh: false }],
+    [{ id: "computer", resumed: true }, { fresh: false }],
+    [{ id: "computer", resumed: false }, { fresh: true }],
+  ])("reports whether provisioning started the computer: %j", async (body, expected) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(body)),
+    );
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+
+    await expect(
+      provider.provision({ botId: "bot", homePath: "/tmp/bot" }, context),
+    ).resolves.toStrictEqual({
+      id: "computer",
+      botId: "bot",
+      kind: "docker",
+      providerRef: "computer",
+      ...expected,
+    });
+  });
+
   it("translates a 429 computer limit reached error from the supervisor", async () => {
     vi.stubGlobal(
       "fetch",

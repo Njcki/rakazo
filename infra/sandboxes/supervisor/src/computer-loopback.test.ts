@@ -285,6 +285,7 @@ describe("computer loopback provision lifecycle", () => {
     expect(await response.json()).toMatchObject({
       resumed,
       id: resumed ? "existing" : "replacement",
+      ...(resumed ? { started: true } : {}),
     });
     expect(response.status).toBe(200);
     if (resumed) {

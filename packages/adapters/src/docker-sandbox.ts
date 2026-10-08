@@ -164,13 +164,17 @@ export class DockerSandboxProvider implements SandboxProvider {
       }
       throw new Error(`sandbox provision failed: ${res.status} ${detail}`.trim());
     }
-    const body = await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
+    const body = await readSandboxJson<{ id: string; resumed?: boolean; started?: boolean }>(
+      res,
+      context.signal,
+    );
     return {
       id: body.id,
       botId: request.botId,
       kind: "docker",
       providerRef: body.id,
       fresh: body.resumed !== true,
+      ...(body.started === true ? { started: true } : {}),
     };
   }
 

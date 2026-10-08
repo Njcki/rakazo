@@ -711,15 +711,30 @@ export const RU_MESSAGES: Record<string, string> = {
   "Speaks with your phone's own text-to-speech instead of a connected provider.":
     "Озвучивает встроенным синтезом речи телефона вместо подключённого провайдера.",
   // ai-data-sharing
+  "AI models": "Модели ИИ",
+  Memory: "Память",
+  "Privacy policies": "Политики конфиденциальности",
+  Rakazo: "Rakazo",
+  "Withdraw all permissions": "Отозвать все разрешения",
+  "Withdraw all permissions?": "Отозвать все разрешения?",
+  "New mobile actions won't send data to these services. Runs already in progress and routines keep going until you stop them.":
+    "Новые действия на мобильном устройстве не будут отправлять данные этим сервисам. Текущие запуски и задачи продолжат выполняться, пока вы их не остановите.",
+  Withdraw: "Отозвать",
+  "Share data with {name}?": "Поделиться данными с {name}?",
+  "You can turn this off in Account → AI data sharing.":
+    "Это можно отключить в разделе Аккаунт → Передача данных ИИ.",
+  Allow: "Разрешить",
+  "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines.":
+    "Сообщения, история чата, инструкции ботов, воспоминания, вложения, снимки экрана и содержимое подключённых приложений отправляются для работы ваших ботов, включая задачи.",
+  "Your recordings are sent for transcription, and text you play is sent to generate speech.":
+    "Ваши записи отправляются для расшифровки, а воспроизводимый вами текст — для генерации речи.",
+  "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context.":
+    "Сводки разговоров, воспоминания, поисковые запросы и идентификаторы ботов и пространств отправляются для хранения и извлечения контекста.",
   "AI data sharing": "Передача данных ИИ",
   "Allow {name} on mobile": "Разрешить {name} на телефоне",
   "Could not load permissions.": "Не удалось загрузить разрешения.",
   "No AI services configured.": "Сервисы ИИ не настроены.",
   "Privacy policy": "Политика конфиденциальности",
-  "Provider privacy policy": "Политика конфиденциальности провайдера",
-  "Withdraw all mobile permissions": "Отозвать все мобильные разрешения",
-  "Withdrawal applies to new mobile actions. Stop existing runs and disable routines separately.":
-    "Отзыв применяется к новым действиям с телефона. Остановите текущие запуски и отключите рутины отдельно.",
   "Continue with {name}": "Продолжить с {name}",
   "Could not load sign-in options": "Не удалось загрузить способы входа",
   "Deletion code": "Код удаления",

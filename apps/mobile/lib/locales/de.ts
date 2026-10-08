@@ -707,15 +707,30 @@ export const DE_MESSAGES: Record<string, string> = {
   Unmute: "Stummschaltung aufheben",
   "Voice chat": "Sprachchat",
   // ai-data-sharing
+  "AI models": "KI-Modelle",
+  Memory: "Gedächtnis",
+  "Privacy policies": "Datenschutzerklärungen",
+  Rakazo: "Rakazo",
+  "Withdraw all permissions": "Alle Berechtigungen widerrufen",
+  "Withdraw all permissions?": "Alle Berechtigungen widerrufen?",
+  "New mobile actions won't send data to these services. Runs already in progress and routines keep going until you stop them.":
+    "Neue mobile Aktionen senden keine Daten an diese Dienste. Laufende Ausführungen und Routinen laufen weiter, bis du sie stoppst.",
+  Withdraw: "Widerrufen",
+  "Share data with {name}?": "Daten mit {name} teilen?",
+  "You can turn this off in Account → AI data sharing.":
+    "Du kannst dies unter Konto → KI-Datenfreigabe ausschalten.",
+  Allow: "Erlauben",
+  "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines.":
+    "Nachrichten, Chatverlauf, Bot-Anweisungen, Erinnerungen, Anhänge, Screenshots und Inhalte verbundener Apps werden gesendet, um deine Bots auszuführen, einschließlich Routinen.",
+  "Your recordings are sent for transcription, and text you play is sent to generate speech.":
+    "Deine Aufnahmen werden zur Transkription gesendet, und Text, den du abspielst, wird zur Spracherzeugung gesendet.",
+  "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context.":
+    "Gesprächszusammenfassungen, Erinnerungen, Suchanfragen sowie Bot- und Space-IDs werden gesendet, um Kontext zu speichern und abzurufen.",
   "AI data sharing": "KI-Datenfreigabe",
   "Allow {name} on mobile": "{name} auf dem Handy erlauben",
   "Could not load permissions.": "Berechtigungen konnten nicht geladen werden.",
   "No AI services configured.": "Keine KI-Dienste eingerichtet.",
   "Privacy policy": "Datenschutzerklärung",
-  "Provider privacy policy": "Datenschutzerklärung des Anbieters",
-  "Withdraw all mobile permissions": "Alle mobilen Berechtigungen widerrufen",
-  "Withdrawal applies to new mobile actions. Stop existing runs and disable routines separately.":
-    "Der Widerruf gilt für neue mobile Aktionen. Beende laufende Ausführungen und deaktiviere Routinen separat.",
   "Continue with {name}": "Mit {name} fortfahren",
   "Could not load sign-in options": "Anmeldeoptionen konnten nicht geladen werden",
   "Deletion code": "Löschcode",

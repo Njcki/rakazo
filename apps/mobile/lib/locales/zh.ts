@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Try Again": "重试",
+  "Not sent · Tap to retry": "未发送 · 轻点重试",
   Photo: "照片",
   Today: "今天",
   Yesterday: "昨天",
@@ -395,7 +397,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Other model…": "其他模型…",
   Password: "密码",
   "Password recovery is not configured for this server": "此服务器未配置密码找回",
-  "Password updated": "密码已更新",
   "Passwords do not match": "两次输入的密码不一致",
   "Paste a replacement key": "粘贴替换密钥",
   "Paste your API key": "粘贴你的 API 密钥",

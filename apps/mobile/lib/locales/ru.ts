@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Try Again": "Повторить",
+  "Not sent · Tap to retry": "Не отправлено · Нажмите, чтобы повторить",
   Photo: "Фото",
   Today: "Сегодня",
   Yesterday: "Вчера",
@@ -413,7 +415,6 @@ export const RU_MESSAGES: Record<string, string> = {
   Password: "Пароль",
   "Password recovery is not configured for this server":
     "Восстановление пароля не настроено для этого сервера",
-  "Password updated": "Пароль обновлён",
   "Passwords do not match": "Пароли не совпадают",
   "Paste a replacement key": "Вставьте запасной ключ",
   "Paste your API key": "Вставьте свой ключ API",

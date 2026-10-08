@@ -1,4 +1,6 @@
 export const DE_MESSAGES: Record<string, string> = {
+  "Try Again": "Erneut versuchen",
+  "Not sent · Tap to retry": "Nicht gesendet · Zum Wiederholen tippen",
   Photo: "Foto",
   Today: "Heute",
   Yesterday: "Gestern",
@@ -524,7 +526,6 @@ export const DE_MESSAGES: Record<string, string> = {
   "Confirm password": "Passwort bestätigen",
   "Could not change password": "Passwort konnte nicht geändert werden",
   "New password": "Neues Passwort",
-  "Password updated": "Passwort aktualisiert",
   "Passwords do not match": "Die Passwörter stimmen nicht überein",
   // components/AskActions.tsx
   "Allow once": "Einmal erlauben",

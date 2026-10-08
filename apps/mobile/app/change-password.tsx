@@ -1,7 +1,6 @@
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -58,7 +57,6 @@ export default function ChangePassword() {
       setNewPassword("");
       setConfirmation("");
       close();
-      Alert.alert(t("Password updated"));
     } catch (cause) {
       setError(errorText(cause, t("Could not change password")));
     } finally {

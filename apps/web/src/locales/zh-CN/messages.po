@@ -200,6 +200,11 @@ msgstr "什么都做一点"
 msgid "A sign-in tab opened at <0>{0}</0>. Enter this code there — this window keeps waiting:"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+msgid "A subscription credential is stored securely."
+msgstr "订阅凭据已安全存储。"
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -459,6 +464,10 @@ msgstr "始终允许此工具"
 msgid "Always allowed"
 msgstr "始终允许"
 
+#: src/lib/model-connection-preflight.ts
+msgid "An API key is stored for this provider, not a subscription sign-in."
+msgstr "此提供方存储的是 API 密钥，不是订阅登录。"
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "回答"
@@ -595,6 +604,10 @@ msgstr ""
 #: src/pages/shell/chat-context.tsx
 msgid "Attachment"
 msgstr "附件"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Authentication failed."
+msgstr "身份验证失败。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -821,6 +834,14 @@ msgstr "检查更新"
 #: src/pages/Shell.tsx
 msgid "Check in."
 msgstr "报到。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Check the API key or sign-in, then test again."
+msgstr "请检查 API 密钥或登录，然后重新测试。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Check the server URL and network, then test again."
+msgstr "请检查服务器 URL 和网络，然后重新测试。"
 
 #: src/pages/Auth.tsx
 msgid "Check your email"
@@ -1050,6 +1071,10 @@ msgstr "确认删除"
 msgid "Confirm password"
 msgstr "确认密码"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Confirm the URL is reachable from this browser session, then test again."
+msgstr "请确认此浏览器会话可以访问该 URL，然后重新测试。"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -1123,6 +1148,10 @@ msgstr "已连接，下一条消息起即可使用其工具。"
 msgid "Connecting…"
 msgstr "正在连接…"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Connection test failed."
+msgstr "连接测试失败。"
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -1190,6 +1219,10 @@ msgstr "无法修改密码"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
 msgstr "无法更改默认模型"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Could not check stored credentials."
+msgstr "无法检查已存储的凭据。"
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
@@ -1435,17 +1468,16 @@ msgstr "无法打开终端"
 msgid "Could not play a test clip"
 msgstr "无法播放测试片段"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Could not reach the model server."
+msgstr "无法连接到模型服务器。"
+
 #: src/lib/computer-sandbox.ts
 #: src/lib/user-error.ts
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
 msgid "Could not reach the server"
 msgstr "无法连接服务器"
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Could not reach this model server"
-msgstr "无法访问此模型服务器"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not remove"
@@ -2009,6 +2041,10 @@ msgstr "请输入 1 到 {MAX_MODEL_MAX_TOKENS} 之间的整数作为最大输出
 msgid "Enter a whole number from 1 to 1000 for the image limit."
 msgstr "请输入 1 到 1000 之间的整数作为图像限制。"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Enter an API key before testing."
+msgstr "测试前请输入 API 密钥。"
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every"
@@ -2135,6 +2171,10 @@ msgstr "正在查找…"
 #: src/pages/Onboarding.tsx
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "在 <0>{0}</0> 完成登录。最后一页可能无法加载；把 URL 或代码粘贴到这里。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Finish subscription sign-in, then test again."
+msgstr "请完成订阅登录，然后重新测试。"
 
 #: src/components/CloudAgentCard.tsx
 msgid "finished"
@@ -2721,6 +2761,10 @@ msgstr "分钟"
 msgid "Model"
 msgstr "模型"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Model \"{modelId}\" was not listed."
+msgstr "模型“{modelId}”未列出。"
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Model id"
@@ -2752,6 +2796,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "来自服务器的模型"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Models list OK. {modelCount, plural, one {# model} other {# models}} available. Chat was not tested."
+msgstr "模型列表正常。{modelCount, plural, one {# 个模型} other {# 个模型}}可用。未测试聊天。"
 
 #: src/lib/billing.ts
 msgid "month"
@@ -2920,6 +2968,10 @@ msgstr "还没有与 {peerBotName} 的消息。"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "没有可用的模型目录。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "No models listed."
+msgstr "未列出模型。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
@@ -3169,6 +3221,10 @@ msgstr "粘贴服务器的 OpenAI 兼容地址。需要时 Rakazo 会补上 /v1�
 msgid "Paste your API key"
 msgstr "粘贴你的 API 密钥"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Paste your API key, then test again."
+msgstr "请粘贴你的 API 密钥，然后重新测试。"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
@@ -3177,6 +3233,14 @@ msgstr "已暂停"
 #: src/pages/shell/chat-context.tsx
 msgid "Photo"
 msgstr "照片"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Pick a model from the catalog."
+msgstr "请从目录中选择模型。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Pick a model from the list or enter a model id served by this endpoint."
+msgstr "请从列表中选择模型，或输入此端点提供的模型 ID。"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
@@ -3543,6 +3607,10 @@ msgstr "返回 Rakazo"
 msgid "rev {0}"
 msgstr "版本 {0}"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Review provider settings and test again."
+msgstr "请检查提供方设置并重新测试。"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "撤销"
@@ -3883,6 +3951,10 @@ msgstr "登录 Rakazo"
 msgid "Sign in to your existing account to link SSO"
 msgstr "请登录现有账户以关联 SSO"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Sign in with the subscription, or test the API key instead."
+msgstr "请使用订阅登录，或改为测试 API 密钥。"
+
 #: src/pages/Auth.tsx
 #: src/pages/Welcome.tsx
 msgid "Sign up"
@@ -4091,13 +4163,33 @@ msgstr ""
 msgid "Test"
 msgstr "测试"
 
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Test API key"
+msgstr "测试 API 密钥"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "测试运行"
 
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Test sign-in"
+msgstr "测试登录"
+
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Testing…"
+msgstr "正在测试…"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API 未恢复。请刷新此页面。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "The connection timed out."
+msgstr "连接超时。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "The provider is rate-limiting requests."
+msgstr "提供方正在限制请求频率。"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
@@ -4161,6 +4253,14 @@ msgstr "此操作将永久删除您的账户和数据。"
 #: src/pages/shell/dialogs.tsx
 msgid "This permanently removes every message and stops current work. The chat remains available."
 msgstr "将永久删除全部消息并停止当前工作。聊天仍可使用。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "This provider cannot be tested without saving."
+msgstr "此提供方必须先保存才能测试。"
+
+#: src/lib/model-connection-preflight.ts
+msgid "This provider is not connected yet."
+msgstr "此提供方尚未连接。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This removes the connection from every space."
@@ -4248,6 +4348,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "重试"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Try the test again."
+msgstr "请重试测试。"
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Type"
@@ -4370,6 +4474,10 @@ msgstr "使用 {hostLabel}"
 msgid "Use a found model"
 msgstr "使用找到的模型"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Use Connect to verify the key."
+msgstr "请使用“连接”验证密钥。"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
 msgstr ""
@@ -4417,6 +4525,10 @@ msgstr "语音"
 #: src/components/call/VoiceChatCard.tsx
 msgid "Voice chat"
 msgstr "语音聊天"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Wait a moment and test again."
+msgstr "请稍候并重新测试。"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"

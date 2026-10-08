@@ -86,6 +86,7 @@ import {
   prepareGraphqlInstall,
   prepareManagedConnectorForTransaction,
   prepareStoredModelAuth,
+  probeCatalogProviderModels,
   probeOpenAiCompatibleModels,
   provisionComputer,
   queueComputerUpdate,
@@ -1188,6 +1189,20 @@ export function createRouter(deps: RouterDeps) {
           }
         },
       ),
+      probeCatalog: authed.models.probeCatalog.handler(async ({ context, input }) => {
+        try {
+          const models = await probeCatalogProviderModels(
+            { provider: input.provider, apiKey: input.apiKey },
+            undefined,
+            context.signal,
+          );
+          return { models };
+        } catch (error) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: error instanceof Error ? error.message : "Could not list models",
+          });
+        }
+      }),
       beginOAuth: authed.models.beginOAuth.handler(async ({ context, input }) => {
         return deps.oauthLogins.begin({
           userId: context.actor.userId,

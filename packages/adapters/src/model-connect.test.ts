@@ -25,7 +25,11 @@ describe("built-in provider output limits", () => {
       key: "sk-test-key",
       maxTokens: 16384,
     });
-    expect(modelCredentialDto(row, plaintext)).toMatchObject({ maxTokens: 16384, hasKey: true });
+    expect(modelCredentialDto(row, plaintext)).toMatchObject({
+      maxTokens: 16384,
+      hasKey: true,
+      authKind: "api_key",
+    });
     expect(JSON.stringify(modelCredentialDto(row, plaintext))).not.toContain("sk-test-key");
   });
 
@@ -121,6 +125,17 @@ describe("built-in provider output limits", () => {
         buildModelConnectPlaintext({ provider: "openai-codex", maxTokens: 8192 }, previous),
       ),
     ).toEqual({ kind: "oauth", credential, maxTokens: 8192 });
+    expect(
+      modelCredentialDto(
+        {
+          id: "cred-oauth",
+          provider: "openai-codex",
+          label: "ChatGPT",
+          isDefault: false,
+        },
+        previous,
+      ).authKind,
+    ).toBe("oauth");
   });
 
   it("rejects a limit update when no credential exists", () => {
@@ -297,6 +312,7 @@ describe("modelCredentialDto", () => {
       hasKey: false,
       isDefault: true,
       supportsImages: false,
+      authKind: "openai_compatible",
       baseUrl: "https://example.invalid/v1",
       modelId: "qwen3-4b",
       reasoning: false,

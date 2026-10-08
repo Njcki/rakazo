@@ -200,6 +200,11 @@ msgstr ""
 msgid "A sign-in tab opened at <0>{0}</0>. Enter this code there — this window keeps waiting:"
 msgstr ""
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+msgid "A subscription credential is stored securely."
+msgstr "Hay una credencial de suscripción guardada de forma segura."
+
 #: src/pages/shell/bot-picker.tsx
 msgid "About groups"
 msgstr ""
@@ -459,6 +464,10 @@ msgstr "Permitir siempre esta herramienta"
 msgid "Always allowed"
 msgstr "Siempre permitido"
 
+#: src/lib/model-connection-preflight.ts
+msgid "An API key is stored for this provider, not a subscription sign-in."
+msgstr "Hay una clave de API guardada para este proveedor, no un inicio de sesión por suscripción."
+
 #: src/components/AskCard.tsx
 msgid "Answer"
 msgstr "Responder"
@@ -595,6 +604,10 @@ msgstr ""
 #: src/pages/shell/chat-context.tsx
 msgid "Attachment"
 msgstr "Archivo adjunto"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Authentication failed."
+msgstr "Error de autenticación."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -821,6 +834,14 @@ msgstr "Buscar actualizaciones"
 #: src/pages/Shell.tsx
 msgid "Check in."
 msgstr "Regístrate."
+
+#: src/lib/model-connection-preflight.ts
+msgid "Check the API key or sign-in, then test again."
+msgstr "Revisa la clave de API o el inicio de sesión y vuelve a probar."
+
+#: src/lib/model-connection-preflight.ts
+msgid "Check the server URL and network, then test again."
+msgstr "Revisa la URL del servidor y la red y vuelve a probar."
 
 #: src/pages/Auth.tsx
 msgid "Check your email"
@@ -1050,6 +1071,10 @@ msgstr "Confirmar eliminación"
 msgid "Confirm password"
 msgstr "Confirmar contraseña"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Confirm the URL is reachable from this browser session, then test again."
+msgstr "Confirma que la URL es accesible desde esta sesión del navegador y vuelve a probar."
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -1123,6 +1148,10 @@ msgstr "Conectado: sus herramientas estarán disponibles desde tu próximo mensa
 msgid "Connecting…"
 msgstr "Conectando…"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Connection test failed."
+msgstr "La prueba de conexión falló."
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -1190,6 +1219,10 @@ msgstr "No se pudo cambiar la contraseña"
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not change the default model"
 msgstr "No se pudo cambiar el modelo predeterminado"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Could not check stored credentials."
+msgstr "No se pudieron comprobar las credenciales guardadas."
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not check teaching status. Refresh the view to continue."
@@ -1435,17 +1468,16 @@ msgstr "No se pudo abrir la terminal"
 msgid "Could not play a test clip"
 msgstr "No se pudo reproducir un clip de prueba"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Could not reach the model server."
+msgstr "No se pudo acceder al servidor del modelo."
+
 #: src/lib/computer-sandbox.ts
 #: src/lib/user-error.ts
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Auth.tsx
 msgid "Could not reach the server"
 msgstr "No se pudo alcanzar el servidor"
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Could not reach this model server"
-msgstr "No se pudo alcanzar este servidor de modelos"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not remove"
@@ -2009,6 +2041,10 @@ msgstr "Introduce un número entero del 1 al {MAX_MODEL_MAX_TOKENS} para el máx
 msgid "Enter a whole number from 1 to 1000 for the image limit."
 msgstr "Introduce un número entero del 1 al 1000 para el límite de imágenes."
 
+#: src/lib/model-connection-preflight.ts
+msgid "Enter an API key before testing."
+msgstr "Introduce una clave de API antes de probar."
+
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Every"
@@ -2135,6 +2171,10 @@ msgstr "Buscando…"
 #: src/pages/Onboarding.tsx
 msgid "Finish signing in at <0>{0}</0>. The final page may not load; paste its URL or code here."
 msgstr "Termina de iniciar sesión en <0>{0}</0>. Es posible que la página final no cargue; pega aquí su URL o código."
+
+#: src/lib/model-connection-preflight.ts
+msgid "Finish subscription sign-in, then test again."
+msgstr "Termina el inicio de sesión por suscripción y vuelve a probar."
 
 #: src/components/CloudAgentCard.tsx
 msgid "finished"
@@ -2721,6 +2761,10 @@ msgstr "minutos"
 msgid "Model"
 msgstr "Modelo"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Model \"{modelId}\" was not listed."
+msgstr "El modelo \"{modelId}\" no aparece en la lista."
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Model id"
@@ -2752,6 +2796,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Models from server"
 msgstr "Modelos del servidor"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Models list OK. {modelCount, plural, one {# model} other {# models}} available. Chat was not tested."
+msgstr "Lista de modelos correcta. {modelCount, plural, one {# modelo disponible} other {# modelos disponibles}}. No se probó el chat."
 
 #: src/lib/billing.ts
 msgid "month"
@@ -2920,6 +2968,10 @@ msgstr "Aún no hay mensajes con {peerBotName}."
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No model catalog is available."
 msgstr "No hay un catálogo de modelos disponible."
+
+#: src/lib/model-connection-preflight.ts
+msgid "No models listed."
+msgstr "No hay modelos en la lista."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
@@ -3169,6 +3221,10 @@ msgstr "Pega la dirección compatible con OpenAI de tu servidor. Rakazo agrega /
 msgid "Paste your API key"
 msgstr "Pega tu clave de API"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Paste your API key, then test again."
+msgstr "Pega tu clave de API y vuelve a probar."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "En pausa"
@@ -3177,6 +3233,14 @@ msgstr "En pausa"
 #: src/pages/shell/chat-context.tsx
 msgid "Photo"
 msgstr "Foto"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Pick a model from the catalog."
+msgstr "Elige un modelo del catálogo."
+
+#: src/lib/model-connection-preflight.ts
+msgid "Pick a model from the list or enter a model id served by this endpoint."
+msgstr "Elige un modelo de la lista o introduce un id de modelo que sirva este endpoint."
 
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
@@ -3543,6 +3607,10 @@ msgstr "Volver a Rakazo"
 msgid "rev {0}"
 msgstr "rev. {0}"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Review provider settings and test again."
+msgstr "Revisa la configuración del proveedor y vuelve a probar."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Revoke"
 msgstr "Revocar"
@@ -3883,6 +3951,10 @@ msgstr "Inicia sesión en Rakazo"
 msgid "Sign in to your existing account to link SSO"
 msgstr "Inicia sesión en tu cuenta existente para vincular SSO"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Sign in with the subscription, or test the API key instead."
+msgstr "Inicia sesión con la suscripción o prueba la clave de API."
+
 #: src/pages/Auth.tsx
 #: src/pages/Welcome.tsx
 msgid "Sign up"
@@ -4091,13 +4163,33 @@ msgstr ""
 msgid "Test"
 msgstr "Probar"
 
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Test API key"
+msgstr "Probar clave de API"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Test run"
 msgstr "Ejecución de prueba"
 
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Test sign-in"
+msgstr "Probar inicio de sesión"
+
+#: src/components/ModelConnectionPreflightNotice.tsx
+msgid "Testing…"
+msgstr "Probando…"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "La API no volvió. Actualiza esta página."
+
+#: src/lib/model-connection-preflight.ts
+msgid "The connection timed out."
+msgstr "Se agotó el tiempo de conexión."
+
+#: src/lib/model-connection-preflight.ts
+msgid "The provider is rate-limiting requests."
+msgstr "El proveedor está limitando la frecuencia de las solicitudes."
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
@@ -4161,6 +4253,14 @@ msgstr "Esto elimina permanentemente tu cuenta y tus datos."
 #: src/pages/shell/dialogs.tsx
 msgid "This permanently removes every message and stops current work. The chat remains available."
 msgstr "Esto elimina de forma permanente todos los mensajes y detiene el trabajo actual. El chat sigue disponible."
+
+#: src/lib/model-connection-preflight.ts
+msgid "This provider cannot be tested without saving."
+msgstr "Este proveedor no se puede probar sin guardar."
+
+#: src/lib/model-connection-preflight.ts
+msgid "This provider is not connected yet."
+msgstr "Este proveedor aún no está conectado."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This removes the connection from every space."
@@ -4248,6 +4348,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "Intentarlo de nuevo"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Try the test again."
+msgstr "Vuelve a intentar la prueba."
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Type"
@@ -4370,6 +4474,10 @@ msgstr "Usar {hostLabel}"
 msgid "Use a found model"
 msgstr "Usar un modelo encontrado"
 
+#: src/lib/model-connection-preflight.ts
+msgid "Use Connect to verify the key."
+msgstr "Usa Conectar para verificar la clave."
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
 msgstr ""
@@ -4417,6 +4525,10 @@ msgstr "Voz"
 #: src/components/call/VoiceChatCard.tsx
 msgid "Voice chat"
 msgstr "Chat de voz"
+
+#: src/lib/model-connection-preflight.ts
+msgid "Wait a moment and test again."
+msgstr "Espera un momento y vuelve a probar."
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Waiting for the API to come back…"

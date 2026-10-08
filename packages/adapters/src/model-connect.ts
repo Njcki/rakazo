@@ -8,6 +8,7 @@ import {
   modelOutputLeavesInputRoom,
 } from "@rakazo/contracts";
 import { modelIdSupportsImages, updateModelImageCapabilities } from "./model-vision.js";
+import { modelCredentialAuthKind } from "./pi-catalog-availability.js";
 import {
   CHATGPT_OAUTH_PROVIDER,
   parseModelSecret,
@@ -238,6 +239,7 @@ export function modelCredentialDto(
     const parsed = parseModelSecret(plaintext);
     return {
       ...credential,
+      authKind: modelCredentialAuthKind(parsed),
       ...(parsed.maxTokens !== undefined ? { maxTokens: parsed.maxTokens } : {}),
       ...(parsed.kind !== "oauth"
         ? {
@@ -255,9 +257,12 @@ export function modelCredentialDto(
   };
   if (!plaintext) return compatibleCredential;
   const parsed = parseModelSecret(plaintext);
-  if (parsed.kind !== "openai_compatible") return compatibleCredential;
+  if (parsed.kind !== "openai_compatible") {
+    return { ...compatibleCredential, authKind: modelCredentialAuthKind(parsed) };
+  }
   return {
     ...compatibleCredential,
+    authKind: "openai_compatible",
     supportsImages:
       parsed.visionModelIds !== undefined
         ? modelIdSupportsImages(parsed.visionModelIds, row.defaultModel)

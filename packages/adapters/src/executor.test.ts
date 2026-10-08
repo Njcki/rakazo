@@ -2702,6 +2702,7 @@ description: Prepare standup notes
       prisma,
       secretStore: { load: vi.fn(), put: vi.fn() },
       deploymentModelKey: "deployment-openrouter-key",
+      deploymentModelConfigured: true,
     } as unknown as Parameters<typeof createRunExecutor>[0]);
 
     const model = await executor.resolveModel({
@@ -2746,6 +2747,7 @@ description: Prepare standup notes
       secretStore: { load: vi.fn(), put: vi.fn() },
       // PI_DEFAULT_PROVIDER is unset here, so this key belongs to OpenRouter.
       deploymentModelKey: "deployment-openrouter-key",
+      deploymentModelConfigured: true,
     } as unknown as Parameters<typeof createRunExecutor>[0]);
 
     const model = await executor.resolveModel({ userId: "user-1", spaceId: "ws-1" });

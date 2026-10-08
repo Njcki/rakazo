@@ -2628,6 +2628,8 @@ export interface ExecutorDeps {
   secrets: string[];
   secretStore: SecretStore;
   deploymentModelKey?: string;
+  /** The deployment default model can run; see resolveDeploymentModel. */
+  deploymentModelConfigured?: boolean;
   dataDir?: string;
   notifications?: NotificationProvider;
   jobs: JobPublisher;
@@ -3017,7 +3019,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         overrideCredential,
         defaultCredential,
         settings,
-        deployment: deps.deploymentModelKey ? resolveDeploymentModel() : null,
+        deployment: deps.deploymentModelConfigured ? resolveDeploymentModel() : null,
       });
       const { credential, thinkingLevel } = selected;
       let { provider, id } = selected;
@@ -3567,7 +3569,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }),
           );
         }
-        const runDeployment = deps.deploymentModelKey ? resolveDeploymentModel() : null;
+        const runDeployment = deps.deploymentModelConfigured ? resolveDeploymentModel() : null;
         const runtimeFallback = runtimeFallbackModel(deps.runtime);
         const selected = selectConfiguredModel({
           bot,

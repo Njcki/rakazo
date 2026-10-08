@@ -45,15 +45,8 @@ import {
   NativeSelectOption,
 } from "@rakazo/ui-web";
 import { Check, ChevronDown, Copy, X } from "lucide-react";
-import {
-  type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   ModelPreflightFeedback,
   modelPreflightTestingLabel,
@@ -96,6 +89,8 @@ export function ModelSettingsOverlay({
   const [credentials, setCredentials] = useState<ModelCredential[]>([]);
   const [me, setMe] = useState<Me | null>(null);
   const [provider, setProvider] = useState("");
+  // The provider whose optional personal-key form is open.
+  const [ownKeyProvider, setOwnKeyProvider] = useState<string | null>(null);
   const [providerQuery, setProviderQuery] = useState("");
   const [modelId, setModelId] = useState("");
   const modelIdRef = useRef(modelId);
@@ -288,7 +283,16 @@ export function ModelSettingsOverlay({
   const modelsForProvider = catalog.filter((entry) => entry.provider === provider);
   const selected = modelsForProvider.find((entry) => entry.id === modelId) ?? modelsForProvider[0];
   selectedLabelRef.current = selected?.label;
-  const disconnectName = selected?.providerName ?? selected?.provider ?? "";
+  const selectedProviderName = selected?.providerName ?? selected?.provider ?? "";
+  const disconnectName = selectedProviderName;
+  const hostCredentialSource = me?.hostCredentialSource ?? "";
+  const serverCredentialsNote = (
+    <p className="text-sm leading-[1.5] text-muted-foreground">
+      <Trans>
+        Uses this server's own {hostCredentialSource} credentials to access {selectedProviderName}.
+      </Trans>
+    </p>
+  );
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
   const isCloudflareGateway = provider === CLOUDFLARE_AI_GATEWAY_PROVIDER_ID;
   const cloudflareRoutingReady =
@@ -310,6 +314,8 @@ export function ModelSettingsOverlay({
   const isActive =
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
+  // Space still bills the host while this provider matches; model id alone is not credentials.
+  const usingServerCredentials = provider === me?.hostCredentialProvider;
   const acceptsKey = selected?.auth !== "oauth";
   const subscriptionSignIn = selected?.signIn !== undefined;
   // Effort levels for the staged catalog model — "off" stays out, matching the
@@ -783,7 +789,7 @@ export function ModelSettingsOverlay({
             </NativeSelect>
           </label>
         ) : null}
-        {selected.billing ? (
+        {selected.billing && !usingServerCredentials ? (
           <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">{selected.billing}</p>
         ) : null}
       </>
@@ -1102,7 +1108,7 @@ export function ModelSettingsOverlay({
   ) : null;
 
   const saveButton =
-    credential && (!isActive || thinkingDirty) ? (
+    credential && (!isActive || thinkingDirty || usingServerCredentials) ? (
       <div className="mt-6">
         <Button
           type="button"
@@ -1114,7 +1120,7 @@ export function ModelSettingsOverlay({
         >
           {pending === "default" ? (
             <Trans>Switching…</Trans>
-          ) : isActive ? (
+          ) : isActive && !usingServerCredentials ? (
             <Trans>Save</Trans>
           ) : (
             <Trans>Use this model</Trans>
@@ -1386,6 +1392,11 @@ export function ModelSettingsOverlay({
                 </>
               ) : credential ? (
                 <>
+                  {/* The key may be the default in another space while this one runs on server
+                      credentials; saving here switches this space to the key. */}
+                  {provider === me?.hostCredentialProvider ? (
+                    <div className="mb-5">{serverCredentialsNote}</div>
+                  ) : null}
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-[15px] text-foreground">
@@ -1413,6 +1424,23 @@ export function ModelSettingsOverlay({
                   <div className="mt-5">{catalogModelConfig}</div>
                   {saveButton}
                   <div className="mt-6 border-t border-border pt-5">{connectionControls}</div>
+                </>
+              ) : provider === me?.hostCredentialProvider ? (
+                <>
+                  {serverCredentialsNote}
+                  <details
+                    className="mt-5 text-sm text-muted-foreground"
+                    open={ownKeyProvider === provider}
+                    onToggle={(event) =>
+                      setOwnKeyProvider(event.currentTarget.open ? provider : null)
+                    }
+                  >
+                    <summary className="w-fit cursor-pointer select-none">
+                      <Trans>Use your own key</Trans>
+                    </summary>
+                    <div className="mt-5">{connectionControls}</div>
+                    <div className="mt-6">{catalogModelConfig}</div>
+                  </details>
                 </>
               ) : (
                 <>

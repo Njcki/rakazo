@@ -179,6 +179,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Allow speech recognition in Settings, or connect ElevenLabs, OpenAI, or Fish Audio.":
     "Разрешите распознавание речи в Настройках или подключите ElevenLabs, OpenAI или Fish Audio.",
   "Connect a voice provider first.": "Сначала подключите провайдера голосовой связи.",
+  "Use your own key": "Использовать свой ключ",
+  "Uses this server's own {source} credentials to access {provider}.":
+    "Использует собственные учётные данные {source} этого сервера для доступа к {provider}.",
   "Connect API key": "Подключить API-ключ",
   "Connect Executor": "Подключить Executor",
   "Connect MCP server {name}": "Подключение MCP-сервера {name}",

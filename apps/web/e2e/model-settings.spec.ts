@@ -258,8 +258,12 @@ test("model settings connect, replace, and cancel provider authentication", asyn
     {},
   );
   expect(connected.find((entry) => entry.provider === "scripted")?.maxTokens).toBe(8192);
-  await page.getByText("Advanced", { exact: true }).click();
-  await page.getByLabel("Maximum output tokens").fill("16384");
+  // Connecting preserves the open disclosure; only open it if the form remounted.
+  const outputLimit = page.getByLabel("Maximum output tokens");
+  if (!(await outputLimit.isVisible())) {
+    await page.getByText("Advanced", { exact: true }).click();
+  }
+  await outputLimit.fill("16384");
   await page.getByRole("button", { name: "Save limits", exact: true }).click();
   await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
   const updated = await rpc<Array<{ provider: string; maxTokens?: number }>>(
@@ -411,6 +415,109 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   const afterDisconnect = await rpc<Array<{ provider: string }>>(page, "models/credentials", {});
   expect(afterDisconnect.some((entry) => entry.provider === "scripted")).toBe(false);
   await expect(page.getByRole("button", { name: /Scripted/ })).not.toContainText("Connected");
+});
+
+test("a deployment default on server credentials says so and keeps an own key optional", async ({
+  page,
+}, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `server-credentials-${stamp}@rakazo.test`, "password12", `Server ${stamp}`);
+  await completeOnboarding(page);
+  // The E2E deployment runs on a scripted model, so present the active default as one that
+  // authenticates from the host, the way an Amazon Bedrock deployment on an AWS role does.
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Record<string, unknown> };
+    await route.fulfill({
+      response,
+      json: {
+        ...body,
+        json: {
+          ...body.json,
+          defaultProvider: "amazon-bedrock",
+          defaultModel: "eu.anthropic.claude-haiku-4-5-20251001-v1:0",
+          hostCredentialProvider: "amazon-bedrock",
+          hostCredentialSource: "AWS IAM",
+        },
+      },
+    });
+  });
+  await openUserSettings(page, "models");
+
+  const serverNote = page.getByText(
+    "Uses this server's own AWS IAM credentials to access Amazon Bedrock.",
+  );
+  const ownKeyDisclosure = page.getByText("Use your own key", { exact: true });
+  await expect(serverNote).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect API key" })).toBeHidden();
+  await captureScreenshot(page, testInfo, "model-settings-server-credentials");
+
+  await ownKeyDisclosure.click();
+  await expect(page.getByRole("button", { name: "Connect API key" })).toBeVisible();
+  await expect(serverNote).toBeVisible();
+  await ownKeyDisclosure.click();
+  await expect(page.getByRole("button", { name: "Connect API key" })).toBeHidden();
+  await expect(serverNote).toBeVisible();
+});
+
+test("a key connected in another space can replace server credentials for the same model", async ({
+  page,
+}, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `shared-model-${stamp}@rakazo.test`, "password12", "Model Owner");
+  await completeOnboarding(page);
+  const otherSpace = await rpc<{ id: string }>(page, "spaces/create", { name: "Other space" });
+  const provider = "amazon-bedrock";
+  const modelId = "eu.anthropic.claude-haiku-4-5-20251001-v1:0";
+  const connected = await page.request.post("/rpc/models/connect", {
+    headers: { "x-rakazo-space-id": otherSpace.id },
+    data: { json: { provider, modelId, apiKey: "fake-bedrock-key" } },
+  });
+  expect(connected.ok()).toBe(true);
+  await page.route("**/rpc/me", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: Record<string, unknown> };
+    // The offline deployment uses Scripted; expose its untouched default as host Bedrock.
+    if (body.json.defaultProvider !== provider) {
+      Object.assign(body.json, {
+        defaultProvider: provider,
+        defaultModel: modelId,
+        hostCredentialProvider: provider,
+        hostCredentialSource: "AWS IAM",
+      });
+    }
+    await route.fulfill({ response, json: body });
+  });
+  await openUserSettings(page, "models");
+  await expect(page.getByRole("combobox", { name: "Model", exact: true })).toHaveText(
+    /Claude Haiku/,
+  );
+  await expect(
+    page.getByText("Uses this server's own AWS IAM credentials to access Amazon Bedrock."),
+  ).toBeVisible();
+  const useModel = page.getByRole("button", { name: "Use this model", exact: true });
+  await expect(useModel).toBeVisible();
+  const personalBillingNote = page.getByText(
+    "Uses your Amazon Bedrock API key. Rakazo does not pay for model usage.",
+  );
+  await expect(personalBillingNote).toBeHidden();
+  await captureScreenshot(page, testInfo, "model-settings-server-credentials-connected-key");
+  const saved = page.waitForRequest("**/rpc/models/setDefault");
+  await useModel.click();
+  const request = await saved;
+  expect(request.postDataJSON().json).toMatchObject({ provider, modelId });
+  expect(request.headers()["x-rakazo-space-id"]).not.toBe(otherSpace.id);
+  await expect(page.getByText(/Now using/)).toBeVisible();
+  await expect(useModel).toBeHidden();
+  await expect(personalBillingNote).toBeVisible();
+  await expect(
+    page.getByText("Uses this server's own AWS IAM credentials to access Amazon Bedrock."),
+  ).toBeHidden();
+  expect(await rpc(page, "me", {})).toMatchObject({
+    defaultProvider: provider,
+    defaultModel: modelId,
+    hostCredentialProvider: null,
+  });
 });
 
 test("catalog models keep a space default thinking level per saved model", async ({

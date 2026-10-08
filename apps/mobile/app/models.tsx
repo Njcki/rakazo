@@ -99,6 +99,8 @@ export default function Models() {
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [me, setMe] = useState<MobileMe | null>(null);
   const [provider, setProvider] = useState("");
+  // The provider whose optional personal-key form is open.
+  const [ownKeyProvider, setOwnKeyProvider] = useState<string | null>(null);
   const [showAllProviders, setShowAllProviders] = useState(false);
   const [modelId, setModelId] = useState("");
   const [modelSearch, setModelSearch] = useState({ provider: "", query: "" });
@@ -337,6 +339,8 @@ export default function Models() {
   const isActive =
     me?.defaultProvider === selected?.provider &&
     me?.defaultModel === (isOpenAiCompatible ? modelId.trim() : selected?.id);
+  // Space still bills the host while this provider matches; model id alone is not credentials.
+  const usingServerCredentials = provider === me?.hostCredentialProvider;
   const acceptsKey = selected?.auth !== "oauth";
   const subscriptionSignIn = selected?.signIn !== undefined;
   // Effort levels for the staged catalog model — "off" stays out, matching the
@@ -926,6 +930,15 @@ export default function Models() {
     </>
   ) : null;
 
+  const serverCredentialsNote = (
+    <Text style={styles.secondary}>
+      {t("Uses this server's own {source} credentials to access {provider}.", {
+        source: me?.hostCredentialSource ?? "",
+        provider: selected?.providerName ?? provider,
+      })}
+    </Text>
+  );
+
   const compatKeySection =
     isOpenAiCompatible && acceptsKey ? (
       <View style={styles.keySection}>
@@ -1233,10 +1246,16 @@ export default function Models() {
     ) : null;
 
   const saveRow =
-    credential && (!isActive || thinkingDirty) ? (
+    credential && (!isActive || thinkingDirty || usingServerCredentials) ? (
       <NativeActionButton
         disabled={busy || (isOpenAiCompatible && !modelId.trim())}
-        label={pending === "default" ? t("Switching…") : isActive ? t("Save") : t("Use this model")}
+        label={
+          pending === "default"
+            ? t("Switching…")
+            : isActive && !usingServerCredentials
+              ? t("Save")
+              : t("Use this model")
+        }
         onPress={() => void setModelDefault()}
         style={{ marginTop: 12 }}
       />
@@ -1381,6 +1400,7 @@ export default function Models() {
             </>
           ) : credential ? (
             <>
+              {provider === me?.hostCredentialProvider ? serverCredentialsNote : null}
               {connectedStatusRow}
               <Text style={styles.sectionTitle}>{t("Model")}</Text>
               {catalogModelCard}
@@ -1388,6 +1408,21 @@ export default function Models() {
               {feedbackAnchor === "model" ? feedback : null}
               <View style={styles.maintenanceSection}>{catalogConnectionControls}</View>
               {feedbackAnchor === "model" ? null : feedback}
+            </>
+          ) : provider === me?.hostCredentialProvider ? (
+            <>
+              {serverCredentialsNote}
+              {disclosureRow(t("Use your own key"), ownKeyProvider === provider, () =>
+                setOwnKeyProvider((current) => (current === provider ? null : provider)),
+              )}
+              {ownKeyProvider === provider ? (
+                <>
+                  {catalogConnectionControls}
+                  {feedback}
+                  <Text style={styles.sectionTitle}>{t("Model")}</Text>
+                  {catalogModelCard}
+                </>
+              ) : null}
             </>
           ) : (
             <>

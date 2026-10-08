@@ -211,6 +211,7 @@ export interface CompactHistoryDeps {
   jobs: JobPublisher;
   memoryProviders: MemoryProviderResolver;
   deploymentModelKey?: string;
+  deploymentModelConfigured?: boolean;
   resolveModel?: (scope: {
     userId: string;
     spaceId: string;
@@ -335,7 +336,7 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
         spaceId: thread.spaceId,
         botId: thread.botId,
       })
-    : deps.deploymentModelKey
+    : deps.deploymentModelConfigured
       ? {
           // Provider must come from the same resolver as the key, not a hardcoded one.
           provider: deploymentFallback.provider,

@@ -33,6 +33,7 @@ export function createBackgroundJobHandlers(deps: {
   secretStore: SecretStore;
   memoryProviders: MemoryProviderResolver;
   deploymentModelKey?: string;
+  deploymentModelConfigured?: boolean;
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
 }): BackgroundJobHandlers {
@@ -109,6 +110,7 @@ export function createBackgroundJobHandlers(deps: {
           jobs: deps.jobs,
           memoryProviders: deps.memoryProviders,
           deploymentModelKey: deps.deploymentModelKey,
+          deploymentModelConfigured: deps.deploymentModelConfigured,
           ...(deps.executor.resolveModel ? { resolveModel: deps.executor.resolveModel } : {}),
         },
         payload.threadId,

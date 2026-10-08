@@ -20,6 +20,7 @@ import type {
   ViewStyle,
 } from "react-native";
 import {
+  I18nManager,
   Image,
   Linking,
   Platform,
@@ -64,6 +65,18 @@ const POP_ISOLATE = "\u2069";
 const markdownParser = createMarkdownIt();
 markdownParser.validateLink = keepMarkdownLinkToken;
 linkifyExplicitUrls(markdownParser);
+
+// Hebrew, Arabic and the other right-to-left scripts, with their presentation forms.
+const RTL_LETTER =
+  /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
+
+// iOS shapes each paragraph by its first letter but aligns it, and orders rows, by the app's
+// direction. Returns the text's direction when it differs from the app's.
+function contraryDirection(text: string) {
+  const rtl = RTL_LETTER.test(/\p{L}/u.exec(text)?.[0] ?? "");
+  if (rtl === I18nManager.isRTL) return undefined;
+  return rtl ? "rtl" : "ltr";
+}
 
 function markdownStyles(palette: ColorTokens) {
   return StyleSheet.create({
@@ -575,10 +588,14 @@ function listItemRule(
   styleMap: Parameters<RenderRule>[3],
 ): ReactNode {
   const body = StyleSheet.flatten(styleMap.body) as TextStyle | undefined;
+  // An item written against the app's direction puts its marker on the far side, read its way.
+  const direction = contraryDirection(cellPlainText(node));
+  const row = [styleMap._VIEW_SAFE_list_item, direction && layout.reversedRow];
   const marker: TextStyle = {
     color: body?.color,
     fontSize: body?.fontSize,
     lineHeight: body?.lineHeight,
+    writingDirection: direction,
   };
   // `parent` lists ancestors nearest first; the nearest list decides the marker, so an ordered
   // list nested in a bulleted one is numbered.
@@ -587,7 +604,7 @@ function listItemRule(
   );
   if (list?.type === "bullet_list") {
     return (
-      <View key={node.key} style={styleMap._VIEW_SAFE_list_item}>
+      <View key={node.key} style={row}>
         <Text style={[marker, styleMap.bullet_list_icon]} accessible={false}>
           {Platform.select({ android: "\u2022", ios: "\u00B7", default: "\u2022" })}
         </Text>
@@ -599,7 +616,7 @@ function listItemRule(
     const start = Number(list.attributes?.start);
     const number = Number.isFinite(start) ? start + node.index : node.index + 1;
     return (
-      <View key={node.key} style={styleMap._VIEW_SAFE_list_item}>
+      <View key={node.key} style={row}>
         <Text style={[marker, styleMap.ordered_list_icon]}>
           {number}
           {node.markup}
@@ -619,6 +636,14 @@ function listItemRule(
 // outside the text flow and collapses the bubble height, overlapping later messages.
 const renderRules: RenderRules = {
   list_item: listItemRule,
+  textgroup: (node, children, _parent, styleMap) => (
+    <Text
+      key={node.key}
+      style={[styleMap.textgroup, contraryDirection(cellPlainText(node)) && layout.farSideBlock]}
+    >
+      {children}
+    </Text>
+  ),
   text: (node, _children, parents, styleMap, inherited) => (
     <Text key={node.key} style={textStyleForParents(inherited, parents, styleMap)}>
       {node.content}
@@ -900,7 +925,12 @@ export const LinkifiedText = memo(function LinkifiedText({
     textDecorationColor: palette.mutedForeground,
   };
   return (
-    <Text style={{ color, fontSize: BODY_FONT_SIZE, lineHeight: 23 }}>
+    <Text
+      style={[
+        { color, fontSize: BODY_FONT_SIZE, lineHeight: 23 },
+        contraryDirection(children) && layout.farSideText,
+      ]}
+    >
       {plainTextLinkParts(children).map((part, index) => {
         if (part.type === "text") return part.value;
         const open = () => {
@@ -986,6 +1016,18 @@ const layout = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 1,
     minWidth: 0,
+  },
+  reversedRow: {
+    flexDirection: "row-reverse",
+  },
+  // React Native mirrors `right` in a right-to-left app, so it is always the far side.
+  farSideText: {
+    textAlign: "right",
+  },
+  // A text group sits in a row; filling it lets a short line reach the far side too.
+  farSideBlock: {
+    textAlign: "right",
+    width: "100%",
   },
   // An inline view sits on the baseline; this drops it so it centres on the capitals. The gap
   // before the label is part of the view, since inline views do not keep their margins.

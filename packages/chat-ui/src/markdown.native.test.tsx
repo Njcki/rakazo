@@ -9,6 +9,8 @@ const linking = vi.hoisted(() => ({
   openURL: vi.fn(async () => undefined),
 }));
 
+const i18n = vi.hoisted(() => ({ isRTL: false }));
+
 // The load handler of each rendered Image, so a test can report its decoded size.
 const imageLoads = vi.hoisted(
   () =>
@@ -100,6 +102,7 @@ vi.mock("react-native", async () => {
       "flexShrink",
       "flex",
       "flexGrow",
+      "flexDirection",
       "overflow",
       "accessibilityElementsHidden",
       "importantForAccessibility",
@@ -110,6 +113,9 @@ vi.mock("react-native", async () => {
       "textDecorationLine",
       "color",
       "fontWeight",
+      "textAlign",
+      "writingDirection",
+      "width",
     ]),
     ScrollView: mockComponent("rn-scroll-view", ["horizontal", "borderColor", "borderWidth"]),
     Pressable: mockComponent("rn-pressable", [
@@ -141,6 +147,7 @@ vi.mock("react-native", async () => {
         options.ios ?? options.default ?? options.android,
     },
     Linking: linking,
+    I18nManager: i18n,
   };
 });
 
@@ -653,6 +660,158 @@ describe("native markdown images", () => {
     // The image component is a stub under test; a link would mean it fell back.
     expect(html).toContain("<rn-stub");
     expect(html).not.toContain("data-accessibility-role");
+  });
+});
+
+describe("message direction", () => {
+  const parse = (html: string) => new DOMParser().parseFromString(html, "text/html");
+  const directionAttributes =
+    /data-text-align|data-writing-direction|data-flex-direction="row-reverse"/;
+
+  function userBubble(text: string) {
+    const html = renderToStaticMarkup(
+      <LinkifiedText color={darkTokens.foreground} linkColor={darkTokens.link} palette={darkTokens}>
+        {text}
+      </LinkifiedText>,
+    );
+    return { html, root: parse(html).querySelector("rn-text") };
+  }
+
+  function botTextGroups(markdown: string) {
+    const document = parse(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>));
+    // A text group is the outermost text of a block; its leaves are nested texts.
+    const groups = [...document.querySelectorAll("rn-text")].filter(
+      (text) => text.parentElement?.tagName.toLowerCase() !== "rn-text",
+    );
+    return { document, groups };
+  }
+
+  function textOf(element: Element | null | undefined) {
+    return element?.textContent ?? "";
+  }
+
+  it("right-aligns a user message whose first letter is Hebrew or Arabic", () => {
+    for (const text of [
+      "שלום! זה מבחן של טקסט בעברית בלבד, עם סימני פיסוק בסוף.",
+      "2026: مرحبا بالعالم، هذه رسالة طويلة بما يكفي لتلتف.",
+      "«שלום», see the CHANGELOG sentence.",
+    ]) {
+      const { root } = userBubble(text);
+      expect(root?.getAttribute("data-text-align")).toBe("right");
+      // iOS already shapes each paragraph by its own first letter.
+      expect(root?.hasAttribute("data-writing-direction")).toBe(false);
+    }
+  });
+
+  it("leaves Latin, CJK and messages that start in English as they were", () => {
+    for (const text of ["Hello there.", "你好，世界。", "Translate: שלום", "😀 123 !!", ""]) {
+      expect(userBubble(text).html).not.toMatch(directionAttributes);
+    }
+  });
+
+  it("aligns each bot block by its own first letter", () => {
+    const { groups } = botTextGroups(
+      [
+        "Fake reply 9. You said:",
+        "",
+        "## כותרת",
+        "",
+        "רשימה קצרה.",
+        "",
+        "See README.md.",
+        "",
+        "> ציטוט",
+      ].join("\n"),
+    );
+    const alignment = Object.fromEntries(
+      groups.map((group) => [
+        textOf(group),
+        [group.getAttribute("data-text-align"), group.getAttribute("data-width")],
+      ]),
+    );
+    expect(alignment).toEqual({
+      "Fake reply 9. You said:": [null, null],
+      כותרת: ["right", "100%"],
+      "רשימה קצרה.": ["right", "100%"],
+      "See README.md.": [null, null],
+      ציטוט: ["right", "100%"],
+    });
+  });
+
+  it("puts each list item's marker on its own side", () => {
+    const { document } = botTextGroups(
+      "- פריט ראשון\n- Install the CLI.\n\n1. אחד\n2. second\n3. שלוש",
+    );
+    const items = [...document.querySelectorAll("rn-view")].filter((view) => {
+      const marker = view.firstElementChild;
+      return marker?.tagName.toLowerCase() === "rn-text" && /^(\u00B7|\d\.)$/.test(textOf(marker));
+    });
+    expect(
+      items.map((item) => [
+        textOf(item.lastElementChild),
+        item.getAttribute("data-flex-direction"),
+        item.firstElementChild?.getAttribute("data-writing-direction") ?? null,
+      ]),
+    ).toEqual([
+      ["פריט ראשון", "row-reverse", "rtl"],
+      ["Install the CLI.", "row", null],
+      ["אחד", "row-reverse", "rtl"],
+      ["second", "row", null],
+      ["שלוש", "row-reverse", "rtl"],
+    ]);
+  });
+
+  it("renders an English block in a Hebrew-first reply the same as on its own", () => {
+    const englishItem = (markdown: string) =>
+      [...botTextGroups(markdown).document.querySelectorAll("rn-view")]
+        .filter(
+          (view) =>
+            textOf(view.firstElementChild) === "\u00B7" &&
+            textOf(view.lastElementChild) === "Install the CLI.",
+        )
+        .map((view) => view.outerHTML);
+    const englishParagraph = (markdown: string) =>
+      botTextGroups(markdown)
+        .groups.filter((group) => textOf(group) === "See README.md.")
+        .map((group) => group.outerHTML);
+    const mixed = "שלום רב.\n\n- פריט ראשון\n- Install the CLI.\n\nSee README.md.";
+    expect(englishItem(mixed)).toEqual(englishItem("- Install the CLI."));
+    expect(englishParagraph(mixed)).toEqual(englishParagraph("See README.md."));
+    expect(englishItem(mixed)).toHaveLength(1);
+  });
+
+  it("keeps code in a right-to-left message as it was", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"שלום\n\n    indented();\n\n```\nfenced();\n```"}</ChatMarkdown>,
+    );
+    const code = [...parse(html).querySelectorAll("rn-text")].filter((text) =>
+      /indented|fenced/.test(textOf(text)),
+    );
+    expect(code.length).toBeGreaterThan(0);
+    for (const text of code) expect(text.outerHTML).not.toMatch(directionAttributes);
+  });
+
+  it("keeps a left-to-right bot message laid out as before", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>
+        {"## Heading\n\nIntro שלום.\n\n- one\n- two\n\n1. first\n2. second"}
+      </ChatMarkdown>,
+    );
+    expect(html).not.toMatch(directionAttributes);
+  });
+
+  it("aligns an English message to the far side in a right-to-left app", () => {
+    i18n.isRTL = true;
+    try {
+      // React Native mirrors `right` in a right-to-left layout, so it lands on the left.
+      expect(userBubble("Hello there.").root?.getAttribute("data-text-align")).toBe("right");
+      expect(userBubble("שלום").html).not.toMatch(directionAttributes);
+      const { document } = botTextGroups("- Install the CLI.");
+      expect(document.querySelector('rn-view[data-flex-direction="row-reverse"]')).not.toBeNull();
+      expect(document.querySelector('rn-text[data-writing-direction="ltr"]')).not.toBeNull();
+    } finally {
+      i18n.isRTL = false;
+    }
   });
 });
 

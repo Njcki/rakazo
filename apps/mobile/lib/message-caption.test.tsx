@@ -45,6 +45,7 @@ vi.mock("react-native", () => {
     },
     Platform: { OS: "ios", select: (options: { ios?: unknown }) => options.ios },
     Linking: linking,
+    I18nManager: { isRTL: false },
   };
 });
 

@@ -119,7 +119,6 @@ import {
 import {
   type ClipboardEvent,
   type DragEvent,
-  lazy,
   type MutableRefObject,
   memo,
   type RefObject,
@@ -148,6 +147,7 @@ import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { CallCard } from "../components/call/CallCard";
 import { VoiceChatCard } from "../components/call/VoiceChatCard";
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
+import { lazyOverlay } from "../components/ErrorBoundary";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -275,25 +275,23 @@ import {
 } from "./shell/message-cards";
 import { WindowChrome } from "./WindowChrome";
 
-const BotContextMenu = lazy(() =>
-  import("./BotContextMenu").then((module) => ({ default: module.BotContextMenu })),
+const BotContextMenu = lazyOverlay(() =>
+  import("./BotContextMenu").then((module) => module.BotContextMenu),
 );
-const MessagingSettingsOverlay = lazy(() =>
-  import("./MessagingSettingsOverlay").then((module) => ({
-    default: module.MessagingSettingsOverlay,
-  })),
+const MessagingSettingsOverlay = lazyOverlay(() =>
+  import("./MessagingSettingsOverlay").then((module) => module.MessagingSettingsOverlay),
 );
-const SettingsOverlay = lazy(() =>
-  import("./SettingsOverlay").then((module) => ({ default: module.SettingsOverlay })),
+const SettingsOverlay = lazyOverlay(() =>
+  import("./SettingsOverlay").then((module) => module.SettingsOverlay),
 );
-const PeerMessagesOverlay = lazy(() =>
-  import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
+const PeerMessagesOverlay = lazyOverlay(() =>
+  import("./PeerMessagesOverlay").then((module) => module.PeerMessagesOverlay),
 );
-const PluginsOverlay = lazy(() =>
-  import("./PluginsOverlay").then((module) => ({ default: module.PluginsOverlay })),
+const PluginsOverlay = lazyOverlay(() =>
+  import("./PluginsOverlay").then((module) => module.PluginsOverlay),
 );
-const McpServersOverlay = lazy(() =>
-  import("./McpServersOverlay").then((module) => ({ default: module.McpServersOverlay })),
+const McpServersOverlay = lazyOverlay(() =>
+  import("./McpServersOverlay").then((module) => module.McpServersOverlay),
 );
 
 type PendingAttachment = {

@@ -882,6 +882,7 @@ msgstr "ID клиента"
 msgid "Client secret"
 msgstr "Секрет клиента"
 
+#: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -1325,6 +1326,7 @@ msgstr "Не удалось установить коннектор"
 msgid "Could not list files"
 msgstr ""
 
+#: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
 msgstr "Не удалось загрузить"
@@ -3304,6 +3306,8 @@ msgstr "Пересоздать неработающий компьютер."
 msgid "Recreating the computer"
 msgstr "Повторное создание компьютера"
 
+#: src/App.tsx
+#: src/components/ErrorBoundary.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "Обновить"
@@ -3876,6 +3880,7 @@ msgstr "Slack не включен"
 msgid "Software update"
 msgstr "Обновление программного обеспечения"
 
+#: src/App.tsx
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
 msgstr "Что-то пошло не так. Попробуйте ещё раз."

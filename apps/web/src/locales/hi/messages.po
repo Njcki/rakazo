@@ -882,6 +882,7 @@ msgstr ""
 msgid "Client secret"
 msgstr ""
 
+#: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -1325,6 +1326,7 @@ msgstr "कनेक्टर इंस्टॉल नहीं हो सक�
 msgid "Could not list files"
 msgstr ""
 
+#: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load"
 msgstr "लोड नहीं हो सका"
@@ -3304,6 +3306,8 @@ msgstr "काम न कर रहे कंप्यूटर को फिर
 msgid "Recreating the computer"
 msgstr ""
 
+#: src/App.tsx
+#: src/components/ErrorBoundary.tsx
 #: src/pages/RoutineRunHistory.tsx
 msgid "Refresh"
 msgstr "रीफ़्रेश करें"
@@ -3876,6 +3880,7 @@ msgstr ""
 msgid "Software update"
 msgstr ""
 
+#: src/App.tsx
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
 msgstr "कुछ गलत हो गया। फिर से कोशिश करें।"

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { Navigate, Outlet, Route, Routes, useSearchParams } from "react-router-dom";
 import { LoadingState } from "./components/ai/primitives";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
 import { markAfterPaint, markOnce } from "./lib/performance";
@@ -60,13 +61,15 @@ export function App() {
   );
   return (
     <RemoteImagesContext.Provider value={loadRemoteImages}>
-      {window.location.pathname === SSO_CALLBACK_PATH ? (
-        <SsoCallbackPage />
-      ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
-        <LocalSettingsPage />
-      ) : (
-        <SessionApp />
-      )}
+      <ErrorBoundary fallback={<AppFailed />}>
+        {window.location.pathname === SSO_CALLBACK_PATH ? (
+          <SsoCallbackPage />
+        ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
+          <LocalSettingsPage />
+        ) : (
+          <SessionApp />
+        )}
+      </ErrorBoundary>
     </RemoteImagesContext.Provider>
   );
 }
@@ -210,6 +213,31 @@ function SessionUnavailable({ refetch }: { refetch: () => Promise<void> }) {
             }}
           >
             <Trans>Retry now</Trans>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Last resort for a render failure no inner boundary caught: offer a reload instead of a blank page. */
+function AppFailed() {
+  return (
+    <div
+      className="grid h-full place-items-center bg-background px-6 text-center"
+      data-rakazo-app-state="failed"
+    >
+      <div className="flex flex-col items-center">
+        <p className="text-[13.5px] text-muted-foreground/80">
+          <Trans>Something went wrong. Try again.</Trans>
+        </p>
+        <div className="mt-4">
+          <Button
+            variant="secondary"
+            className="rounded-full"
+            onClick={() => window.location.reload()}
+          >
+            <Trans>Refresh</Trans>
           </Button>
         </div>
       </div>

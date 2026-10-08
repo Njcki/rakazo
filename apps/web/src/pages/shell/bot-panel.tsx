@@ -31,6 +31,7 @@ import {
 } from "@rakazo/ui-web";
 import { X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
 import { botProfilePatch } from "../../lib/bot-profile-patch";
 import { thinkingLevelLabel } from "../../lib/model-catalog";
 import { rpc } from "../../lib/rpc";
@@ -472,12 +473,18 @@ export function BotSettings({
           </span>
         </summary>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-        <Suspense fallback={null}>
-          <ScratchpadSection botId={bot.id} />
-          {advancedOpened ? (
-            <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
-          ) : null}
-        </Suspense>
+        <ErrorBoundary fallback={<SectionLoadFailed />}>
+          <Suspense fallback={null}>
+            <ScratchpadSection botId={bot.id} />
+          </Suspense>
+        </ErrorBoundary>
+        {advancedOpened ? (
+          <ErrorBoundary fallback={<SectionLoadFailed />}>
+            <Suspense fallback={null}>
+              <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+            </Suspense>
+          </ErrorBoundary>
+        ) : null}
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
           <Trans>Model</Trans>
           <NativeSelect

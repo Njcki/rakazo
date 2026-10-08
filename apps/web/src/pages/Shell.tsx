@@ -716,10 +716,17 @@ export function ShellPage() {
     };
   }, [session.data?.user]);
   const [usage, setUsage] = useState<{
-    inputTokens: number;
-    outputTokens: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens?: number | null;
     runs: number;
   } | null>(null);
+  const refreshUsage = useCallback(() => {
+    void rpc.usage
+      .summary()
+      .then(setUsage)
+      .catch(() => undefined);
+  }, []);
   const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const webhookSecretProvisionRef = useRef(new Map<string, Promise<string>>());
@@ -3427,10 +3434,6 @@ export function ShellPage() {
                 aria-label={t`Usage`}
                 onClick={() => {
                   setMenuOpen(false);
-                  void rpc.usage
-                    .summary()
-                    .then(setUsage)
-                    .catch(() => undefined);
                   openSettings("usage");
                 }}
               >
@@ -3693,10 +3696,6 @@ export function ShellPage() {
                 return;
               }
               if (action === "settings-usage") {
-                void rpc.usage
-                  .summary()
-                  .then(setUsage)
-                  .catch(() => undefined);
                 openSettings("usage");
               }
             }}
@@ -4460,6 +4459,7 @@ export function ShellPage() {
             name={userName}
             email={session.data?.user.email}
             usage={usage}
+            onUsageOpen={refreshUsage}
             initialSection={settingsSection}
             avatarStyle={bootstrapMe?.avatarStyle ?? "robot"}
             isDeploymentOwner={bootstrapMe?.isDeploymentOwner === true}

@@ -108,8 +108,9 @@ export default function Account() {
   const [archivedBots, setArchivedBots] = useState<MobileBot[]>([]);
   const [usage, setUsage] = useState<{
     runs: number;
-    inputTokens: number;
-    outputTokens: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    totalTokens?: number | null;
   } | null>(null);
   const { avatarStyle, updateAvatarStyle } = useAvatarStyle();
   const appearance = getCachedAppearancePreference();
@@ -135,7 +136,12 @@ export default function Account() {
     void rpc<MobileMe>("me")
       .then(setMe)
       .catch(() => undefined);
-    void rpc<{ runs: number; inputTokens: number; outputTokens: number }>("usage/summary")
+    void rpc<{
+      runs: number;
+      inputTokens: number | null;
+      outputTokens: number | null;
+      totalTokens?: number | null;
+    }>("usage/summary")
       .then(setUsage)
       .catch(() => undefined);
     if (Platform.OS === "android") {
@@ -154,7 +160,7 @@ export default function Account() {
         usage
           ? t("{runs} runs · {tokens} tokens", {
               runs: usage.runs,
-              tokens: usage.inputTokens + usage.outputTokens,
+              tokens: usage.totalTokens ?? "—",
             })
           : undefined
       }

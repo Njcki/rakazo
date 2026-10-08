@@ -28,14 +28,18 @@ import type {
   AgentSteeringMessage,
   AgentToolCompletion,
   AgentToolExecutionResult,
+  AgentUsage,
   ConnectorTool,
+  ModelCallObserver,
 } from "@rakazo/adapter-kit";
+import { DEFAULT_CONTEXT_STRATEGY } from "@rakazo/adapter-kit";
 import { usableModelId } from "@rakazo/contracts";
 import { getLogger } from "@rakazo/logging";
 import { isToolPauseResult } from "./approval-effect.js";
 import { connectionIdArgument, credentialArgument } from "./bot-secrets.js";
-import { builtinAgentTools, DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
+import { DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { withCloudflareGatewayAuth } from "./cloudflare-ai-gateway.js";
+import { shortenToolResultText } from "./context-selection.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
 import {
   normalizeOpenAiToolParameters,
@@ -43,6 +47,7 @@ import {
 } from "./openai-tool-parameters.js";
 import { PiRuntimeCredentialStore, toOAuthCredential } from "./pi-credentials.js";
 import { supplementPiModels } from "./pi-current-models.js";
+import { estimatePiImageTokens } from "./pi-image-context.js";
 import { registerLocalProvider } from "./pi-local-provider.js";
 import { codexComputeResidency } from "./pi-oauth.js";
 import {
@@ -51,7 +56,6 @@ import {
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
 import {
-  billedPromptTokens,
   clipToolResultContent,
   clipToolResultText,
   MODEL_STREAM_IDLE_TIMEOUT_MS,
@@ -65,6 +69,9 @@ import {
   type PiSessionHandle,
   type PiSessionRecorder,
 } from "./pi-session.js";
+import { observedPiStream } from "./pi-usage.js";
+import type { RuntimeContextDecision } from "./runtime-context.js";
+import { createRuntimeContextPolicy } from "./runtime-context.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
 import { textContentArg } from "./tool-text.js";
@@ -134,12 +141,25 @@ export function maxToolCallsPerTurn(env: NodeJS.ProcessEnv = process.env): numbe
 export interface PiAgentRuntimeOptions {
   /** Directory where Pi JSONL sessions are written. Omit to disable recording. */
   sessionRoot?: string;
+  modelCallObserver?: ModelCallObserver;
+  /** Sanitized per-call selection telemetry; never includes prompt or credentials. */
+  onContextDecision?: (
+    decision: RuntimeContextDecision & {
+      runId: string;
+      agentId?: string;
+      usage: AgentUsage;
+    },
+  ) => void;
 }
 
 export class PiAgentRuntime implements AgentRuntime {
   private readonly sessionRecorder?: PiSessionRecorder;
+  private readonly modelCallObserver?: ModelCallObserver;
+  private readonly onContextDecision?: PiAgentRuntimeOptions["onContextDecision"];
 
   constructor(options: PiAgentRuntimeOptions = {}) {
+    this.modelCallObserver = options.modelCallObserver;
+    this.onContextDecision = options.onContextDecision;
     this.sessionRecorder = options.sessionRoot
       ? new PiJsonlSessionRecorder(options.sessionRoot)
       : undefined;
@@ -150,7 +170,12 @@ export class PiAgentRuntime implements AgentRuntime {
       id: "pi",
       contractVersion: "1",
       adapterVersion: "0.1.0",
-      capabilities: { streaming: true, compaction: true, tools: true, scripted: false },
+      capabilities: {
+        streaming: true,
+        compaction: true,
+        tools: true,
+        scripted: false,
+      },
     };
   }
 
@@ -208,12 +233,15 @@ export class PiAgentRuntime implements AgentRuntime {
           return;
         }
         const { models, model, apiKey } = selectedModel;
-        const toolDefs = request.tools.length ? request.tools : builtinAgentTools;
+        const toolDefs = request.tools;
         const nestedAgents = new Set<Agent>();
         const completionModel = modelForCompletion(model, request.model.maxTokens);
         trackedBudget = toolCallBudgetFor(request.runId);
         const host: ToolHost = {
           queue,
+          context,
+          onContextDecision: this.onContextDecision,
+          modelCallObserver: this.modelCallObserver,
           request,
           models,
           model: completionModel,
@@ -274,6 +302,10 @@ export class PiAgentRuntime implements AgentRuntime {
           }
         }
 
+        const contextPolicy = createRuntimeContextPolicy(request, context, {
+          credentialScope: apiKey,
+          imageTokens: estimatePiImageTokens,
+        });
         let agent: Agent;
         agent = new Agent({
           sessionId: conversationSessionId(request.threadId, request.botId),
@@ -286,6 +318,32 @@ export class PiAgentRuntime implements AgentRuntime {
               withCloudflareGatewayAuth(request.model, options),
               request.model.maxTokens,
               () => selectedModel.credentials?.accessToken ?? apiKey,
+              (preparedOptions) =>
+                observedPiStream(
+                  models,
+                  m,
+                  ctx,
+                  preparedOptions,
+                  (event) => queue.push(event),
+                  this.modelCallObserver,
+                  { operationKind: request.usageOperationKind ?? "answer" },
+                  {
+                    prepareContext: contextPolicy.prepareContext,
+                    imageTokens: estimatePiImageTokens,
+                    recordUsage: request.onUsage,
+                    onUsage: (usage) => {
+                      contextPolicy.onUsage(usage);
+                      const decision = contextPolicy.getDecision();
+                      if (decision)
+                        this.onContextDecision?.({
+                          ...decision,
+                          runId: request.runId,
+                          usage,
+                        });
+                    },
+                  },
+                ),
+              request.model.cacheCapabilities?.retentionMode,
             ),
           getApiKey: async () => apiKey,
           transformContext: async (messages) =>
@@ -296,7 +354,11 @@ export class PiAgentRuntime implements AgentRuntime {
           finishTurn: async (turn, turnSignal) => {
             await deliverFinishedShells(
               (text) => {
-                agent.followUp({ role: "user", content: text, timestamp: Date.now() });
+                agent.followUp({
+                  role: "user",
+                  content: text,
+                  timestamp: Date.now(),
+                });
               },
               host.pendingShells,
               turn,
@@ -441,21 +503,6 @@ export class PiAgentRuntime implements AgentRuntime {
               streamed = text;
               queue.push({ type: "text", text });
             }
-            if ("usage" in event.message && event.message.usage) {
-              const usage = billedPromptTokens(event.message.usage);
-              queue.push({
-                type: "usage",
-                ...usage,
-                provider: model.provider,
-                model: model.id,
-              });
-              getLogger().debug("model usage", {
-                runId: request.runId,
-                provider: model.provider,
-                model: model.id,
-                ...usage,
-              });
-            }
           }
         });
 
@@ -570,15 +617,16 @@ function toPiImages(images: AgentRunRequest["currentTurnImages"]) {
   }));
 }
 
-function configuredOpenRouterModel(id: string): Model<"openai-completions"> {
+function configuredOpenRouterModel(
+  id: string,
+  contextWindow = 16_384,
+): Model<"openai-completions"> {
   // A configured model can intentionally be newer than Pi's static catalog. Keep
   // pricing conservative, but enable reasoning: unknown OpenRouter endpoints
   // (e.g. gemini-3.7-flash before the snapshot catches up) often mandate it, and
   // thinkingLevel "off" becomes effort "none" which those endpoints reject.
-  // The output ceiling follows from that reasoning flag: a 4k placeholder would
-  // clamp the reasoning budget back to a size the thinking alone can consume.
-  // It cannot outgrow the conservative window this placeholder also assumes.
-  const contextWindow = 16_384;
+  // Reserve half the conservative fallback window for input. A model card's
+  // configured limits override this placeholder below.
   return {
     id,
     name: id,
@@ -589,7 +637,7 @@ function configuredOpenRouterModel(id: string): Model<"openai-completions"> {
     input: ["text"],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow,
-    maxTokens: Math.min(REASONING_MODEL_MAX_TOKENS, contextWindow),
+    maxTokens: Math.min(REASONING_MODEL_MAX_TOKENS, Math.max(1, Math.floor(contextWindow / 2))),
   };
 }
 
@@ -617,10 +665,20 @@ export function resolveRuntimeModel(modelConfig: AgentRunRequest["model"]): {
   if (
     !model &&
     provider === "openrouter" &&
-    envDefaultProvider === "openrouter" &&
-    modelId === envDefaultModel
+    modelId &&
+    ((envDefaultProvider === "openrouter" && modelId === envDefaultModel) ||
+      modelConfig.contextWindow !== undefined)
   ) {
-    model = configuredOpenRouterModel(modelId);
+    model = configuredOpenRouterModel(modelId, modelConfig.contextWindow);
+  }
+  if (model && (modelConfig.contextWindow !== undefined || modelConfig.maxTokens !== undefined)) {
+    model = {
+      ...model,
+      ...(modelConfig.contextWindow !== undefined
+        ? { contextWindow: modelConfig.contextWindow }
+        : {}),
+      ...(modelConfig.maxTokens !== undefined ? { maxTokens: modelConfig.maxTokens } : {}),
+    };
   }
   const apiKey = modelConfig.oauth
     ? undefined
@@ -680,8 +738,41 @@ export function modelsForRequest(
 }
 
 function toAgentTools(toolDefs: readonly ConnectorTool[], host: ToolHost): AgentTool[] {
-  const names = normalizeAgentToolNames(toolDefs);
-  return toolDefs.map((tool, index) => toAgentTool(tool, host, names[index]!));
+  // Registration order is incidental. Canonicalize before allocating collision suffixes
+  // so both provider-visible names and JSON schema serialization stay stable.
+  const canonicalJson = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonicalJson);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([key, item]) => [key, canonicalJson(item)]),
+      );
+    }
+    return value;
+  };
+  const ordered = toolDefs
+    .map((tool) => ({
+      tool: {
+        ...tool,
+        inputSchema: canonicalJson(tool.inputSchema) as Record<string, unknown>,
+      },
+      key: JSON.stringify(canonicalJson(tool)),
+    }))
+    .sort((a, b) =>
+      a.tool.name < b.tool.name
+        ? -1
+        : a.tool.name > b.tool.name
+          ? 1
+          : a.key < b.key
+            ? -1
+            : a.key > b.key
+              ? 1
+              : 0,
+    )
+    .map(({ tool }) => tool);
+  const names = normalizeAgentToolNames(ordered);
+  return ordered.map((tool, index) => toAgentTool(tool, host, names[index]!));
 }
 
 /**
@@ -819,6 +910,9 @@ function toHistory(
         role: "user" as const,
         content: images.length ? [{ type: "text" as const, text }, ...images] : text,
         timestamp: Date.now(),
+        rakazoHistory: true,
+        rakazoMessageId: m.id,
+        rakazoCreatedAt: m.createdAt,
       };
     });
 }
@@ -899,7 +993,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
         };
       }
       if (tool.name === "remember") {
-        return { content: String(raw.content ?? ""), path: String(raw.path ?? "MEMORY.md") };
+        return {
+          content: String(raw.content ?? ""),
+          path: String(raw.path ?? "MEMORY.md"),
+        };
       }
       if (tool.name === "request_takeover") {
         return { reason: String(raw.reason ?? "I need you on the screen.") };
@@ -992,8 +1089,10 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
     execute: async (toolCallId, params): Promise<AgentToolResult<unknown>> => {
       host.signal.throwIfAborted();
       const args = (params ?? {}) as Record<string, unknown>;
-      const executionId =
+      const rawCallId =
         toolCallId || `${host.request.runId}:${tool.name}:${host.toolCallSeq.value++}`;
+      // Backend idempotency includes the agent namespace; Pi wire IDs remain untouched.
+      const executionId = JSON.stringify(["pi-tool", host.agentNamespace ?? "main", rawCallId]);
       if (!beginToolCall(host)) {
         return {
           content: [{ type: "text", text: "Skipped: tool-call limit reached." }],
@@ -1053,7 +1152,17 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
                 return result;
               }
               return {
-                content: [{ type: "text", text: summarizeToolResult(result) }],
+                content: [
+                  {
+                    type: "text",
+                    text: serializeToolResult(
+                      result,
+                      host.request.contextStrategy,
+                      tool.name,
+                      args,
+                    ),
+                  },
+                ],
                 details: result,
               };
             }
@@ -1088,12 +1197,22 @@ function toAgentTool(tool: ConnectorTool, host: ToolHost, exposedName: string): 
               return boundAgentToolResult(result);
             }
             return {
-              content: [{ type: "text", text: summarizeToolResult(result) }],
+              content: [
+                {
+                  type: "text",
+                  text: serializeToolResult(result, host.request.contextStrategy, tool.name, args),
+                },
+              ],
               details: result,
             };
           }
           return {
-            content: [{ type: "text", text: `${tool.name} is unavailable without an executor.` }],
+            content: [
+              {
+                type: "text",
+                text: `${tool.name} is unavailable without an executor.`,
+              },
+            ],
             details: { error: "no executor" },
           };
         })();
@@ -1155,7 +1274,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     }
   } catch (error) {
     const message = sanitizeError(error instanceof Error ? error.message : String(error));
-    host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
+    host.queue.push({
+      type: "subagent",
+      agentId,
+      name,
+      task,
+      status: "failed",
+      result: message,
+    });
     host.subagentGate.release();
     return `Subagent failed: ${message}`;
   }
@@ -1163,29 +1289,50 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
   const selectedModel = resolveRuntimeModel(requestModel);
   if (!selectedModel.model) {
     const message = `Unknown model ${selectedModel.provider}/${selectedModel.modelId}`;
-    host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
+    host.queue.push({
+      type: "subagent",
+      agentId,
+      name,
+      task,
+      status: "failed",
+      result: message,
+    });
     host.subagentGate.release();
     return `Subagent failed: ${message}`;
   }
   const subagentModel = modelForCompletion(selectedModel.model, requestModel.maxTokens);
 
-  const childDefs = (host.request.tools.length ? host.request.tools : builtinAgentTools).filter(
-    (tool) => !DELEGATION_TOOL_NAMES.has(tool.name),
-  );
+  const childDefs = host.request.tools.filter((tool) => !DELEGATION_TOOL_NAMES.has(tool.name));
   const nestedHost: ToolHost = {
     ...host,
     models: selectedModel.models,
     model: subagentModel,
     apiKey: selectedModel.apiKey,
     depth: 1,
+    agentNamespace: agentId,
     pendingShells: [],
   };
+  const contextPolicy = createRuntimeContextPolicy(
+    {
+      ...host.request,
+      model: requestModel,
+      history: [],
+      prompt: task,
+      sourceMessageId: undefined,
+    },
+    host.context,
+    { credentialScope: selectedModel.apiKey, imageTokens: estimatePiImageTokens },
+  );
   let nested!: Agent;
   nested = new Agent({
     finishTurn: async (turn, turnSignal) => {
       await deliverFinishedShells(
         (text) => {
-          nested.followUp({ role: "user", content: text, timestamp: Date.now() });
+          nested.followUp({
+            role: "user",
+            content: text,
+            timestamp: Date.now(),
+          });
         },
         nestedHost.pendingShells,
         turn,
@@ -1201,6 +1348,33 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
         withCloudflareGatewayAuth(requestModel, options),
         requestModel.maxTokens,
         () => selectedModel.credentials?.accessToken ?? selectedModel.apiKey,
+        (preparedOptions) =>
+          observedPiStream(
+            selectedModel.models,
+            m,
+            ctx,
+            preparedOptions,
+            (event) => host.queue.push(event),
+            host.modelCallObserver,
+            { operationKind: "subagent", agentId },
+            {
+              prepareContext: contextPolicy.prepareContext,
+              imageTokens: estimatePiImageTokens,
+              recordUsage: host.request.onUsage,
+              onUsage: (usage) => {
+                contextPolicy.onUsage(usage);
+                const decision = contextPolicy.getDecision();
+                if (decision)
+                  host.onContextDecision?.({
+                    ...decision,
+                    runId: host.request.runId,
+                    agentId,
+                    usage,
+                  });
+              },
+            },
+          ),
+        requestModel.cacheCapabilities?.retentionMode,
       ),
     getApiKey: async () => selectedModel.apiKey,
     transformContext: async (messages) =>
@@ -1261,21 +1435,6 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     if (event.type === "message_end" && event.message.role === "assistant") {
       const text = assistantText(event.message);
       if (text && !streamed) streamed = text;
-      if ("usage" in event.message && event.message.usage) {
-        const usage = billedPromptTokens(event.message.usage);
-        host.queue.push({
-          type: "usage",
-          ...usage,
-          provider: subagentModel.provider,
-          model: subagentModel.id,
-        });
-        getLogger().debug("model usage", {
-          runId: host.request.runId,
-          provider: subagentModel.provider,
-          model: subagentModel.id,
-          ...usage,
-        });
-      }
     }
   });
 
@@ -1311,7 +1470,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     const error = nested.state.errorMessage || providerFailureText(nested.state.messages.at(-1));
     if (error && !budgetExceeded) {
       const message = sanitizeProviderError(subagentModel.provider, error);
-      host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
+      host.queue.push({
+        type: "subagent",
+        agentId,
+        name,
+        task,
+        status: "failed",
+        result: message,
+      });
       return `Subagent failed: ${message}`;
     }
     const budgetMessage = budgetExceeded
@@ -1333,7 +1499,14 @@ async function executeSubagent(host: ToolHost, executionId: string, args: Record
     return clipped;
   } catch (error) {
     const message = sanitizeError(error instanceof Error ? error.message : String(error));
-    host.queue.push({ type: "subagent", agentId, name, task, status: "failed", result: message });
+    host.queue.push({
+      type: "subagent",
+      agentId,
+      name,
+      task,
+      status: "failed",
+      result: message,
+    });
     return `Subagent failed: ${message}`;
   } finally {
     host.nestedAgents.delete(nested);
@@ -1749,11 +1922,19 @@ export function jsonField(spec: unknown): ReturnType<typeof Type.String> {
   return Type.String(options);
 }
 
-function summarizeToolResult(result: unknown) {
+function serializeToolResult(
+  result: unknown,
+  strategy: AgentRunRequest["contextStrategy"],
+  name: string,
+  args: Record<string, unknown>,
+) {
   try {
     const text = JSON.stringify(result);
     if (!text) return "ok";
-    return clipToolResultText(text);
+    if (text.length <= 12_000) return text;
+    return (strategy ?? DEFAULT_CONTEXT_STRATEGY) === "current"
+      ? clipToolResultText(text)
+      : shortenToolResultText(text, 12_000, { name, arguments: args });
   } catch {
     return "ok";
   }
@@ -1888,6 +2069,9 @@ interface EventQueue {
 }
 
 interface ToolHost {
+  context?: Partial<AdapterContext>;
+  onContextDecision?: PiAgentRuntimeOptions["onContextDecision"];
+  modelCallObserver?: ModelCallObserver;
   queue: EventQueue;
   request: AgentRunRequest;
   models: Models;
@@ -1901,6 +2085,7 @@ interface ToolHost {
   abortTurn(): void;
   signal: AbortSignal;
   depth: number;
+  agentNamespace?: string;
   pausePending: boolean;
   /** Shell commands that returned output and are still running. */
   pendingShells: Array<Promise<FinishedShellCommand>>;
@@ -2112,7 +2297,11 @@ export function codexStreamIdleWatchdog(
 
   const describeTimeout = (message: AssistantMessage): AssistantMessage =>
     timedOut && message.stopReason === "aborted"
-      ? { ...message, stopReason: "error", errorMessage: CODEX_STREAM_IDLE_TIMEOUT_MESSAGE }
+      ? {
+          ...message,
+          stopReason: "error",
+          errorMessage: CODEX_STREAM_IDLE_TIMEOUT_MESSAGE,
+        }
       : message;
 
   const rewrite = (event: AssistantMessageEvent): AssistantMessageEvent => {
@@ -2216,31 +2405,33 @@ export function reliableModelStream(
   options: ModelsSimpleStreamOptions | undefined,
   configuredMaxTokens: number | undefined,
   accessToken?: string | (() => string | undefined),
+  runStream?: (options: ModelsSimpleStreamOptions) => AssistantMessageEventStream,
+  cacheRetention?: ModelsSimpleStreamOptions["cacheRetention"],
 ): AssistantMessageEventStream {
   const watchdog = isCodexModel(model) ? codexStreamIdleWatchdog(options?.signal) : undefined;
   try {
-    const stream = models.streamSimple(
+    const preparedOptions = reliableStreamOptions(
       model,
-      context,
-      reliableStreamOptions(
-        model,
-        watchdog
-          ? {
-              ...options,
-              signal: watchdog.signal,
-              fetch: codexRequestFetch(options?.fetch, MODEL_STREAM_IDLE_TIMEOUT_MS),
-              // Only a 2xx arms the shared watchdog. Error bodies are bounded by
-              // the fetch wrapper, and a caller-supplied hook still sees every status.
-              onResponse: (response, requestModel) => {
-                if (response.status >= 200 && response.status < 300) watchdog.ping();
-                return options?.onResponse?.(response, requestModel);
-              },
-            }
-          : options,
-        configuredMaxTokens,
-        accessToken,
-      ),
+      watchdog
+        ? {
+            ...options,
+            signal: watchdog.signal,
+            fetch: codexRequestFetch(options?.fetch, MODEL_STREAM_IDLE_TIMEOUT_MS),
+            // Only a 2xx arms the shared watchdog. Error bodies are bounded by
+            // the fetch wrapper, and a caller-supplied hook still sees every status.
+            onResponse: (response, requestModel) => {
+              if (response.status >= 200 && response.status < 300) watchdog.ping();
+              return options?.onResponse?.(response, requestModel);
+            },
+          }
+        : options,
+      configuredMaxTokens,
+      accessToken,
+      cacheRetention,
     );
+    const stream = runStream
+      ? runStream(preparedOptions)
+      : models.streamSimple(model, context, preparedOptions);
     return watchdog ? watchdog.wrap(stream) : stream;
   } catch (error) {
     watchdog?.dispose();
@@ -2260,9 +2451,11 @@ export function reliableStreamOptions(
   options?: ModelsSimpleStreamOptions,
   configuredMaxTokens?: number,
   accessToken?: string | (() => string | undefined),
+  cacheRetention?: ModelsSimpleStreamOptions["cacheRetention"],
 ): ModelsSimpleStreamOptions {
   let next: ModelsSimpleStreamOptions = {
     ...options,
+    ...(cacheRetention ? { cacheRetention } : {}),
     timeoutMs: options?.timeoutMs ?? MODEL_STREAM_TIMEOUT_MS,
     maxRetries: options?.maxRetries ?? modelStreamMaxRetries(),
     maxTokens: resolveCompletionMaxTokens(

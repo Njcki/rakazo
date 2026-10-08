@@ -1,4 +1,4 @@
-import { Stack, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -9,13 +9,12 @@ import {
   TextInput,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { NativeActionButton } from "../components/native-action-button";
-import { cancelHeaderOptions } from "../components/sheet-header";
-import { changePassword } from "../lib/api";
-import { mobileTokens } from "../lib/appearance";
-import { useI18n } from "../lib/i18n";
-import { native, useThemedStyles } from "../lib/native";
-import { errorText } from "../lib/user-error";
+import { NativeActionButton } from "../../components/native-action-button";
+import { changePassword } from "../../lib/api";
+import { mobileTokens } from "../../lib/appearance";
+import { useI18n } from "../../lib/i18n";
+import { native, useThemedStyles } from "../../lib/native";
+import { errorText } from "../../lib/user-error";
 
 export default function ChangePassword() {
   const router = useRouter();
@@ -67,7 +66,6 @@ export default function ChangePassword() {
 
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
-      <Stack.Screen options={cancelHeaderOptions(t("Cancel"), close)} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.screen}

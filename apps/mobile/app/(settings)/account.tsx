@@ -14,20 +14,20 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppMark } from "../components/app-mark";
-import { useAvatarStyle } from "../components/avatar-style";
-import { BotAvatar } from "../components/bot-avatar";
-import { NativeActionButton } from "../components/native-action-button";
-import { NativeSegmentedControl } from "../components/native-segmented-control";
-import { NativeSymbol } from "../components/native-symbol";
+import { AppMark } from "../../components/app-mark";
+import { useAvatarStyle } from "../../components/avatar-style";
+import { BotAvatar } from "../../components/bot-avatar";
+import { NativeActionButton } from "../../components/native-action-button";
+import { NativeSegmentedControl } from "../../components/native-segmented-control";
+import { NativeSymbol } from "../../components/native-symbol";
 import {
   SettingsGroup,
   SettingsLabel,
   SettingsRow,
   SettingsSwitch,
   useStackedSettings,
-} from "../components/settings-group";
-import type { MobileBot, MobileMe } from "../lib/api";
+} from "../../components/settings-group";
+import type { MobileBot, MobileMe } from "../../lib/api";
 import {
   currentApiBase,
   deleteAccount,
@@ -37,17 +37,17 @@ import {
   rpc,
   selectedSpaceId,
   signOut,
-} from "../lib/api";
-import { formatUpdateLabel, getAppVersionInfo } from "../lib/app-version";
+} from "../../lib/api";
+import { formatUpdateLabel, getAppVersionInfo } from "../../lib/app-version";
 import {
   getCachedAppearancePreference,
   mobileTokens,
   setAppearancePreference,
-} from "../lib/appearance";
-import { explicitSignInRoute } from "../lib/auth-routing";
-import { promptAccountDeletion } from "../lib/delete-account-prompt";
-import { setUiLocale, useI18n } from "../lib/i18n";
-import type { LiveNotificationSettings } from "../lib/live-notifications";
+} from "../../lib/appearance";
+import { replaceWithSignIn } from "../../lib/auth-routing";
+import { promptAccountDeletion } from "../../lib/delete-account-prompt";
+import { setUiLocale, useI18n } from "../../lib/i18n";
+import type { LiveNotificationSettings } from "../../lib/live-notifications";
 import {
   canPostPromotedNotifications,
   DEFAULT_LIVE_NOTIFICATION_SETTINGS,
@@ -55,24 +55,24 @@ import {
   openLiveNotificationSettings,
   openPromotedNotificationSettings,
   setLiveNotificationSettings,
-} from "../lib/live-notifications";
-import { presentMessageActionSheet } from "../lib/message-action-sheet";
-import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
-import { registerPushToken } from "../lib/push";
+} from "../../lib/live-notifications";
+import { presentMessageActionSheet } from "../../lib/message-action-sheet";
+import { native, useResolvedAppearance, useThemedStyles } from "../../lib/native";
+import { registerPushToken } from "../../lib/push";
 import {
   getCachedRemoteImagesEnabled,
   setRemoteImagesPreference,
   subscribeRemoteImages,
-} from "../lib/remote-images-preference";
+} from "../../lib/remote-images-preference";
 import {
   getCachedResponseStreamingEnabled,
   setResponseStreamingPreference,
   subscribeResponseStreaming,
-} from "../lib/response-streaming";
-import { continueWithSso } from "../lib/sso";
-import type { AccountUiLocale } from "../lib/ui-locale";
-import { ACCOUNT_UI_LOCALES, UI_LOCALE_LABELS } from "../lib/ui-locale";
-import { errorText } from "../lib/user-error";
+} from "../../lib/response-streaming";
+import { continueWithSso } from "../../lib/sso";
+import type { AccountUiLocale } from "../../lib/ui-locale";
+import { ACCOUNT_UI_LOCALES, UI_LOCALE_LABELS } from "../../lib/ui-locale";
+import { errorText } from "../../lib/user-error";
 
 /** Render account settings, including the entry point for voice configuration. */
 export default function Account() {
@@ -199,8 +199,7 @@ export default function Account() {
     setSignOutError(null);
     try {
       await signOut();
-      router.dismissAll();
-      router.replace(explicitSignInRoute);
+      replaceWithSignIn();
     } catch (err) {
       setSignOutError(errorText(err, t("Could not sign out")));
       setPending(false);
@@ -327,8 +326,7 @@ export default function Account() {
         await deleteAccount(undefined, token);
       }
       setDeleteOpen(false);
-      router.dismissAll();
-      router.replace("/sign-in");
+      replaceWithSignIn("/sign-in");
     } catch (err) {
       setDeleteError(errorText(err, t("Could not delete account")));
     } finally {

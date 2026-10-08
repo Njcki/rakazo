@@ -302,7 +302,7 @@ export const DE_MESSAGES: Record<string, string> = {
   Skip: "Überspringen",
   "Take control": "Kontrolle übernehmen",
   "You have control": "Du hast die Kontrolle",
-  // app/models.tsx
+  // app/(settings)/models.tsx
   "Active model": "Aktives Modell",
   "Authorization code": "Autorisierungscode",
   "Configured by deployment": "Durch die Bereitstellung konfiguriert",
@@ -375,7 +375,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "http://localhost:53692/callback?code=…": "http://localhost:53692/callback?code=…",
   "sk-…": "sk-…",
   "this model": "dieses Modell",
-  // app/integrations.tsx
+  // app/(settings)/integrations.tsx
   "1 tool": "1 Tool",
   "Account label": "Kontobezeichnung",
   Accounts: "Konten",
@@ -431,7 +431,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "https://example.com/openapi.json": "https://example.com/openapi.json",
   "https://executor.example/mcp": "https://executor.example/mcp",
   "{count} tools": "{count} Tools",
-  // app/integration-setup.tsx
+  // app/(settings)/integration-setup.tsx
   "API key": "API-Schlüssel",
   "Account ID": "Konto-ID",
   "Gateway ID": "Gateway-ID",
@@ -451,7 +451,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Project ID": "Projekt-ID",
   "Set up Executor on your server in the web app.":
     "Richte Executor auf deinem Server in der Web-App ein.",
-  // app/voice.tsx
+  // app/(settings)/voice.tsx
   Connect: "Verbinden",
   "Connect a voice provider first.": "Verbinde zuerst einen Sprachanbieter.",
   "Connected {name}.": "{name} verbunden.",
@@ -478,7 +478,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "This device": "Dieses Gerät",
   "Your phone's built-in voice. Free, no account needed":
     "Die eingebaute Stimme deines Telefons. Kostenlos, kein Konto nötig",
-  // app/account.tsx
+  // app/(settings)/account.tsx
   "Agent messages": "Agent-Nachrichten",
   "Alerts from routines": "Meldungen von Routinen",
   Appearance: "Erscheinungsbild",
@@ -523,7 +523,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Your account": "Dein Konto",
   "{runs} runs · {tokens} tokens": "{runs} Ausführungen · {tokens} Token",
   "{style} avatars": "Avatare: {style}",
-  // app/change-password.tsx
+  // app/(settings)/change-password.tsx
   "Confirm password": "Passwort bestätigen",
   "Could not change password": "Passwort konnte nicht geändert werden",
   "New password": "Neues Passwort",
@@ -673,7 +673,7 @@ export const DE_MESSAGES: Record<string, string> = {
   "Something went wrong. Try again.": "Etwas ist schiefgelaufen. Versuche es erneut.",
   // lib/voice.ts
   "Could not play that clip.": "Dieser Clip konnte nicht abgespielt werden.",
-  // app/models.tsx
+  // app/(settings)/models.tsx
   "Add connected model": "Verbundenes Modell hinzufügen",
   "Add connected models to use them as backups.":
     "Füge verbundene Modelle hinzu, um sie als Backups zu verwenden.",

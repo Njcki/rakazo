@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("../app/models.tsx", import.meta.url), "utf8");
+const source = readFileSync(new URL("../app/(settings)/models.tsx", import.meta.url), "utf8");
 
 describe("native backup editor loading contract", () => {
   it("requires a successful load before enabling edits or saving", () => {

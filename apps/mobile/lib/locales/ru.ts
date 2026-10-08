@@ -659,7 +659,7 @@ export const RU_MESSAGES: Record<string, string> = {
     "Встроенный голос телефона. Бесплатно, без аккаунта",
   "Could not save that preference": "Не удалось сохранить эту настройку",
   Username: "Имя пользователя",
-  // app/models.tsx
+  // app/(settings)/models.tsx
   "Add connected model": "Добавить подключённую модель",
   "Add connected models to use them as backups.":
     "Добавьте подключённые модели, чтобы использовать их как резервные.",

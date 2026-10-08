@@ -44,22 +44,27 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { NativeActionButton } from "../components/native-action-button";
-import { NativeSwitch } from "../components/native-switch";
-import { Checkmark, Chevron } from "../components/row-accessories";
-import type { ApiRequestContext, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
-import { captureApiRequestContext, rpc, selectedSpaceId } from "../lib/api";
-import { mobileTokens } from "../lib/appearance";
-import { useI18n } from "../lib/i18n";
-import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { NativeActionButton } from "../../components/native-action-button";
+import { NativeSwitch } from "../../components/native-switch";
+import { Checkmark, Chevron } from "../../components/row-accessories";
+import type {
+  ApiRequestContext,
+  MobileMe,
+  MobileModel,
+  MobileModelCredential,
+} from "../../lib/api";
+import { captureApiRequestContext, rpc, selectedSpaceId } from "../../lib/api";
+import { mobileTokens } from "../../lib/appearance";
+import { useI18n } from "../../lib/i18n";
+import { presentMessageActionSheet } from "../../lib/message-action-sheet";
 import {
   cancelModelOAuthAttempt,
   finishModelOAuthAttempt,
   waitForModelOAuth,
-} from "../lib/model-auth";
-import { mobileBackupScopeIsCurrent } from "../lib/model-backups";
-import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
-import { errorText } from "../lib/user-error";
+} from "../../lib/model-auth";
+import { mobileBackupScopeIsCurrent } from "../../lib/model-backups";
+import { native, useResolvedAppearance, useThemedStyles } from "../../lib/native";
+import { errorText } from "../../lib/user-error";
 
 function connectionMaxTokensField(providerId: string, stored: number | undefined): string {
   if (providerId === OPENAI_COMPATIBLE_PROVIDER_ID) {

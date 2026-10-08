@@ -1,13 +1,14 @@
 import type { IntegrationSetupState } from "@rakazo/contracts";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput } from "react-native";
-import { NativeActionButton } from "../components/native-action-button";
-import { NativeSegmentedControl } from "../components/native-segmented-control";
-import { rpc } from "../lib/api";
-import { mobileTokens } from "../lib/appearance";
-import { useI18n } from "../lib/i18n";
-import { native, useThemedStyles } from "../lib/native";
+import { NativeActionButton } from "../../components/native-action-button";
+import { NativeSegmentedControl } from "../../components/native-segmented-control";
+import { rpc } from "../../lib/api";
+import { mobileTokens } from "../../lib/appearance";
+import { useI18n } from "../../lib/i18n";
+import { native, useThemedStyles } from "../../lib/native";
+import { closeSettingsSheet } from "../../lib/settings-sheet";
 
 export default function IntegrationSetup() {
   const router = useRouter();
@@ -20,9 +21,18 @@ export default function IntegrationSetup() {
   const [projectId, setProjectId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A sheet dismissed mid-request must not replace whatever screen is in front by then.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     void rpc<IntegrationSetupState>("integrationSetup/get")
       .then((setup) => {
+        if (!mounted.current) return;
         if (!setup.canConfigure) {
           router.replace("/integrations");
           return;
@@ -56,7 +66,7 @@ export default function IntegrationSetup() {
             },
       );
       setKey("");
-      router.replace("/integrations");
+      if (mounted.current) router.replace("/integrations");
     } catch {
       setError(t("Could not verify or save these credentials"));
     } finally {
@@ -184,7 +194,8 @@ export default function IntegrationSetup() {
         t("Continue"),
         () => {
           if (managed && key.trim()) void save();
-          else router.replace("/");
+          // Leaves settings: back to the screen under the sheet, or Home after first-run sign-in.
+          else closeSettingsSheet();
         },
         busy ||
           (managed &&
@@ -192,7 +203,7 @@ export default function IntegrationSetup() {
             !configured &&
             (!key.trim() || (choice === "pipedream" && (!clientId.trim() || !projectId.trim())))),
       )}
-      {button(t("Skip"), () => router.replace("/"), busy)}
+      {button(t("Skip"), closeSettingsSheet, busy)}
     </ScrollView>
   );
 }

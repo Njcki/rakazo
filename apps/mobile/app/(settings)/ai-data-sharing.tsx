@@ -8,17 +8,17 @@ import {
   SettingsRow,
   SettingsSwitch,
   useStackedSettings,
-} from "../components/settings-group";
-import { promptAiConsent } from "../lib/ai-consent";
+} from "../../components/settings-group";
+import { promptAiConsent } from "../../lib/ai-consent";
 import {
   aiDataSharingPlaceholder,
   aiPrivacyLinks,
   groupAiRecipients,
-} from "../lib/ai-data-sharing";
-import { rpc } from "../lib/api";
-import { useI18n } from "../lib/i18n";
-import { native, useThemedStyles } from "../lib/native";
-import { errorText } from "../lib/user-error";
+} from "../../lib/ai-data-sharing";
+import { rpc } from "../../lib/api";
+import { useI18n } from "../../lib/i18n";
+import { native, useThemedStyles } from "../../lib/native";
+import { errorText } from "../../lib/user-error";
 
 export default function AiDataSharing() {
   const { t } = useI18n();

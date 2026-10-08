@@ -21,23 +21,23 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ConnectorIcon } from "../components/connector-icon";
-import { NativeActionButton } from "../components/native-action-button";
-import { Chevron } from "../components/row-accessories";
-import { rpc } from "../lib/api";
-import { mobileTokens } from "../lib/appearance";
-import { useI18n } from "../lib/i18n";
-import type { IntegrationsCacheScope, IntegrationsSnapshot } from "../lib/integrations-cache";
+import { ConnectorIcon } from "../../components/connector-icon";
+import { NativeActionButton } from "../../components/native-action-button";
+import { Chevron } from "../../components/row-accessories";
+import { rpc } from "../../lib/api";
+import { mobileTokens } from "../../lib/appearance";
+import { useI18n } from "../../lib/i18n";
+import type { IntegrationsCacheScope, IntegrationsSnapshot } from "../../lib/integrations-cache";
 import {
   integrationsCacheScope,
   isIntegrationsScopeCurrent,
   persistedIntegrationsCacheScope,
   readIntegrationsCache,
   writeIntegrationsCache,
-} from "../lib/integrations-cache";
-import { loadLastBotId } from "../lib/last-bot";
-import { native, useThemedStyles } from "../lib/native";
-import { errorText } from "../lib/user-error";
+} from "../../lib/integrations-cache";
+import { loadLastBotId } from "../../lib/last-bot";
+import { native, useThemedStyles } from "../../lib/native";
+import { errorText } from "../../lib/user-error";
 
 type SourceKind = "treg" | "executor" | "mcp" | "api" | "graphql";
 type ConnectionTool = { name: string; description: string };

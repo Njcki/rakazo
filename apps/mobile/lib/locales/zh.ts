@@ -640,7 +640,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Your phone's built-in voice. Free, no account needed": "手机自带的语音。免费，无需账户",
   "Could not save that preference": "无法保存该设置",
   Username: "用户名",
-  // app/models.tsx
+  // app/(settings)/models.tsx
   "Add connected model": "添加已连接模型",
   "Add connected models to use them as backups.": "添加已连接模型作为备用模型。",
   "Backup models": "备用模型",

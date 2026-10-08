@@ -1474,6 +1474,10 @@ msgstr ""
 msgid "Could not rename section"
 msgstr "Abschnitt konnte nicht umbenannt werden"
 
+#: src/pages/shell/dialogs.tsx
+msgid "Could not rename space"
+msgstr "Space konnte nicht umbenannt werden"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not render chart"
 msgstr "Diagramm konnte nicht angezeigt werden"
@@ -3420,6 +3424,11 @@ msgstr "Wird entfernt…"
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Abschnitt umbenennen"
+
+#: src/pages/Shell.tsx
+#: src/pages/shell/dialogs.tsx
+msgid "Rename space"
+msgstr "Space umbenennen"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Renews {day}"

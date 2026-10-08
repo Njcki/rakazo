@@ -302,6 +302,7 @@ describe("contracts", () => {
     expect(appContract.bots.archive).toBeTruthy();
     expect(appContract.bots.restore).toBeTruthy();
     expect(appContract.bots.remove).toBeTruthy();
+    expect(appContract.spaces.rename).toBeTruthy();
     expect(appContract.spaces.remove).toBeTruthy();
     expect(appContract.botSections.list).toBeTruthy();
     expect(appContract.botSections.create).toBeTruthy();

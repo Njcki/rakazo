@@ -1474,6 +1474,10 @@ msgstr "Не удалось переименовать соединение"
 msgid "Could not rename section"
 msgstr "Не удалось переименовать раздел"
 
+#: src/pages/shell/dialogs.tsx
+msgid "Could not rename space"
+msgstr "Не удалось переименовать пространство"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not render chart"
 msgstr "Не удалось отобразить диаграмму"
@@ -3420,6 +3424,11 @@ msgstr "Удаление…"
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Переименовать раздел"
+
+#: src/pages/Shell.tsx
+#: src/pages/shell/dialogs.tsx
+msgid "Rename space"
+msgstr "Переименовать пространство"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Renews {day}"

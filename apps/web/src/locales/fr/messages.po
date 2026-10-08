@@ -1474,6 +1474,10 @@ msgstr "Impossible de renommer la connexion"
 msgid "Could not rename section"
 msgstr "Impossible de renommer la section"
 
+#: src/pages/shell/dialogs.tsx
+msgid "Could not rename space"
+msgstr "Impossible de renommer l'espace"
+
 #: src/pages/shell/message-cards.tsx
 msgid "Could not render chart"
 msgstr "Impossible d'afficher le graphique"
@@ -3420,6 +3424,11 @@ msgstr "Retrait en cours…"
 #: src/pages/shell/dialogs.tsx
 msgid "Rename section"
 msgstr "Renommer la section"
+
+#: src/pages/Shell.tsx
+#: src/pages/shell/dialogs.tsx
+msgid "Rename space"
+msgstr "Renommer l'espace"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Renews {day}"

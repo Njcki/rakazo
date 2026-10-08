@@ -152,6 +152,7 @@ import {
   CannotDeleteDefaultSpaceError,
   CannotDeleteLastSpaceError,
   CannotDeleteSpaceAsNonOwnerError,
+  CannotRenameSpaceAsNonOwnerError,
   ComputerLimitError,
   claimEmptySpaceDeletionForMember,
   createExternalConversationRepos,
@@ -177,6 +178,7 @@ import {
   parseComputerMode,
   pushSessionExpiresAt,
   releaseSpaceDeletionClaim,
+  renameSpaceForMember,
   renewSpaceDeletionClaim,
   restoreBotUnderComputerQuota,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
@@ -801,12 +803,37 @@ export function createRouter(deps: RouterDeps) {
           name: space.name,
           isDefault: false,
           hasContent: false,
+          canRename: true,
           canDelete: true,
           bots: [],
           groups: [],
           externalConversations: [],
           botSections: [],
         };
+      }),
+      rename: authed.spaces.rename.handler(async ({ context, input }) => {
+        try {
+          return await renameSpaceForMember(deps.prisma, {
+            currentSpaceId: context.actor.spaceId,
+            userId: context.actor.userId,
+            spaceId: input.spaceId,
+            name: input.name,
+          });
+        } catch (error) {
+          if (error instanceof SpaceNotFoundError) {
+            throw new ORPCError("NOT_FOUND", { message: error.message });
+          }
+          if (error instanceof CannotRenameSpaceAsNonOwnerError) {
+            throw new ORPCError("FORBIDDEN", { message: error.message });
+          }
+          if (error instanceof InvalidSpaceNameError) {
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          }
+          if (error instanceof SpaceDeletionInProgressError) {
+            throw new ORPCError("CONFLICT", { message: error.message });
+          }
+          throw error;
+        }
       }),
       remove: authed.spaces.remove.handler(async ({ context, input }) => {
         let claimId: string | null = null;
@@ -5817,6 +5844,7 @@ async function spaceNavigationDto(
         name: membership.space.name,
         isDefault: membership.space.isDefault,
         hasContent: spacesWithContent.has(membership.spaceId),
+        canRename: membership.role === "owner" && membership.space.deletingAt === null,
         canDelete:
           membership.role === "owner" &&
           !membership.space.isDefault &&

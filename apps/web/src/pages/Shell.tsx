@@ -39,7 +39,6 @@ import {
   clampMentionHighlightIndex,
   cronFromPreset,
   formatMessageTime,
-  groupBotsForSidebar,
   groupVoiceChats,
   inferAttachmentMimeType,
   isActive,
@@ -265,6 +264,7 @@ import {
   NewSpaceDialog,
   PickerInfoDialog,
   RenameBotSectionDialog,
+  RenameSpaceDialog,
 } from "./shell/dialogs";
 import {
   AppConnectCard,
@@ -273,6 +273,7 @@ import {
   ChoiceCard,
   McpApprovalCard,
 } from "./shell/message-cards";
+import { commitSpaceRename, sidebarGroupsForSpaces } from "./shell/space-sidebar";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazyOverlay(() =>
@@ -601,6 +602,7 @@ export function ShellPage() {
   const [deleteTarget, setDeleteTarget] = useState<Bot | null>(null);
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<Group | null>(null);
   const [deleteSpaceTarget, setDeleteSpaceTarget] = useState<Space | null>(null);
+  const [renameSpaceTarget, setRenameSpaceTarget] = useState<Space | null>(null);
   const [spaceMenu, setSpaceMenu] = useState<{
     id: string;
     position: ContextMenuPosition;
@@ -612,6 +614,9 @@ export function ShellPage() {
     spaceMenuAnchor.current = null;
   }, [spaceMenu]);
   const closeSpaceMenu = useCallback(() => setSpaceMenu(null), []);
+  const spaceMenuTarget = spaceMenu
+    ? (spaces.find((space) => space.id === spaceMenu.id) ?? null)
+    : null;
   const [clearTarget, setClearTarget] = useState<
     { kind: "bot"; chat: Bot } | { kind: "group"; chat: Group } | null
   >(null);
@@ -1504,7 +1509,6 @@ export function ShellPage() {
   }, [activeGroup?.id, groupId, notifyBrowserForEvent]);
 
   const sidebarGroups = useMemo(() => {
-    const needle = query.toLowerCase();
     const sidebarSpaces =
       spaces.length > 0
         ? spaces.map((space) =>
@@ -1517,6 +1521,7 @@ export function ShellPage() {
                 name: "Personal",
                 isDefault: true,
                 hasContent: true,
+                canRename: false,
                 canDelete: false,
                 bots,
                 groups,
@@ -1524,59 +1529,7 @@ export function ShellPage() {
               },
             ]
           : [];
-    const showSpaceNames = sidebarSpaces.length > 1;
-    return sidebarSpaces.flatMap((space) => {
-      const visibleBots = space.bots.filter((bot) =>
-        `${bot.name} ${bot.title ?? ""} ${bot.preview ?? ""}`.toLowerCase().includes(needle),
-      );
-      const visibleGroups = space.groups.filter((group) =>
-        `${group.name} ${group.preview}`.toLowerCase().includes(needle),
-      );
-      const sections = groupBotsForSidebar(
-        [
-          ...visibleBots.map((chat) => ({ kind: "bot" as const, chat })),
-          ...visibleGroups.map((chat) => ({ kind: "group" as const, chat })),
-        ].map((item) => ({
-          ...item,
-          id: item.chat.id,
-          parentBotId: item.kind === "bot" ? item.chat.parentBotId : null,
-          pinned: item.chat.pinned,
-          sectionId: item.chat.sectionId,
-        })),
-        space.botSections,
-      ).map((group, index) => ({
-        ...group,
-        sectionId: group.key.startsWith("section:") ? group.key.slice("section:".length) : null,
-        key: showSpaceNames ? `space:${space.id}:${group.key}` : group.key,
-        title: showSpaceNames
-          ? group.title
-            ? `${space.name} · ${group.title}`
-            : space.name
-          : group.title,
-        showLock: showSpaceNames,
-        emptySpaceId: undefined as string | undefined,
-        spaceId: space.id,
-        spaceName: space.name,
-        canDeleteSpace: index === 0 && space.canDelete === true,
-      }));
-      if (sections.length > 0) return sections;
-      // Keep empty spaces selectable; chat clicks are the only switch control.
-      if (!showSpaceNames) return [];
-      if (needle && (space.bots.length > 0 || space.groups.length > 0)) return [];
-      return [
-        {
-          key: `space:${space.id}:empty`,
-          title: space.name,
-          bots: [],
-          sectionId: null,
-          showLock: true,
-          emptySpaceId: space.id,
-          spaceId: space.id,
-          spaceName: space.name,
-          canDeleteSpace: space.canDelete === true,
-        },
-      ];
-    });
+    return sidebarGroupsForSpaces(sidebarSpaces, query);
   }, [bootstrapMe, botSections, bots, groups, spaces, query]);
 
   const openSpaceChat = useCallback(
@@ -2989,85 +2942,99 @@ export function ShellPage() {
                   nestedRows.flatMap((row) =>
                     row.item.kind === "bot" && row.parentId === parentId ? [row.item.chat.id] : [],
                   );
+                const hasSpaceActions = group.canRenameSpace || group.canDeleteSpace;
                 return (
                   <div key={group.key} data-sidebar-group={group.key}>
-                    {group.title ? (
-                      <div className="flex items-center pt-3 pb-0.5">
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground/60 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
-                          onClick={() => {
-                            if (group.emptySpaceId) {
-                              openSpaceChat(group.emptySpaceId, "/onboarding");
-                              return;
-                            }
-                            toggleSidebarSection(group.key);
-                          }}
-                          onContextMenu={
-                            group.sectionId
-                              ? (event) => {
-                                  event.preventDefault();
-                                  // Prefer section rename over delete-space when both apply;
-                                  // the dedicated space-actions button still opens the space menu.
-                                  const sections =
-                                    group.spaceId === bootstrapMe?.spaceId
-                                      ? botSections
-                                      : (spaces.find((space) => space.id === group.spaceId)
-                                          ?.botSections ?? []);
-                                  const section = sections.find(
-                                    (item) => item.id === group.sectionId,
-                                  );
-                                  if (!section) return;
-                                  sectionMenuAnchor.current = event.currentTarget;
-                                  setSectionMenu({
-                                    section,
-                                    spaceId: group.spaceId,
-                                    position: { x: event.clientX, y: event.clientY },
-                                  });
-                                }
-                              : group.canDeleteSpace
+                    {group.title || hasSpaceActions ? (
+                      <div
+                        className={
+                          group.title && hasSpaceActions
+                            ? "grid pt-3 pb-0.5"
+                            : `flex items-center pt-3 pb-0.5${group.title ? "" : " justify-end"}`
+                        }
+                      >
+                        {group.title ? (
+                          <button
+                            type="button"
+                            className={`flex min-w-0 items-center justify-between gap-2 rounded-lg px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground/60 hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring ${hasSpaceActions ? "col-start-1 row-start-1 w-full pe-8" : "flex-1"}`}
+                            onClick={() => {
+                              if (group.emptySpaceId) {
+                                openSpaceChat(group.emptySpaceId, "/onboarding");
+                                return;
+                              }
+                              toggleSidebarSection(group.key);
+                            }}
+                            onContextMenu={
+                              group.sectionId
                                 ? (event) => {
                                     event.preventDefault();
-                                    spaceMenuAnchor.current = event.currentTarget;
-                                    setSpaceMenu({
-                                      id: group.spaceId,
+                                    // Prefer section rename over the space menu when both apply;
+                                    // the dedicated space-actions button still opens the space menu.
+                                    const sections =
+                                      group.spaceId === bootstrapMe?.spaceId
+                                        ? botSections
+                                        : (spaces.find((space) => space.id === group.spaceId)
+                                            ?.botSections ?? []);
+                                    const section = sections.find(
+                                      (item) => item.id === group.sectionId,
+                                    );
+                                    if (!section) return;
+                                    sectionMenuAnchor.current = event.currentTarget;
+                                    setSectionMenu({
+                                      section,
+                                      spaceId: group.spaceId,
                                       position: { x: event.clientX, y: event.clientY },
                                     });
                                   }
-                                : undefined
-                          }
-                          aria-expanded={group.emptySpaceId ? undefined : !collapsed}
-                          aria-label={
-                            group.emptySpaceId
-                              ? t`Open ${group.title}`
-                              : collapsed
-                                ? t`Expand ${group.title}`
-                                : t`Collapse ${group.title}`
-                          }
-                        >
-                          <span className="flex min-w-0 items-center gap-1.5 truncate">
-                            {group.showLock ? (
-                              <Lock size={11} strokeWidth={2} aria-hidden="true" />
-                            ) : null}
-                            <span className="truncate">{group.title}</span>
-                          </span>
-                          {group.emptySpaceId ? null : (
-                            <ChevronDown
-                              size={14}
-                              strokeWidth={1.8}
-                              className={
-                                collapsed
-                                  ? "-rotate-90 transition-transform"
-                                  : "transition-transform"
-                              }
-                              aria-hidden="true"
-                            />
-                          )}
-                        </button>
-                        {group.canDeleteSpace ? (
+                                : hasSpaceActions
+                                  ? (event) => {
+                                      event.preventDefault();
+                                      spaceMenuAnchor.current = event.currentTarget;
+                                      setSpaceMenu({
+                                        id: group.spaceId,
+                                        position: { x: event.clientX, y: event.clientY },
+                                      });
+                                    }
+                                  : undefined
+                            }
+                            aria-expanded={group.emptySpaceId ? undefined : !collapsed}
+                            aria-label={
+                              group.emptySpaceId
+                                ? t`Open ${group.title}`
+                                : collapsed
+                                  ? t`Expand ${group.title}`
+                                  : t`Collapse ${group.title}`
+                            }
+                          >
+                            <span className="flex min-w-0 items-center gap-1.5 truncate">
+                              {group.showLock ? (
+                                <Lock size={11} strokeWidth={2} aria-hidden="true" />
+                              ) : null}
+                              <span className="truncate">{group.title}</span>
+                            </span>
+                            {group.emptySpaceId ? null : (
+                              <ChevronDown
+                                size={14}
+                                strokeWidth={1.8}
+                                className={
+                                  collapsed
+                                    ? "-rotate-90 transition-transform"
+                                    : "transition-transform"
+                                }
+                                aria-hidden="true"
+                              />
+                            )}
+                          </button>
+                        ) : null}
+                        {hasSpaceActions ? (
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            className={
+                              group.title
+                                ? "col-start-1 row-start-1 justify-self-end self-center"
+                                : undefined
+                            }
                             aria-label={t`Actions for ${group.spaceName}`}
                             onClick={(event) => {
                               const rect = event.currentTarget.getBoundingClientRect();
@@ -4222,17 +4189,29 @@ export function ShellPage() {
               sideOffset={0}
               className="w-[220px]"
             >
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => {
-                  const target = spaces.find((space) => space.id === spaceMenu.id);
-                  if (target) setDeleteSpaceTarget(target);
-                  setSpaceMenu(null);
-                }}
-              >
-                <Trash2 />
-                {t`Delete space`}
-              </DropdownMenuItem>
+              {spaceMenuTarget?.canRename ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setRenameSpaceTarget(spaceMenuTarget);
+                    setSpaceMenu(null);
+                  }}
+                >
+                  <Pencil />
+                  {t`Rename space`}
+                </DropdownMenuItem>
+              ) : null}
+              {spaceMenuTarget?.canDelete ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    setDeleteSpaceTarget(spaceMenuTarget);
+                    setSpaceMenu(null);
+                  }}
+                >
+                  <Trash2 />
+                  {t`Delete space`}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         ) : null}
@@ -4260,6 +4239,28 @@ export function ShellPage() {
               setDeleteGroupTarget(null);
               setPanel(null);
               await refreshBots(true);
+            }}
+          />
+        ) : null}
+
+        {renameSpaceTarget ? (
+          <RenameSpaceDialog
+            space={renameSpaceTarget}
+            onCancel={() => setRenameSpaceTarget(null)}
+            onConfirm={async (name) => {
+              const spaceId = renameSpaceTarget.id;
+              await commitSpaceRename({
+                rename: async () => {
+                  await rpc.spaces.rename({ spaceId, name });
+                },
+                apply: () => {
+                  setSpaces((current) =>
+                    current.map((space) => (space.id === spaceId ? { ...space, name } : space)),
+                  );
+                },
+                refresh: () => refreshBots(),
+              });
+              setRenameSpaceTarget(null);
             }}
           />
         ) : null}

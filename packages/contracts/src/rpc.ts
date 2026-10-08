@@ -152,6 +152,8 @@ const threadSendInput = threadTarget
     }
   });
 
+const spaceName = z.string().trim().min(1).max(60);
+
 export const appContract = {
   aiConsent: {
     status: oc.input(AiConsentQuerySchema).output(AiConsentStatusSchema),
@@ -178,7 +180,10 @@ export const appContract = {
   },
   spaces: {
     list: oc.output(SpaceNavigationSchema),
-    create: oc.input(z.object({ name: z.string().trim().min(1).max(60) })).output(SpaceSchema),
+    create: oc.input(z.object({ name: spaceName })).output(SpaceSchema),
+    rename: oc
+      .input(z.object({ spaceId: Id, name: spaceName }))
+      .output(z.object({ id: Id, name: z.string() })),
     remove: oc
       .input(z.object({ spaceId: Id }))
       .output(z.object({ ok: z.literal(true), activeSpaceId: Id })),

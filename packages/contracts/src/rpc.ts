@@ -840,6 +840,16 @@ export const appContract = {
   search: {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
+  links: {
+    /**
+     * The site icon for a link's origin as a small data URL, resolved and cached by the server.
+     * `retry` means the server was too busy to look; the origin may still have an icon.
+     */
+    favicon: oc
+      // The longest origin: a scheme, a 253-character host name and a port.
+      .input(z.object({ origin: z.string().max("https://".length + 253 + ":65535".length) }))
+      .output(z.object({ icon: z.string().nullable(), retry: z.boolean().optional() })),
+  },
   runs: {
     list: oc.input(z.object({ filter: z.enum(["active", "recent"]) })).output(RunsListOutputSchema),
   },

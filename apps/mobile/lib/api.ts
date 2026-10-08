@@ -68,6 +68,19 @@ export const MAX_MOBILE_RPC_RESPONSE_BYTES = 16 * 1024 * 1024;
 const SPACE_AUTH_RECOVERY_SAFE_PROCS = new Set(["spaces/list", "me"]);
 
 let cachedApiBase: string | undefined;
+const apiBaseListeners = new Set<() => void>();
+
+export function subscribeApiBase(listener: () => void): () => void {
+  apiBaseListeners.add(listener);
+  return () => {
+    apiBaseListeners.delete(listener);
+  };
+}
+
+function setCachedApiBase(url: string): void {
+  cachedApiBase = url;
+  for (const listener of apiBaseListeners) listener();
+}
 let cachedSpaceId = "";
 /** Bumped on every in-memory Space selection change so a delayed response
  * cannot treat a later reselection of the same Space id as its own. */
@@ -104,18 +117,18 @@ export async function loadApiBase() {
   } catch {
     // SecureStore is unavailable in some test / web hosts.
   }
-  cachedApiBase = apiBase;
+  setCachedApiBase(apiBase);
   try {
     const storedSpace = (await SecureStore.getItemAsync(SPACE_KEY)) ?? "";
     cachedSpaceId = storedSpace;
     bumpSpaceSelectionGeneration();
     // A deletion fallback must override the now-invalid saved Space even when
     // the device failed to replace that value before the previous process exited.
-    await recoverSpaceRollback(cachedApiBase);
+    await recoverSpaceRollback(apiBase);
   } catch {
     // Keep any in-memory selection when SecureStore is temporarily unavailable.
   }
-  return cachedApiBase;
+  return currentApiBase();
 }
 
 export async function selectSpace(id: string) {
@@ -377,7 +390,7 @@ export async function saveApiBase(input: string): Promise<EndpointResult> {
     }
     return { ok: false, error: t("Could not save the server URL") };
   }
-  cachedApiBase = parsed.url;
+  setCachedApiBase(parsed.url);
   await clearStoredValue(SPACE_ROLLBACK_KEY);
   return parsed;
 }
@@ -409,7 +422,7 @@ export async function resetApiBase(): Promise<EndpointResult> {
       return { ok: false, error: t("Could not clear the custom server URL") };
     }
   }
-  cachedApiBase = url;
+  setCachedApiBase(url);
   await clearStoredValue(SPACE_ROLLBACK_KEY);
   return { ok: true, url };
 }

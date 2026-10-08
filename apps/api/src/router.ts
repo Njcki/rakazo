@@ -26,6 +26,7 @@ import type {
   ComposioProvider,
   ComputerExecutionLease,
   ConnectorRegistry,
+  FaviconResolver,
   getBotSecretMetadata,
   IntegrationProviderSettings,
   MemoryProviderResolver,
@@ -51,6 +52,7 @@ import {
   computerSupportsTerminal,
   computerSupportsUpdate,
   computerUpdateView,
+  createFaviconResolver,
   createVoiceProvider,
   defaultCatalogModelId,
   deletePushToken,
@@ -530,6 +532,8 @@ export interface RouterDeps {
   oauthLogins: PiOAuthLogins;
   /** Live Codex catalog seam; defaults to the shared per-process cache. */
   codexCatalog?: CodexLiveCatalog;
+  /** Site icons for links; defaults to the per-process cache that fetches them. */
+  favicons?: FaviconResolver;
   /**
    * Detached refresh for a stored credential whose bearer expired — the live
    * catalog path calls it instead of refreshing inline. Defaults to the
@@ -719,6 +723,7 @@ export function createRouter(deps: RouterDeps) {
   const onboardingDeps = { prisma: deps.prisma, events: deps.events, connectors: deps.connectors };
   const mcpOAuth = deps.mcpOAuth ?? new McpOAuthBroker(deps.prisma, deps.secrets);
   const codexCatalog = deps.codexCatalog ?? new CodexCatalogCache();
+  const favicons = deps.favicons ?? createFaviconResolver();
   const refreshExpiredCredential =
     deps.refreshExpiredModelCredential ??
     ((scope: { userId: string; spaceId: string }, secretId: string, provider: string) =>
@@ -5639,6 +5644,9 @@ export function createRouter(deps: RouterDeps) {
       query: authed.search.query.handler(async ({ context, input }) => ({
         hits: await querySpaceSearch(deps.prisma, context.actor, input.q),
       })),
+    },
+    links: {
+      favicon: authed.links.favicon.handler(async ({ input }) => favicons.favicon(input.origin)),
     },
     runs: {
       list: authed.runs.list.handler(async ({ context, input }) => ({

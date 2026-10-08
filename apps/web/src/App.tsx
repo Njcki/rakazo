@@ -1,5 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { RemoteImagesContext } from "@rakazo/chat-ui/web";
+import type { LinkFavicons } from "@rakazo/chat-ui/web";
+import { LinkFaviconsContext, RemoteImagesContext } from "@rakazo/chat-ui/web";
 import { LOCAL_SETTINGS_PAGE } from "@rakazo/contracts";
 import { Button, Skeleton } from "@rakazo/ui-web";
 import {
@@ -18,6 +19,7 @@ import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import { getRemoteImagesEnabled, subscribeRemoteImages } from "./lib/remote-images-preference";
+import { rpc } from "./lib/rpc";
 import {
   holdUnreachableGate,
   sessionGate,
@@ -53,6 +55,11 @@ function SsoCallbackPage() {
   return null;
 }
 
+// Link icons come from our API, which fetches and caches them; the browser never asks the site.
+const linkFavicons: LinkFavicons = {
+  load: (origin) => rpc.links.favicon({ origin }),
+};
+
 export function App() {
   const loadRemoteImages = useSyncExternalStore(
     subscribeRemoteImages,
@@ -61,15 +68,17 @@ export function App() {
   );
   return (
     <RemoteImagesContext.Provider value={loadRemoteImages}>
-      <ErrorBoundary fallback={<AppFailed />}>
-        {window.location.pathname === SSO_CALLBACK_PATH ? (
-          <SsoCallbackPage />
-        ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
-          <LocalSettingsPage />
-        ) : (
-          <SessionApp />
-        )}
-      </ErrorBoundary>
+      <LinkFaviconsContext.Provider value={linkFavicons}>
+        <ErrorBoundary fallback={<AppFailed />}>
+          {window.location.pathname === SSO_CALLBACK_PATH ? (
+            <SsoCallbackPage />
+          ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
+            <LocalSettingsPage />
+          ) : (
+            <SessionApp />
+          )}
+        </ErrorBoundary>
+      </LinkFaviconsContext.Provider>
     </RemoteImagesContext.Provider>
   );
 }

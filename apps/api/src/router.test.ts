@@ -3667,3 +3667,62 @@ describe("groups.archive", () => {
     expect(calls).toEqual(["cancel run work", "release screen", "expire lease"]);
   });
 });
+
+describe("link favicons", () => {
+  function faviconClient(actor: Actor | null) {
+    const favicon = vi.fn().mockResolvedValue({ icon: "data:image/png;base64,AAAA" });
+    const deps = {
+      prisma: {} as PrismaClient,
+      favicons: { favicon },
+      env: { webOrigin: "http://127.0.0.1:5173", screenProxySecret: "fake-test-secret" },
+      dataDir: "/tmp/rakazo-router-test",
+    } as unknown as RouterDeps;
+    const client = createRouterClient(createRouter(deps), { context: { actor } });
+    return { client, favicon };
+  }
+
+  const reader = {
+    spaceId: "workspace-1",
+    userId: "user-1",
+    email: "user@rakazo.test",
+    isDeploymentOwner: false,
+  } satisfies Actor;
+
+  it("answers a signed-in reader with the resolved icon for an origin", async () => {
+    const { client, favicon } = faviconClient(reader);
+    await expect(client.links.favicon({ origin: "https://x.com" })).resolves.toEqual({
+      icon: "data:image/png;base64,AAAA",
+    });
+    expect(favicon).toHaveBeenCalledWith("https://x.com");
+  });
+
+  it("passes a busy answer through so the client can ask again", async () => {
+    const { client, favicon } = faviconClient(reader);
+    favicon.mockResolvedValue({ icon: null, retry: true });
+    await expect(client.links.favicon({ origin: "https://x.com" })).resolves.toEqual({
+      icon: null,
+      retry: true,
+    });
+  });
+
+  it("accepts the longest origin a host name allows and nothing longer", async () => {
+    const { client, favicon } = faviconClient(reader);
+    // 253 characters: three 63-character labels and one 61-character label.
+    const host = ["a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(61)].join(".");
+    expect(host).toHaveLength(253);
+    const longest = `https://${host}:65535`;
+    await expect(client.links.favicon({ origin: longest })).resolves.toBeDefined();
+    expect(favicon).toHaveBeenCalledWith(longest);
+    await expect(client.links.favicon({ origin: `${longest}0` })).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+    });
+  });
+
+  it("refuses a request without a session before resolving anything", async () => {
+    const { client, favicon } = faviconClient(null);
+    await expect(client.links.favicon({ origin: "https://x.com" })).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+    });
+    expect(favicon).not.toHaveBeenCalled();
+  });
+});

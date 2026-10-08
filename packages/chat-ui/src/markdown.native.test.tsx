@@ -9,6 +9,12 @@ const linking = vi.hoisted(() => ({
   openURL: vi.fn(async () => undefined),
 }));
 
+// The load handler of each rendered Image, so a test can report its decoded size.
+const imageLoads = vi.hoisted(
+  () =>
+    [] as Array<(event: { nativeEvent: { source: { width: number; height: number } } }) => void>,
+);
+
 const tableEvents = vi.hoisted(() => ({
   onLayout: undefined as
     | ((event: { nativeEvent: { layout: { width: number; height: number } } }) => void)
@@ -53,6 +59,11 @@ vi.mock("react-native", async () => {
       if (tag === "rn-view" && typeof rest.onLayout === "function") {
         tableEvents.onLayout = rest.onLayout as typeof tableEvents.onLayout;
       }
+      if (tag === "rn-image" && typeof rest.onLoad === "function") {
+        imageLoads.push(rest.onLoad as (typeof imageLoads)[number]);
+        delete rest.onLoad;
+        delete rest.onError;
+      }
       if (tag === "rn-scroll-view" && typeof rest.onScroll === "function") {
         tableEvents.onScroll = rest.onScroll as typeof tableEvents.onScroll;
       }
@@ -90,9 +101,12 @@ vi.mock("react-native", async () => {
       "flex",
       "flexGrow",
       "overflow",
+      "accessibilityElementsHidden",
+      "importantForAccessibility",
     ]),
     Text: mockComponent("rn-text", [
       "accessibilityRole",
+      "accessibilityLabel",
       "textDecorationLine",
       "color",
       "fontWeight",
@@ -110,7 +124,7 @@ vi.mock("react-native", async () => {
       createAnimatedComponent: (component: unknown) => component,
       timing: () => ({ start: () => undefined }),
       sequence: (...animations: unknown[]) => animations,
-      loop: (animation: unknown) => animation,
+      loop: () => ({ start: () => undefined, stop: () => undefined }),
       delay: () => ({}),
       Value: class {},
     },
@@ -131,11 +145,13 @@ vi.mock("react-native", async () => {
 });
 
 import { darkTokens, lightTokens } from "@rakazo/ui-tokens";
-import { act } from "react";
+import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { Pressable } from "react-native";
+import type { LinkFavicons } from "./markdown.native";
 import {
   ChatMarkdown,
+  LinkFaviconsContext,
   LinkifiedText,
   RemoteImagesContext,
   RemoteMarkdownImage,
@@ -350,7 +366,11 @@ describe("user message links", () => {
       root.render(
         <Pressable accessible={false} onLongPress={longPress}>
           <Pressable onLongPress={longPress}>
-            <LinkifiedText color={darkTokens.foreground} linkColor={darkTokens.link}>
+            <LinkifiedText
+              color={darkTokens.foreground}
+              linkColor={darkTokens.link}
+              palette={darkTokens}
+            >
               {"# Title **important** https://example.com/docs"}
             </LinkifiedText>
           </Pressable>
@@ -361,7 +381,8 @@ describe("user message links", () => {
     const link = container.querySelector<HTMLElement>(
       "rn-pressable rn-pressable [data-accessibility-role='link']",
     );
-    expect(link?.textContent).toBe("https://example.com/docs");
+    // A bare address shows as host and path, joined to its site icon.
+    expect(link?.textContent).toBe("\u2060\u2068example.com/docs\u2069");
     expect(container.textContent).toContain("# Title");
     expect(container.textContent).toContain("**important**");
 
@@ -632,5 +653,250 @@ describe("native markdown images", () => {
     // The image component is a stub under test; a link would mean it fell back.
     expect(html).toContain("<rn-stub");
     expect(html).not.toContain("data-accessibility-role");
+  });
+});
+
+const ICON = "data:image/png;base64,iVBORw0KGgo=";
+// Word joiner, then the label wrapped in a first-strong isolate.
+const joined = (label: string) => `\u2060\u2068${label}\u2069`;
+
+async function renderNativeLinks(
+  node: (streaming: boolean) => ReactNode,
+  favicons: LinkFavicons,
+  streaming = false,
+) {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const render = async (nextStreaming: boolean) => {
+    await act(async () => {
+      root.render(
+        <LinkFaviconsContext.Provider value={favicons}>
+          {node(nextStreaming)}
+        </LinkFaviconsContext.Provider>,
+      );
+    });
+  };
+  await render(streaming);
+  return {
+    container,
+    render,
+    links: () => [
+      ...container.querySelectorAll<HTMLElement>("rn-text[data-accessibility-role='link']"),
+    ],
+    cleanup: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    },
+  };
+}
+
+describe("native website links", () => {
+  const globe = createElement("rn-globe");
+
+  it("draws the API's icon in a hidden tile joined to the author's label", async () => {
+    const load = vi.fn(async () => ({ icon: ICON }));
+    const view = await renderNativeLinks(
+      () => (
+        <ChatMarkdown>{"Traffic plunges. [Post](https://native-a.example.test/p/1)"}</ChatMarkdown>
+      ),
+      { load, globe },
+    );
+    const [link] = view.links();
+    expect(link?.getAttribute("data-accessibility-label")).toBe("Post");
+    expect(link?.textContent).toBe(joined("Post"));
+    const marker = link?.querySelector("rn-view");
+    expect(marker?.getAttribute("data-accessibility-elements-hidden")).toBe("true");
+    expect(marker?.getAttribute("data-important-for-accessibility")).toBe("no-hide-descendants");
+    expect(marker?.querySelector("rn-image")).not.toBeNull();
+    expect(
+      marker
+        ?.querySelector("rn-view[data-background-color]")
+        ?.getAttribute("data-background-color"),
+    ).toBe(darkTokens.faviconPlate);
+    // Body colour, not the old blue; the underline sits on the label, not the tile.
+    expect(link?.getAttribute("data-color")).toBe(darkTokens.foreground);
+    expect(link?.getAttribute("data-text-decoration-line")).toBe("none");
+    expect(load).toHaveBeenCalledWith("https://native-a.example.test");
+    await view.cleanup();
+  });
+
+  it("shortens a bare URL to host and path", async () => {
+    const view = await renderNativeLinks(
+      () => <ChatMarkdown>{"See https://www.native-b.example.test/status/9?s=1 now"}</ChatMarkdown>,
+      { load: async () => ({ icon: null }), globe },
+    );
+    const [link] = view.links();
+    expect(link?.getAttribute("data-accessibility-label")).toBe("native-b.example.test/status/9");
+    expect(link?.textContent).toBe(joined("native-b.example.test/status/9"));
+    await view.cleanup();
+  });
+
+  it("shows the app's globe when there is no icon or the icon is a 1×1 pixel", async () => {
+    const view = await renderNativeLinks(
+      () => (
+        <ChatMarkdown>
+          {"[A](https://native-c.example.test/) [B](https://native-d.example.test/)"}
+        </ChatMarkdown>
+      ),
+      {
+        load: async (origin) => ({
+          icon: origin === "https://native-c.example.test" ? null : ICON,
+        }),
+        globe,
+      },
+    );
+    const [first, second] = view.links();
+    expect(first?.querySelector("rn-globe")).not.toBeNull();
+    expect(second?.querySelector("rn-image")).not.toBeNull();
+    await act(async () => {
+      imageLoads.at(-1)?.({ nativeEvent: { source: { width: 1, height: 1 } } });
+    });
+    expect(view.links()[1]?.querySelector("rn-image")).toBeNull();
+    expect(view.links()[1]?.querySelector("rn-globe")).not.toBeNull();
+    await view.cleanup();
+  });
+
+  it("shortens and cleans bare URLs whose escapes the parser decoded", async () => {
+    const view = await renderNativeLinks(
+      () => (
+        <ChatMarkdown>
+          {
+            "See https://bidi.example.test/%E2%80%AEtxt.exe and https://native-k.example.test/caf%C3%A9 now"
+          }
+        </ChatMarkdown>
+      ),
+      { load: async () => ({ icon: null }), globe },
+    );
+    const [bidi, cafe] = view.links();
+    expect(bidi?.getAttribute("data-accessibility-label")).toBe("bidi.example.test/txt.exe");
+    expect(bidi?.textContent).toBe(joined("bidi.example.test/txt.exe"));
+    expect(cafe?.textContent).toBe(joined("native-k.example.test/café"));
+    expect(view.container.textContent).not.toContain("\u202E");
+    await view.cleanup();
+  });
+
+  it("isolates a label so its direction characters stay inside the link", async () => {
+    const view = await renderNativeLinks(
+      () => (
+        <ChatMarkdown>
+          {
+            "See [\u202Eevil](https://native-j.example.test/) then [next](https://native-j.example.test/n)"
+          }
+        </ChatMarkdown>
+      ),
+      { load: async () => ({ icon: null }), globe },
+    );
+    const [evil, next] = view.links();
+    expect(evil?.textContent).toBe(joined("\u202Eevil"));
+    expect(next?.textContent).toBe(joined("next"));
+    await view.cleanup();
+  });
+
+  it("keeps formatting inside a labelled link in the website link style", async () => {
+    const view = await renderNativeLinks(
+      () => <ChatMarkdown>{"[**Bold** label](https://native-h.example.test/)"}</ChatMarkdown>,
+      { load: async () => ({ icon: null }), globe },
+    );
+    const [link] = view.links();
+    // The innermost text run, which carries the style the renderer gives text inside a link.
+    const bold = [...(link?.querySelectorAll("rn-text") ?? [])]
+      .filter((text) => text.textContent === "Bold")
+      .at(-1);
+    expect(bold?.getAttribute("data-color")).toBe(darkTokens.foreground);
+    expect(bold?.getAttribute("data-text-decoration-line")).toBe("underline");
+    expect(bold?.getAttribute("data-font-weight")).toBe("700");
+    const plain = [...(link?.querySelectorAll("rn-text") ?? [])]
+      .filter((text) => text.textContent === " label")
+      .at(-1);
+    expect(plain?.getAttribute("data-font-weight")).toBe("500");
+    await view.cleanup();
+  });
+
+  it("shows the globe and does not ask again right away after a failed lookup", async () => {
+    const load = vi.fn(async () => {
+      throw new Error("Not found");
+    });
+    const markdown = "[A](https://native-i.example.test/) and [B](https://native-i.example.test/b)";
+    const view = await renderNativeLinks(() => <ChatMarkdown>{markdown}</ChatMarkdown>, {
+      load,
+      globe,
+    });
+    expect(view.container.querySelectorAll("rn-globe")).toHaveLength(2);
+    await view.render(false);
+    await view.cleanup();
+    const again = await renderNativeLinks(() => <ChatMarkdown>{markdown}</ChatMarkdown>, {
+      load,
+      globe,
+    });
+    expect(again.container.querySelectorAll("rn-globe")).toHaveLength(2);
+    expect(load).toHaveBeenCalledTimes(1);
+    await again.cleanup();
+  });
+
+  it("asks for no icon while a reply streams", async () => {
+    const load = vi.fn(async () => ({ icon: ICON }));
+    const view = await renderNativeLinks(
+      (streaming) => (
+        <ChatMarkdown streaming={streaming}>
+          {"Partial https://native-e.example.test/x"}
+        </ChatMarkdown>
+      ),
+      { load, globe },
+      true,
+    );
+    expect(load).not.toHaveBeenCalled();
+    await view.render(false);
+    expect(load).toHaveBeenCalledWith("https://native-e.example.test");
+    await view.cleanup();
+  });
+
+  it("gives no tile to links that are not websites", async () => {
+    const load = vi.fn(async () => ({ icon: ICON }));
+    const view = await renderNativeLinks(
+      () => (
+        <ChatMarkdown>
+          {[
+            "[mail](mailto:someone@example.com) [call](tel:+15555550100) [docs](/docs)",
+            "`https://native-f.example.test/in-code`",
+            "[![build](https://badge.example.test/b.svg)](https://native-f.example.test/ci)",
+          ].join("\n\n")}
+        </ChatMarkdown>
+      ),
+      { load, globe },
+    );
+    expect(view.container.querySelector("rn-globe")).toBeNull();
+    expect(view.container.querySelector("rn-image")).toBeNull();
+    expect(load).not.toHaveBeenCalled();
+    // Links that are not websites keep the plain link style.
+    const mail = view.links().find((link) => link.textContent === "mail");
+    expect(mail?.getAttribute("data-color")).toBe(darkTokens.link);
+    await view.cleanup();
+  });
+
+  it("draws the tile in user messages, in the message's own colour", async () => {
+    const view = await renderNativeLinks(
+      () => (
+        <LinkifiedText
+          color={lightTokens.secondaryForeground}
+          linkColor={lightTokens.link}
+          palette={lightTokens}
+        >
+          {"look https://native-g.example.test/a/ or mail me@example.com"}
+        </LinkifiedText>
+      ),
+      { load: async () => ({ icon: ICON }), globe },
+    );
+    const [site, mail] = view.links();
+    expect(site?.getAttribute("data-accessibility-label")).toBe("native-g.example.test/a");
+    expect(site?.getAttribute("data-color")).toBe(lightTokens.secondaryForeground);
+    expect(site?.querySelector("rn-image")).not.toBeNull();
+    expect(mail?.textContent).toBe("me@example.com");
+    expect(mail?.querySelector("rn-view")).toBeNull();
+    expect(mail?.getAttribute("data-color")).toBe(lightTokens.link);
+    await view.cleanup();
   });
 });

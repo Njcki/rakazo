@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { createContext, memo, useCallback, useContext, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -5,17 +6,21 @@ import type { HastNode } from "./table-utils";
 import "./markdown.web.css";
 import "./markdown-table.css";
 import { droppedTableHtmlText } from "@rakazo/contracts";
-import { CheckIcon, CopyIcon, ImageIcon } from "./icons";
+import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
 import type { ChatMarkdownProps } from "./markdown";
 import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
+  LinkFaviconsPausedContext,
+  linkFaviconOrigin,
+  linkLabel,
   markRemoteImageLoaded,
   plainTextLinkParts,
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
   sanitizeMarkdownUrl,
+  useLinkFavicon,
 } from "./markdown";
 import { MarkdownTable, MarkdownTableSourceContext } from "./markdown-table";
 
@@ -218,6 +223,58 @@ function LinkedRemoteImage({
   );
 }
 
+/** The label when it is plain text, the only kind that can be a bare URL. */
+function hastText(node: MarkdownHast | undefined): string | undefined {
+  const children = node?.children ?? [];
+  if (!children.every((child) => child.type === "text")) return undefined;
+  return children.map((child) => child.value ?? "").join("");
+}
+
+function hastHasImage(node: MarkdownHast | undefined): boolean {
+  return (node?.children ?? []).some((child) => child.tagName === "img" || hastHasImage(child));
+}
+
+function LinkFavicon({ href }: { href: string }) {
+  const { icon, unusable } = useLinkFavicon(href);
+  return (
+    <span
+      aria-hidden="true"
+      className={icon ? "rk-chat-link-tile rk-chat-link-tile-icon" : "rk-chat-link-tile"}
+    >
+      {icon ? (
+        <img
+          src={icon}
+          alt=""
+          draggable={false}
+          onLoad={(event) => {
+            // A 1×1 image is a tracking pixel, not an icon.
+            const image = event.currentTarget;
+            if (image.naturalWidth <= 1 || image.naturalHeight <= 1) unusable();
+          }}
+          onError={unusable}
+        />
+      ) : (
+        <GlobeIcon />
+      )}
+    </span>
+  );
+}
+
+/** A link to a website, drawn with its site icon before the label. */
+function WebsiteLink({
+  href,
+  children,
+  ...props
+}: React.ComponentPropsWithoutRef<"a"> & { href: string; children: ReactNode }) {
+  return (
+    <a {...props} href={href} target="_blank" rel="noreferrer noopener" className="rk-chat-link">
+      <LinkFavicon href={href} />
+      {/* bdi: direction characters in a label cannot reorder the text around the link. */}
+      <bdi className="rk-chat-link-label">{children}</bdi>
+    </a>
+  );
+}
+
 function MarkdownAnchor({
   node,
   ...props
@@ -230,11 +287,17 @@ function MarkdownAnchor({
   }
   // urlTransform blanks unsafe URLs. Keep their text without a link that opens the app again.
   const opens = Boolean(props.href);
-  const link = opens ? (
-    <a {...props} target="_blank" rel="noreferrer noopener" />
-  ) : (
-    <span>{props.children}</span>
-  );
+  const text = hastText(node);
+  const link =
+    opens && linkFaviconOrigin(href) && !hastHasImage(node) ? (
+      <WebsiteLink {...props} href={href}>
+        {text === undefined ? props.children : linkLabel(text, href)}
+      </WebsiteLink>
+    ) : opens ? (
+      <a {...props} target="_blank" rel="noreferrer noopener" />
+    ) : (
+      <span>{props.children}</span>
+    );
   return (
     <InsideLinkContext.Provider value={opens ? "open" : "rejected"}>
       {link}
@@ -265,6 +328,10 @@ export function LinkifiedText({ children }: { children: string }) {
   return plainTextLinkParts(children).map((part, index) =>
     part.type === "text" ? (
       part.value
+    ) : linkFaviconOrigin(part.href) ? (
+      <WebsiteLink key={index} href={part.href}>
+        {linkLabel(part.value, part.href)}
+      </WebsiteLink>
     ) : (
       <a
         key={index}
@@ -287,24 +354,26 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 
   return (
     <div className={streaming ? "rk-chat-markdown rk-chat-markdown-streaming" : "rk-chat-markdown"}>
-      <MarkdownTableSourceContext.Provider value={source}>
-        <ReactMarkdown
-          components={components}
-          remarkPlugins={[remarkGfm]}
-          rehypePlugins={[preserveSkippedTableText]}
-          skipHtml
-          // MarkdownImage decides what an image source may do, so it receives the source as written.
-          urlTransform={(url, key) =>
-            key === "src" ? url : (sanitizeMarkdownUrl(url, true) ?? "")
-          }
-        >
-          {source}
-        </ReactMarkdown>
-      </MarkdownTableSourceContext.Provider>
+      <LinkFaviconsPausedContext.Provider value={streaming}>
+        <MarkdownTableSourceContext.Provider value={source}>
+          <ReactMarkdown
+            components={components}
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[preserveSkippedTableText]}
+            skipHtml
+            // MarkdownImage decides what an image source may do, so it receives the source as written.
+            urlTransform={(url, key) =>
+              key === "src" ? url : (sanitizeMarkdownUrl(url, true) ?? "")
+            }
+          >
+            {source}
+          </ReactMarkdown>
+        </MarkdownTableSourceContext.Provider>
+      </LinkFaviconsPausedContext.Provider>
       {streaming ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
     </div>
   );
 });
 
-export type { ChatMarkdownProps } from "./markdown";
-export { RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
+export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";

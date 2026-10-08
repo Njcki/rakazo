@@ -19,17 +19,31 @@ import type {
   TextStyle,
   ViewStyle,
 } from "react-native";
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Image,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import type { ChatMarkdownProps } from "./markdown";
 import {
   inlineMarkdownImageSrc,
+  LinkFaviconsContext,
+  LinkFaviconsPausedContext,
+  linkFaviconOrigin,
   linkifyExplicitUrls,
+  linkLabel,
   markRemoteImageLoaded,
   plainTextLinkParts,
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
   sanitizeMarkdownUrl,
+  useLinkFavicon,
 } from "./markdown";
 
 function keepMarkdownLinkToken(_url: string) {
@@ -37,6 +51,14 @@ function keepMarkdownLinkToken(_url: string) {
 }
 
 const BLOCK_GAP = 10;
+const BODY_FONT_SIZE = 15.5;
+const LINK_TILE_SIZE = 18;
+// Keeps the site icon on the line of the label's first word.
+const WORD_JOINER = "\u2060";
+// First-strong isolate and its pop: a label's own direction characters cannot reorder the text
+// around the link.
+const ISOLATE = "\u2068";
+const POP_ISOLATE = "\u2069";
 
 // One shared parser: the Markdown components memoize on its identity.
 const markdownParser = createMarkdownIt();
@@ -47,7 +69,7 @@ function markdownStyles(palette: ColorTokens) {
   return StyleSheet.create({
     body: {
       color: palette.foreground,
-      fontSize: 15.5,
+      fontSize: BODY_FONT_SIZE,
       lineHeight: 23,
       width: "100%",
       minWidth: 0,
@@ -170,6 +192,22 @@ function markdownStyles(palette: ColorTokens) {
       color: palette.mutedForeground,
       fontSize: 13,
     },
+    // A website link reads in the body colour. The icon tile is not underlined; only the label is.
+    website_link: {
+      color: palette.foreground,
+      fontWeight: "500",
+      textDecorationLine: "none",
+    },
+    website_link_label: {
+      color: palette.foreground,
+      fontWeight: "500",
+      textDecorationLine: "underline",
+      textDecorationColor: palette.mutedForeground,
+    },
+    link_favicon_plate: {
+      backgroundColor: palette.faviconPlate,
+      padding: 2,
+    },
     linked_image: {
       width: "100%",
       maxWidth: "100%",
@@ -215,6 +253,52 @@ function soleRemoteImage(node: ASTNode):
   return { remote, alt: only.attributes.alt, title: only.attributes.title };
 }
 
+/** The label when it is plain text, the only kind that can be a bare URL. */
+function astText(node: ASTNode): string | undefined {
+  if (!node.children.every((child) => child.type === "text")) return undefined;
+  return node.children.map((child) => child.content).join("");
+}
+
+function astHasImage(node: ASTNode): boolean {
+  return node.children.some((child) => child.type === "image" || astHasImage(child));
+}
+
+/** An inline link to a website, drawn with its site icon. Other links keep the plain link style. */
+function isWebsiteLink(node: ASTNode): boolean {
+  const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
+  return node.type === "link" && Boolean(href && linkFaviconOrigin(href)) && !astHasImage(node);
+}
+
+function LinkFavicon({ href, plate }: { href: string; plate: StyleProp<ViewStyle> }) {
+  const { icon, unusable } = useLinkFavicon(href);
+  const globe = useContext(LinkFaviconsContext)?.globe;
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={layout.linkMarker}
+    >
+      <View style={[layout.linkTile, icon ? plate : undefined]}>
+        {icon ? (
+          <Image
+            source={{ uri: icon }}
+            style={layout.linkIcon}
+            resizeMode="contain"
+            onLoad={(event) => {
+              // A 1×1 image is a tracking pixel, not an icon.
+              const { width, height } = event.nativeEvent.source;
+              if (width <= 1 || height <= 1) unusable();
+            }}
+            onError={unusable}
+          />
+        ) : (
+          globe
+        )}
+      </View>
+    </View>
+  );
+}
+
 function enclosingLink(parents: readonly ASTNode[]) {
   return parents.find((parent) => parent.type === "link" || parent.type === "blocklink");
 }
@@ -227,6 +311,11 @@ function textStyleForParents(
   if (!inherited || typeof inherited !== "object" || Array.isArray(inherited)) return undefined;
   const style = { ...(inherited as Record<string, unknown>) };
   const linkParent = enclosingLink(parents);
+  if (linkParent && isWebsiteLink(linkParent)) {
+    // The label style sets medium weight, but bold inside a label stays bold.
+    const label = StyleSheet.flatten(styleMap.website_link_label) ?? {};
+    return { ...style, ...label, fontWeight: style.fontWeight ?? label.fontWeight };
+  }
   if (!linkParent || sanitizeMarkdownUrl(linkParent.attributes.href ?? "")) return style;
   const linkStyle = StyleSheet.flatten(styleMap.link) ?? {};
   const bodyStyle = StyleSheet.flatten(styleMap.body) ?? {};
@@ -622,6 +711,28 @@ function renderMarkdownLink(
       />
     );
   }
+  if (!block && isWebsiteLink(node)) {
+    const text = astText(node);
+    return (
+      <Text
+        accessibilityRole="link"
+        accessibilityLabel={text === undefined ? undefined : linkLabel(text, href)}
+        key={node.key}
+        style={styleMap.website_link}
+        onPress={(event) => openMarkdownLink(href, event)}
+      >
+        <LinkFavicon href={href} plate={styleMap.link_favicon_plate} />
+        {WORD_JOINER}
+        {ISOLATE}
+        {text === undefined ? (
+          children
+        ) : (
+          <Text style={styleMap.website_link_label}>{linkLabel(text, href)}</Text>
+        )}
+        {POP_ISOLATE}
+      </Text>
+    );
+  }
   if (!block) {
     return (
       <Text
@@ -773,31 +884,60 @@ type LinkifiedTextProps = {
   children: string;
   color: string;
   linkColor: string;
+  palette: ColorTokens;
 };
 
 export const LinkifiedText = memo(function LinkifiedText({
   children,
   color,
   linkColor,
+  palette,
 }: LinkifiedTextProps) {
+  const labelStyle: TextStyle = {
+    color,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+    textDecorationColor: palette.mutedForeground,
+  };
   return (
-    <Text style={{ color, fontSize: 15.5, lineHeight: 23 }}>
-      {plainTextLinkParts(children).map((part, index) =>
-        part.type === "text" ? (
-          part.value
-        ) : (
+    <Text style={{ color, fontSize: BODY_FONT_SIZE, lineHeight: 23 }}>
+      {plainTextLinkParts(children).map((part, index) => {
+        if (part.type === "text") return part.value;
+        const open = () => {
+          void openSafeLink(part.href);
+        };
+        if (!linkFaviconOrigin(part.href)) {
+          return (
+            <Text
+              accessibilityRole="link"
+              key={index}
+              style={{ color: linkColor, textDecorationLine: "underline" }}
+              onPress={open}
+            >
+              {part.value}
+            </Text>
+          );
+        }
+        const label = linkLabel(part.value, part.href);
+        return (
           <Text
             accessibilityRole="link"
+            accessibilityLabel={label}
             key={index}
-            style={{ color: linkColor, textDecorationLine: "underline" }}
-            onPress={() => {
-              void openSafeLink(part.href);
-            }}
+            style={{ color, fontWeight: "500" }}
+            onPress={open}
           >
-            {part.value}
+            <LinkFavicon
+              href={part.href}
+              plate={{ backgroundColor: palette.faviconPlate, padding: 2 }}
+            />
+            {WORD_JOINER}
+            {ISOLATE}
+            <Text style={labelStyle}>{label}</Text>
+            {POP_ISOLATE}
           </Text>
-        ),
-      )}
+        );
+      })}
     </Text>
   );
 });
@@ -822,13 +962,15 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 
   return (
     <View style={layout.wrap}>
-      {streaming ? (
-        <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-          {children}
-        </MarkdownStream>
-      ) : (
-        <Markdown {...sharedProps}>{children}</Markdown>
-      )}
+      <LinkFaviconsPausedContext.Provider value={streaming}>
+        {streaming ? (
+          <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+            {children}
+          </MarkdownStream>
+        ) : (
+          <Markdown {...sharedProps}>{children}</Markdown>
+        )}
+      </LinkFaviconsPausedContext.Provider>
     </View>
   );
 });
@@ -845,7 +987,27 @@ const layout = StyleSheet.create({
     flexShrink: 1,
     minWidth: 0,
   },
+  // An inline view sits on the baseline; this drops it so it centres on the capitals. The gap
+  // before the label is part of the view, since inline views do not keep their margins.
+  linkMarker: {
+    width: LINK_TILE_SIZE + 4,
+    height: LINK_TILE_SIZE,
+    transform: [{ translateY: (LINK_TILE_SIZE - BODY_FONT_SIZE * 0.7) / 2 }],
+  },
+  linkTile: {
+    width: LINK_TILE_SIZE,
+    height: LINK_TILE_SIZE,
+    padding: 1,
+    borderRadius: 5,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  linkIcon: {
+    width: "100%",
+    height: "100%",
+  },
 });
 
-export type { ChatMarkdownProps } from "./markdown";
-export { RemoteImagesContext } from "./markdown";
+export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
+export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";

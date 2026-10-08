@@ -1,4 +1,8 @@
 export const DE_MESSAGES: Record<string, string> = {
+  Today: "Heute",
+  Yesterday: "Gestern",
+  You: "Du",
+  "Original message unavailable": "Originalnachricht nicht verfügbar",
   "No archived bots": "Keine archivierten Bots",
   "Recover computer?": "Computer wiederherstellen?",
   "Recreate a computer that is not working.":

@@ -10,6 +10,7 @@ import type {
   MessageBlock,
   ModelCatalogEntry,
   ModelCredential,
+  ReplyPreview,
   Space,
   SpaceNavigation,
 } from "@rakazo/contracts";
@@ -31,6 +32,7 @@ import {
   progressMessageId,
   readBoundedJsonResponse,
   reduceLiveMessageBlocks,
+  replyMetadata,
   runFailureError,
   signupRequiresEmailVerification,
   takeLiveMessage,
@@ -895,6 +897,7 @@ export type MobileMessage = {
   botId?: string;
   replyToMessageId?: string;
   replyQuote?: string;
+  replyPreview?: ReplyPreview | null;
   createdAt?: string;
   blocks: MessageBlock[];
 };
@@ -1055,6 +1058,7 @@ export function blockText(message: MobileMessage) {
 
 type ThreadEvent = {
   id?: string;
+  createdAt?: string;
   botId?: string;
   type: string;
   seq?: number;
@@ -1292,22 +1296,18 @@ export function applyMobileThreadEvent(
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
     const { remaining } = takeLiveMessage(prev.messages, progressMessageId(event));
     const id = String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`);
+    const known = prev.messages.find((message) => message.id === id);
     const next: MobileMessage = {
       id,
+      createdAt: known?.createdAt ?? event.createdAt,
       runId: event.runId ? String(event.runId) : undefined,
       role: (event.payload?.role as MobileMessage["role"]) ?? "bot",
       // An update can leave the call id out — the `end_call` marker does — so keep the one
       // the message already carries instead of dropping it out of its call.
-      callId:
-        typeof event.payload?.callId === "string"
-          ? event.payload.callId
-          : prev.messages.find((message) => message.id === id)?.callId,
+      callId: typeof event.payload?.callId === "string" ? event.payload.callId : known?.callId,
       blocks: (event.payload?.blocks as MobileMessage["blocks"]) ?? [],
       botId: event.botId ?? (event.payload?.botId ? String(event.payload.botId) : undefined),
-      replyToMessageId: event.payload?.replyToMessageId
-        ? String(event.payload.replyToMessageId)
-        : undefined,
-      replyQuote: event.payload?.replyQuote ? String(event.payload.replyQuote) : undefined,
+      ...replyMetadata(event.payload ?? {}, known),
     };
     return {
       ...prev,

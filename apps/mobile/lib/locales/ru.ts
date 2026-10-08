@@ -1,4 +1,8 @@
 export const RU_MESSAGES: Record<string, string> = {
+  Today: "Сегодня",
+  Yesterday: "Вчера",
+  You: "Вы",
+  "Original message unavailable": "Исходное сообщение недоступно",
   "No archived bots": "Нет архивированных ботов",
   "Recover computer?": "Восстановить компьютер?",
   "Recreate a computer that is not working.": "Пересоздать неработающий компьютер.",

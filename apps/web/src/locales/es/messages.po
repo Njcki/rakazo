@@ -276,6 +276,7 @@ msgstr "Modelo activo"
 msgid "Activity"
 msgstr "Actividad"
 
+#: src/pages/ModelBackupsSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
@@ -312,6 +313,14 @@ msgstr "Agrega una URL de servidor HTTPS."
 #: src/pages/PluginsOverlay.tsx
 msgid "Add another"
 msgstr ""
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Add connected model"
+msgstr "Agregar modelo conectado"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Add connected models to use them as backups."
+msgstr "Agrega modelos conectados para usarlos como respaldo."
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Add credential"
@@ -663,6 +672,18 @@ msgstr "Atrás"
 #: src/pages/Auth.tsx
 msgid "Back to sign in"
 msgstr "Volver a iniciar sesión"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Backup models"
+msgstr "Modelos de respaldo"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Backup models order"
+msgstr "Orden de los modelos de respaldo"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Backup models saved."
+msgstr "Modelos de respaldo guardados."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Base URL"
@@ -1100,6 +1121,10 @@ msgstr "Conectar"
 msgid "Connect a model"
 msgstr "Conectar un modelo"
 
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Connect a provider to add backups."
+msgstr "Conecta un proveedor para agregar modelos de respaldo."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Connect API key"
 msgstr "Conectar clave de API"
@@ -1399,6 +1424,10 @@ msgstr "No se pudieron cargar las reglas de aprobación"
 msgid "Could not load artifacts."
 msgstr ""
 
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Could not load backup models"
+msgstr "No se pudieron cargar los modelos de respaldo."
+
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Could not load billing"
 msgstr ""
@@ -1550,6 +1579,10 @@ msgstr "No se pudo guardar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not save Auto Review"
 msgstr "No se pudo guardar Auto Review"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Could not save backup models"
+msgstr "No se pudieron guardar los modelos de respaldo."
 
 #: src/pages/GroupPanel.tsx
 msgid "Could not save group"
@@ -2551,6 +2584,7 @@ msgstr "Cargando proveedores de voz…"
 #: src/pages/Artifacts.tsx
 #: src/pages/Auth.tsx
 #: src/pages/IntegrationSetup.tsx
+#: src/pages/ModelBackupsSettings.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineRunHistory.tsx
@@ -2647,6 +2681,10 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 msgid "Maximum images per request"
 msgstr "Máximo de imágenes por solicitud"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Maximum of 10 backup models."
+msgstr "Máximo de 10 modelos de respaldo."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -2826,6 +2864,14 @@ msgstr ""
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "More computer actions"
 msgstr "Más acciones de computadora"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Move {full} down"
+msgstr "Mover {full} hacia abajo"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Move {full} up"
+msgstr "Mover {full} hacia arriba"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
@@ -3023,6 +3069,10 @@ msgstr "Sin disparador"
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Ninguno aún"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Not connected"
+msgstr "No conectado"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
@@ -3445,6 +3495,7 @@ msgid "Release interrupted computer?"
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
+#: src/pages/ModelBackupsSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/bot-credentials.tsx
@@ -3455,6 +3506,10 @@ msgstr "Quitar"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "Quitar {0}"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Remove {full}"
+msgstr "Quitar {full}"
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Remove {secretName}? This bot will no longer be able to use it."
@@ -3601,6 +3656,7 @@ msgstr ""
 
 #: src/components/AccountAccess.tsx
 #: src/pages/Auth.tsx
+#: src/pages/ModelBackupsSettings.tsx
 msgid "Retry"
 msgstr "Reintentar"
 
@@ -3699,6 +3755,10 @@ msgstr ""
 msgid "Save"
 msgstr "Guardar"
 
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Save backups"
+msgstr "Guardar respaldos"
+
 #: src/pages/shell/bot-credentials.tsx
 msgid "Save credential"
 msgstr ""
@@ -3744,6 +3804,7 @@ msgstr ""
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/GroupPanel.tsx
+#: src/pages/ModelBackupsSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-credentials.tsx
@@ -3813,6 +3874,10 @@ msgstr "Buscando…"
 #: src/pages/Shell.tsx
 msgid "Select a bot"
 msgstr "Selecciona un bot"
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Select a connected model"
+msgstr "Selecciona un modelo conectado"
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4014,6 +4079,14 @@ msgstr "Actualización de software"
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
 msgstr "Algo salió mal. Inténtalo de nuevo."
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Space changed. Reopen Models to load its backup list."
+msgstr "El espacio cambió. Vuelve a abrir Modelos para cargar la lista de respaldo."
+
+#: src/pages/ModelBackupsSettings.tsx
+msgid "Space changed. Reopen Models to save its backup list."
+msgstr "El espacio cambió. Vuelve a abrir Modelos para guardar la lista de respaldo."
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Space default"

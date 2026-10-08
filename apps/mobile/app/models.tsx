@@ -1,17 +1,22 @@
-import type { ModelOAuthBegin, ThinkingLevel } from "@rakazo/contracts";
+import type { ModelBackupChoice, ModelOAuthBegin, ThinkingLevel } from "@rakazo/contracts";
 import {
+  backupChoiceKey,
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
   cloudflareGatewayRouting,
+  connectedBackupOptions,
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
+  MAX_MODEL_BACKUPS,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
+  moveBackupChoice,
   OPENAI_COMPATIBLE_BASE_URL_HINT,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   parseModelContextWindow,
   parseModelMaxImagesPerPrompt,
   parseModelMaxTokens,
+  sameBackupChoices,
 } from "@rakazo/contracts";
 import {
   COMPATIBLE_THINKING_LEVELS,
@@ -42,8 +47,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeActionButton } from "../components/native-action-button";
 import { NativeSwitch } from "../components/native-switch";
 import { Checkmark, Chevron } from "../components/row-accessories";
-import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
-import { rpc } from "../lib/api";
+import type { ApiRequestContext, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
+import { captureApiRequestContext, rpc, selectedSpaceId } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
@@ -52,6 +57,7 @@ import {
   finishModelOAuthAttempt,
   waitForModelOAuth,
 } from "../lib/model-auth";
+import { mobileBackupScopeIsCurrent } from "../lib/model-backups";
 import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
 import { errorText } from "../lib/user-error";
 
@@ -126,6 +132,22 @@ export default function Models() {
   const [pending, setPending] = useState<"connect" | "default" | "disconnect" | null>(null);
   const [oauthPending, setOauthPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [backupModels, setBackupModels] = useState<ModelBackupChoice[]>([]);
+  const [savedBackupModels, setSavedBackupModels] = useState<ModelBackupChoice[]>([]);
+  const [backupLoading, setBackupLoading] = useState(true);
+  const [backupReady, setBackupReady] = useState(false);
+  const [backupSaving, setBackupSaving] = useState(false);
+  const backupReadyRef = useRef(false);
+  const backupLoadingRef = useRef(true);
+  const backupSavingRef = useRef(false);
+  backupReadyRef.current = backupReady;
+  backupLoadingRef.current = backupLoading;
+  backupSavingRef.current = backupSaving;
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const backupRequestGenerationRef = useRef(0);
+  const meRef = useRef<MobileMe | null>(null);
+  meRef.current = me;
   const [feedbackAnchor, setFeedbackAnchor] = useState<FeedbackAnchor>("connection");
   const oauthAbortRef = useRef<AbortController | null>(null);
   const oauthLoginIdRef = useRef<string | null>(null);
@@ -196,6 +218,7 @@ export default function Models() {
             nextProvider,
             preferred.modelId || nextCredential?.modelId || nextMe.defaultModel,
           );
+    meRef.current = nextMe;
     setMe(nextMe);
     setCatalog(nextCatalog);
     setCredentials(nextCredentials);
@@ -232,11 +255,77 @@ export default function Models() {
     setMaxTokens(connectionMaxTokensField(nextProvider, nextCredential?.maxTokens));
     setAccountId(nextCredential?.accountId ?? "");
     setGatewayId(nextCredential?.gatewayId ?? "");
+    return nextMe;
   }, []);
+
+  const loadBackupModels = useCallback(
+    async (expectedMe: MobileMe) => {
+      const requestGeneration = ++backupRequestGenerationRef.current;
+      const expected = { userId: expectedMe.userId, spaceId: expectedMe.spaceId };
+      backupReadyRef.current = false;
+      backupLoadingRef.current = true;
+      setBackupReady(false);
+      setBackupLoading(true);
+      setBackupModels([]);
+      setSavedBackupModels([]);
+      setBackupError(null);
+      setBackupNotice(null);
+      try {
+        const requestContext: ApiRequestContext = await captureApiRequestContext();
+        const currentMe = await rpc<MobileMe>("me", {}, { requestContext });
+        if (
+          !mobileBackupScopeIsCurrent({
+            expectedUserId: expected.userId,
+            expectedSpaceId: expected.spaceId,
+            currentUserId: currentMe.userId,
+            currentSpaceId: currentMe.spaceId,
+            selectedSpaceId: selectedSpaceId(),
+            requestGeneration,
+            currentGeneration: backupRequestGenerationRef.current,
+          })
+        ) {
+          throw new Error(t("Space changed. Reload Models to refresh backup models."));
+        }
+        const saved = await rpc<ModelBackupChoice[]>("models/backups", {}, { requestContext });
+        const liveMe = meRef.current;
+        if (
+          requestGeneration !== backupRequestGenerationRef.current ||
+          !liveMe ||
+          !mobileBackupScopeIsCurrent({
+            expectedUserId: expected.userId,
+            expectedSpaceId: expected.spaceId,
+            currentUserId: liveMe.userId,
+            currentSpaceId: liveMe.spaceId,
+            selectedSpaceId: selectedSpaceId(),
+            requestGeneration,
+            currentGeneration: backupRequestGenerationRef.current,
+          })
+        ) {
+          return;
+        }
+        setSavedBackupModels([...saved]);
+        setBackupModels([...saved]);
+        backupReadyRef.current = true;
+        setBackupReady(true);
+      } catch (err) {
+        if (requestGeneration !== backupRequestGenerationRef.current) return;
+        backupReadyRef.current = false;
+        setBackupReady(false);
+        setBackupError(err instanceof Error ? err.message : t("Could not load backup models"));
+      } finally {
+        if (requestGeneration === backupRequestGenerationRef.current) {
+          backupLoadingRef.current = false;
+          setBackupLoading(false);
+        }
+      }
+    },
+    [t],
+  );
 
   useFocusEffect(
     useCallback(() => {
       void load()
+        .then((nextMe) => loadBackupModels(nextMe))
         .catch((err: unknown) =>
           publishFeedback("connection", {
             error: errorText(err, t("Could not load model settings")),
@@ -244,10 +333,21 @@ export default function Models() {
         )
         .finally(() => setLoading(false));
       return () => {
+        backupRequestGenerationRef.current += 1;
+        backupReadyRef.current = false;
+        backupLoadingRef.current = true;
+        backupSavingRef.current = false;
+        setBackupModels([]);
+        setSavedBackupModels([]);
+        setBackupReady(false);
+        setBackupLoading(true);
+        setBackupSaving(false);
+        setBackupError(null);
+        setBackupNotice(null);
         modelProbe.invalidate();
         cancelOAuth();
       };
-    }, [cancelOAuth, load]),
+    }, [cancelOAuth, load, loadBackupModels]),
   );
 
   const groups = useMemo(() => {
@@ -279,6 +379,20 @@ export default function Models() {
     () => new Map(credentials.map((entry) => [entry.provider, entry])),
     [credentials],
   );
+  const backupOptions = useMemo(
+    () => connectedBackupOptions(catalog, credentials),
+    [catalog, credentials],
+  );
+  const backupOptionByKey = useMemo(
+    () => new Map(backupOptions.map((option) => [backupChoiceKey(option), option])),
+    [backupOptions],
+  );
+  const currentBackupKeys = new Set(backupModels.map(backupChoiceKey));
+  const addableBackupOptions = backupOptions.filter(
+    (option) => !currentBackupKeys.has(backupChoiceKey(option)),
+  );
+  const backupDirty = !sameBackupChoices(savedBackupModels, backupModels);
+  const backupLocked = !backupReady || backupLoading || backupSaving;
   // Connected providers always get their own top section; the rest follow the
   // curated order (featured first, everything behind "Show more").
   const connectedGroups = useMemo(
@@ -1245,6 +1359,115 @@ export default function Models() {
       </>
     ) : null;
 
+  function addBackupChoice(choice: ModelBackupChoice) {
+    if (backupLoadingRef.current || !backupReadyRef.current || backupSavingRef.current) return;
+    setBackupModels((current) => {
+      if (
+        backupLoadingRef.current ||
+        !backupReadyRef.current ||
+        backupSavingRef.current ||
+        current.length >= MAX_MODEL_BACKUPS ||
+        current.some((entry) => backupChoiceKey(entry) === backupChoiceKey(choice))
+      ) {
+        return current;
+      }
+      return [...current, { provider: choice.provider, modelId: choice.modelId }];
+    });
+    setBackupError(null);
+    setBackupNotice(null);
+  }
+
+  function openBackupModelPicker() {
+    if (
+      backupLoadingRef.current ||
+      !backupReadyRef.current ||
+      backupSavingRef.current ||
+      backupModels.length >= MAX_MODEL_BACKUPS
+    )
+      return;
+    presentMessageActionSheet({
+      title: t("Add connected model"),
+      actions: addableBackupOptions.map((option) => ({
+        text: `${option.providerName} · ${option.label}`,
+        onPress: () => addBackupChoice({ provider: option.provider, modelId: option.modelId }),
+      })),
+      colorScheme,
+      cancel: t("Cancel"),
+      more: t("More"),
+    });
+  }
+
+  function backupRowLabel(choice: ModelBackupChoice) {
+    const option = backupOptionByKey.get(backupChoiceKey(choice));
+    const entry = catalog.find(
+      (candidate) => candidate.provider === choice.provider && candidate.id === choice.modelId,
+    );
+    const providerName = option?.providerName ?? entry?.providerName ?? choice.provider;
+    const label = option?.label ?? entry?.label ?? choice.modelId;
+    return { label: `${providerName} · ${label}`, connected: Boolean(option) };
+  }
+
+  async function saveBackupModels() {
+    if (
+      !me ||
+      !backupDirty ||
+      backupLoadingRef.current ||
+      !backupReadyRef.current ||
+      backupSavingRef.current
+    )
+      return;
+    const expected = { userId: me.userId, spaceId: me.spaceId };
+    const requestGeneration = backupRequestGenerationRef.current;
+    const choices = backupModels.map((choice) => ({ ...choice }));
+    backupSavingRef.current = true;
+    setBackupSaving(true);
+    setBackupError(null);
+    setBackupNotice(null);
+    try {
+      const requestContext: ApiRequestContext = await captureApiRequestContext();
+      const currentMe = await rpc<MobileMe>("me", {}, { requestContext });
+      if (
+        !mobileBackupScopeIsCurrent({
+          expectedUserId: expected.userId,
+          expectedSpaceId: expected.spaceId,
+          currentUserId: currentMe.userId,
+          currentSpaceId: currentMe.spaceId,
+          selectedSpaceId: selectedSpaceId(),
+          requestGeneration,
+          currentGeneration: backupRequestGenerationRef.current,
+        })
+      ) {
+        throw new Error(t("Space changed. Reload Models before saving backups."));
+      }
+      await rpc("models/setBackups", choices, { requestContext });
+      const liveMe = meRef.current;
+      if (
+        !liveMe ||
+        !mobileBackupScopeIsCurrent({
+          expectedUserId: expected.userId,
+          expectedSpaceId: expected.spaceId,
+          currentUserId: liveMe.userId,
+          currentSpaceId: liveMe.spaceId,
+          selectedSpaceId: selectedSpaceId(),
+          requestGeneration,
+          currentGeneration: backupRequestGenerationRef.current,
+        })
+      ) {
+        return;
+      }
+      setSavedBackupModels(choices);
+      setBackupNotice(t("Backup models saved."));
+    } catch (err) {
+      if (requestGeneration !== backupRequestGenerationRef.current) return;
+      setBackupError(err instanceof Error ? err.message : t("Could not save backup models"));
+    } finally {
+      if (requestGeneration === backupRequestGenerationRef.current) {
+        backupSavingRef.current = false;
+        setBackupSaving(false);
+      }
+    }
+  }
+
   const saveRow =
     credential && (!isActive || thinkingDirty || usingServerCredentials) ? (
       <NativeActionButton
@@ -1435,6 +1658,146 @@ export default function Models() {
         ) : (
           feedback
         )}
+
+        <View style={styles.backupSection}>
+          <Text style={styles.backupTitle}>{t("Backup models")}</Text>
+          {backupLoading ? (
+            <ActivityIndicator color={native.secondaryLabel} />
+          ) : backupModels.length ? (
+            <View style={styles.backupCard}>
+              {backupModels.map((choice, index) => {
+                const row = backupRowLabel(choice);
+                const key = backupChoiceKey(choice);
+                return (
+                  <View key={key} style={styles.backupRow}>
+                    <View style={styles.backupCopy}>
+                      <Text style={styles.backupModelLabel}>
+                        {index + 1}. {row.label}
+                      </Text>
+                      {!row.connected ? (
+                        <Text style={styles.backupUnavailable}>{t("Not connected")}</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.backupActions}>
+                      <NativeActionButton
+                        accessibilityLabel={t("Move {model} up", { model: row.label })}
+                        disabled={index === 0 || backupLocked}
+                        onPress={() => {
+                          if (
+                            backupLoadingRef.current ||
+                            !backupReadyRef.current ||
+                            backupSavingRef.current
+                          )
+                            return;
+                          setBackupModels((current) =>
+                            moveBackupChoice(
+                              current,
+                              current.findIndex((entry) => backupChoiceKey(entry) === key),
+                              -1,
+                            ),
+                          );
+                          setBackupError(null);
+                          setBackupNotice(null);
+                        }}
+                        label="↑"
+                        prominence="quiet"
+                      />
+                      <NativeActionButton
+                        accessibilityLabel={t("Move {model} down", { model: row.label })}
+                        disabled={index === backupModels.length - 1 || backupLocked}
+                        onPress={() => {
+                          if (
+                            backupLoadingRef.current ||
+                            !backupReadyRef.current ||
+                            backupSavingRef.current
+                          )
+                            return;
+                          setBackupModels((current) =>
+                            moveBackupChoice(
+                              current,
+                              current.findIndex((entry) => backupChoiceKey(entry) === key),
+                              1,
+                            ),
+                          );
+                          setBackupError(null);
+                          setBackupNotice(null);
+                        }}
+                        label="↓"
+                        prominence="quiet"
+                      />
+                      <NativeActionButton
+                        accessibilityLabel={t("Remove {model}", { model: row.label })}
+                        disabled={backupLocked}
+                        onPress={() => {
+                          if (
+                            backupLoadingRef.current ||
+                            !backupReadyRef.current ||
+                            backupSavingRef.current
+                          )
+                            return;
+                          setBackupModels((current) =>
+                            current.filter((entry) => backupChoiceKey(entry) !== key),
+                          );
+                          setBackupError(null);
+                          setBackupNotice(null);
+                        }}
+                        label={t("Remove")}
+                        prominence="quiet"
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.secondary}>
+              {addableBackupOptions.length
+                ? t("Add connected models to use them as backups.")
+                : t("Connect a provider to add backups.")}
+            </Text>
+          )}
+          {backupModels.length >= MAX_MODEL_BACKUPS ? (
+            <Text style={styles.backupUnavailable}>{t("Maximum of 10 backup models.")}</Text>
+          ) : null}
+          <NativeActionButton
+            accessibilityLabel={t("Add connected model")}
+            disabled={
+              backupLocked ||
+              backupModels.length >= MAX_MODEL_BACKUPS ||
+              addableBackupOptions.length === 0
+            }
+            onPress={openBackupModelPicker}
+            label={t("Add connected model")}
+            prominence="secondary"
+          />
+          <NativeActionButton
+            accessibilityLabel={t("Save backups")}
+            disabled={!backupDirty || backupLocked}
+            onPress={() => void saveBackupModels()}
+            label={backupSaving ? t("Saving…") : t("Save backups")}
+            prominence="primary"
+          />
+          {backupError ? (
+            <View style={{ gap: 8 }}>
+              <Text accessibilityRole="alert" style={styles.error}>
+                {backupError}
+              </Text>
+              {!backupReady && !backupLoading && me ? (
+                <NativeActionButton
+                  disabled={backupLoading || backupSaving}
+                  onPress={() => void loadBackupModels(me)}
+                  label={t("Retry")}
+                  prominence="secondary"
+                />
+              ) : null}
+            </View>
+          ) : null}
+          {backupNotice ? (
+            <Text accessibilityRole="text" style={styles.secondary}>
+              {backupNotice}
+            </Text>
+          ) : null}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1491,6 +1854,52 @@ function createModelsStyles() {
       borderRadius: 14,
       backgroundColor: native.fill,
       overflow: "hidden",
+    },
+    backupSection: {
+      gap: 12,
+      marginTop: 16,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: native.fillPressed,
+      paddingTop: 14,
+    },
+    backupTitle: {
+      color: native.label,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    backupCard: {
+      marginTop: 10,
+      borderRadius: 14,
+      backgroundColor: native.fill,
+      overflow: "hidden",
+    },
+    backupRow: {
+      minHeight: 56,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: native.fillPressed,
+    },
+    backupCopy: {
+      flex: 1,
+      minWidth: 0,
+    },
+    backupModelLabel: {
+      color: native.label,
+      fontSize: 14,
+    },
+    backupUnavailable: {
+      color: native.tertiaryLabel,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    backupActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
     },
     providerRow: {
       minHeight: 62,

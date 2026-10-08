@@ -1013,6 +1013,30 @@ export const ModelCredentialSchema = z.object({
 });
 export type ModelCredential = z.infer<typeof ModelCredentialSchema>;
 
+export const MAX_MODEL_BACKUPS = 10;
+export const ModelBackupChoiceSchema = z.object({
+  provider: z.string().trim().min(1).max(128),
+  modelId: z.string().trim().min(1).max(512),
+});
+export type ModelBackupChoice = z.infer<typeof ModelBackupChoiceSchema>;
+export const ModelBackupListSchema = z
+  .array(ModelBackupChoiceSchema)
+  .max(MAX_MODEL_BACKUPS)
+  .superRefine((choices, ctx) => {
+    const seen = new Set<string>();
+    for (const [index, choice] of choices.entries()) {
+      const key = JSON.stringify([choice.provider, choice.modelId]);
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Backup models must be unique",
+          path: [index],
+        });
+      }
+      seen.add(key);
+    }
+  });
+
 export const OPENAI_COMPATIBLE_PROVIDER_ID = "openai-compatible";
 
 export const ModelConnectInputSchema = z

@@ -660,6 +660,23 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not save that preference": "Не удалось сохранить эту настройку",
   Username: "Имя пользователя",
   // app/models.tsx
+  "Add connected model": "Добавить подключённую модель",
+  "Add connected models to use them as backups.":
+    "Добавьте подключённые модели, чтобы использовать их как резервные.",
+  "Backup models": "Резервные модели",
+  "Backup models saved.": "Резервные модели сохранены.",
+  "Connect a provider to add backups.": "Подключите провайдера, чтобы добавить резервные модели.",
+  "Could not load backup models": "Не удалось загрузить резервные модели.",
+  "Could not save backup models": "Не удалось сохранить резервные модели.",
+  "Maximum of 10 backup models.": "Можно добавить не более 10 резервных моделей.",
+  "Move {model} down": "Переместить {model} ниже",
+  "Move {model} up": "Переместить {model} выше",
+  "Remove {model}": "Удалить {model}",
+  "Save backups": "Сохранить резервные модели",
+  "Space changed. Reload Models to refresh backup models.":
+    "Пространство изменилось. Перезагрузите раздел «Модели», чтобы обновить резервные модели.",
+  "Space changed. Reload Models before saving backups.":
+    "Пространство изменилось. Перезагрузите раздел «Модели», прежде чем сохранять резервные модели.",
   "A sign-in page opened — enter this code there:":
     "Открылась страница входа — введите там этот код:",
   "All providers": "Все провайдеры",

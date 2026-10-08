@@ -215,6 +215,8 @@ export function observedPiStream(
     imageTokens?: ContextBudget["imageTokens"];
     onUsage?: (usage: AgentUsage) => void;
     recordUsage?: (event: Extract<AgentRuntimeEvent, { type: "usage" }>) => void | Promise<void>;
+    /** Provider failures only; excludes context, reservations and usage settlement. */
+    onProviderError?: (message: AssistantMessage) => void;
   },
 ) {
   const stream = createAssistantMessageEventStream();
@@ -243,6 +245,9 @@ export function observedPiStream(
     let reservation: string | undefined;
     let started = false;
     let settled = false;
+    let partialMessage: AssistantMessage | undefined;
+    let providerError: unknown;
+    let providerThrew = false;
     try {
       // A tool-budget or cancellation stop can reach Pi's next-turn hook after
       // aborting. It is not a model invocation and must not create unknown usage.
@@ -270,17 +275,43 @@ export function observedPiStream(
         ...(cacheRetention ? { cacheRetention } : {}),
         ...(observer ? { maxRetries: 0 } : {}),
       };
-      const upstream = models.streamSimple(
-        model,
-        preparedContext,
-        collectRawUsage
-          ? {
-              ...streamOptions,
-              fetch: usageReportingFetch(streamOptions?.fetch ?? globalThis.fetch, reported),
+      let upstream: ReturnType<Models["streamSimple"]>;
+      try {
+        upstream = models.streamSimple(
+          model,
+          preparedContext,
+          collectRawUsage
+            ? {
+                ...streamOptions,
+                fetch: usageReportingFetch(streamOptions?.fetch ?? globalThis.fetch, reported),
+              }
+            : streamOptions,
+        );
+      } catch (error) {
+        providerThrew = true;
+        providerError = error;
+        throw error;
+      }
+      const events = hooks?.onProviderError
+        ? (async function* () {
+            try {
+              yield* upstream;
+            } catch (error) {
+              providerThrew = true;
+              providerError = error;
+              throw error;
             }
-          : streamOptions,
-      );
-      for await (const event of upstream) {
+          })()
+        : upstream;
+      for await (const event of events) {
+        if (hooks?.onProviderError) {
+          partialMessage =
+            event.type === "done"
+              ? event.message
+              : event.type === "error"
+                ? event.error
+                : event.partial;
+        }
         if (event.type === "done" || event.type === "error") {
           const message = event.type === "done" ? event.message : event.error;
           normalized = normalizePiUsage(message.usage, model, reported);
@@ -298,6 +329,7 @@ export function observedPiStream(
             await observer.afterCall(reservation, normalized);
           }
         }
+        if (event.type === "error") hooks?.onProviderError?.(event.error);
         stream.push(event);
       }
       stream.end(await upstream.result());
@@ -322,7 +354,7 @@ export function observedPiStream(
       // Preserve a proper Pi terminal message so Agent and cancellation both settle.
       const message = {
         role: "assistant" as const,
-        content: [],
+        content: hooks?.onProviderError ? (partialMessage?.content ?? []) : [],
         api: model.api,
         provider: model.provider,
         model: model.id,
@@ -339,6 +371,7 @@ export function observedPiStream(
           terminalError instanceof Error ? terminalError.message : String(terminalError),
         timestamp: Date.now(),
       };
+      if (providerThrew && terminalError === providerError) hooks?.onProviderError?.(message);
       stream.push({ type: "error", reason: "error", error: message });
       stream.end(message);
     }

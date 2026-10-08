@@ -674,6 +674,23 @@ export const DE_MESSAGES: Record<string, string> = {
   // lib/voice.ts
   "Could not play that clip.": "Dieser Clip konnte nicht abgespielt werden.",
   // app/models.tsx
+  "Add connected model": "Verbundenes Modell hinzufügen",
+  "Add connected models to use them as backups.":
+    "Füge verbundene Modelle hinzu, um sie als Backups zu verwenden.",
+  "Backup models": "Backup-Modelle",
+  "Backup models saved.": "Backup-Modelle gespeichert.",
+  "Connect a provider to add backups.": "Verbinde einen Anbieter, um Backups hinzuzufügen.",
+  "Could not load backup models": "Backup-Modelle konnten nicht geladen werden.",
+  "Could not save backup models": "Backup-Modelle konnten nicht gespeichert werden.",
+  "Maximum of 10 backup models.": "Maximal 10 Backup-Modelle.",
+  "Move {model} down": "{model} nach unten verschieben",
+  "Move {model} up": "{model} nach oben verschieben",
+  "Remove {model}": "{model} entfernen",
+  "Save backups": "Backups speichern",
+  "Space changed. Reload Models to refresh backup models.":
+    "Der Space wurde gewechselt. Lade Modelle neu, um die Backups zu aktualisieren.",
+  "Space changed. Reload Models before saving backups.":
+    "Der Space wurde gewechselt. Lade Modelle neu, bevor du Backups speicherst.",
   "A sign-in page opened — enter this code there:":
     "Eine Anmeldeseite wurde geöffnet — gib dort diesen Code ein:",
   "All providers": "Alle Anbieter",

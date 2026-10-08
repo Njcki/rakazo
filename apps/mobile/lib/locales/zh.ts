@@ -641,6 +641,22 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not save that preference": "无法保存该设置",
   Username: "用户名",
   // app/models.tsx
+  "Add connected model": "添加已连接模型",
+  "Add connected models to use them as backups.": "添加已连接模型作为备用模型。",
+  "Backup models": "备用模型",
+  "Backup models saved.": "备用模型已保存。",
+  "Connect a provider to add backups.": "连接提供商后即可添加备用模型。",
+  "Could not load backup models": "无法加载备用模型。",
+  "Could not save backup models": "无法保存备用模型。",
+  "Maximum of 10 backup models.": "最多可添加 10 个备用模型。",
+  "Move {model} down": "将 {model} 下移",
+  "Move {model} up": "将 {model} 上移",
+  "Remove {model}": "移除 {model}",
+  "Save backups": "保存备用模型",
+  "Space changed. Reload Models to refresh backup models.":
+    "空间已更改。重新加载“模型”以刷新备用模型。",
+  "Space changed. Reload Models before saving backups.":
+    "空间已更改。保存备用模型前请重新加载“模型”。",
   "A sign-in page opened — enter this code there:": "登录页面已打开——请在其中输入此代码：",
   "All providers": "所有提供商",
   Copied: "已复制",

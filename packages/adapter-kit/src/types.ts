@@ -464,6 +464,12 @@ export interface AgentRunRequest {
   currentTurnImages?: AgentInputImage[];
   tools: ConnectorTool[];
   model: AgentRunModel;
+  /** Ordered, user-selected models eligible after provider unavailability. */
+  fallbackModels?: Array<Pick<AgentRunModel, "provider" | "id">>;
+  /** Resolve one configured backup lazily so healthy primary turns do no extra auth work. */
+  resolveFallbackModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
+  /** Persist the selected backup against the active run lease before requesting it. */
+  onModelChange?: (provider: string, modelId: string) => Promise<void>;
   /** Resolve an explicitly requested helper model within the active user and space scope. */
   resolveModel?: (provider: string, modelId: string) => Promise<AgentRunModel>;
   resumeFromCheckpoint?: string;

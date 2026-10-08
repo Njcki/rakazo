@@ -2942,6 +2942,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
     provider: string,
     modelId: string,
     registerSecrets?: (values: string[]) => void,
+    requireStoredSecret = false,
   ): Promise<AgentRunRequest["model"]> => {
     const validationError = await validateConnectedModelChoice(
       deps.prisma,
@@ -2966,6 +2967,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       provider,
       modelId,
       registerSecrets,
+      requireStoredSecret,
     );
     return {
       provider,
@@ -6350,6 +6352,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
           return;
         }
 
+        let fallbackModels: { provider: string; modelId: string }[] = [];
+        if (!scripted) {
+          try {
+            fallbackModels = await deps.prisma.spaceBackupModel.findMany({
+              where: { userId: run.userId, spaceId: run.spaceId },
+              orderBy: { position: "asc" },
+              select: { provider: true, modelId: true },
+            });
+          } catch (error) {
+            getLogger().warn("Backup models could not be loaded", { runId, error });
+          }
+        }
+        const fallbackModelKeys = new Set(
+          fallbackModels
+            .filter(
+              (candidate) =>
+                candidate.provider !== runModelProvider || candidate.modelId !== runModelId,
+            )
+            .map((candidate) => JSON.stringify([candidate.provider, candidate.modelId])),
+        );
+
         try {
           const runtimeEvents = deps.runtime.run(
             {
@@ -6419,6 +6442,41 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       retire: resolved.retireOAuth,
                     }
                   : undefined,
+              },
+              fallbackModels: fallbackModels.map(({ provider, modelId }) => ({
+                provider,
+                id: modelId,
+              })),
+              resolveFallbackModel: fallbackModelKeys.size
+                ? async (provider, modelId) => {
+                    const key = JSON.stringify([provider, modelId]);
+                    if (!fallbackModelKeys.has(key))
+                      throw new Error("Backup model is not selected");
+                    return resolveConnectedModel(
+                      { userId: run.userId, spaceId: run.spaceId },
+                      provider,
+                      modelId,
+                      (values) => runSecrets.push(...values),
+                      true,
+                    );
+                  }
+                : undefined,
+              onModelChange: async (provider, modelId) => {
+                if (!fallbackModelKeys.has(JSON.stringify([provider, modelId]))) {
+                  throw new Error("Backup model is not selected");
+                }
+                const updated = await deps.prisma.run.updateMany({
+                  where: {
+                    id: runId,
+                    status: "running",
+                    leaseOwner: workerId,
+                    leaseFence: fence,
+                  },
+                  data: { modelProvider: provider, modelId },
+                });
+                if (updated.count !== 1) {
+                  throw new Error("Run lease was lost before the backup model could be used");
+                }
               },
               resumeFromCheckpoint: takeoverResume?.checkpoint,
               script,
@@ -8185,6 +8243,7 @@ async function resolveModelKey(
   provider: string,
   modelId: string,
   registerSecrets?: (values: string[]) => void,
+  requireStoredSecret = false,
 ): Promise<{
   apiKey?: string;
   accountId?: string;
@@ -8212,6 +8271,7 @@ async function resolveModelKey(
         where: { id: credential.secretId, userId, spaceId: null },
       });
       if (!row) {
+        if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
         cloudflareGatewayProviderEnv({ provider });
         return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
       }
@@ -8338,6 +8398,7 @@ async function resolveModelKey(
       };
     });
   }
+  if (requireStoredSecret) throw new Error("Backup model credential is no longer available");
   cloudflareGatewayProviderEnv({ provider });
   return { apiKey: deploymentKeyFor(deps, provider), redact: [] };
 }

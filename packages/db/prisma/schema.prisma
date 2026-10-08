@@ -257,6 +257,7 @@ model SpaceMember {
   modelPreferences SpaceModelPreference[]
   voicePreferences SpaceVoicePreference[]
   aiDataConsents AiDataConsent[]
+  backupModels SpaceBackupModel[]
 
   @@unique([spaceId, userId])
   @@index([organizationId, userId])
@@ -347,6 +348,19 @@ model SpaceModelPreference {
   @@index([credentialId])
   // Partial unique index space_model_preferences_default_key is created in SQL.
   @@map("space_model_preferences")
+}
+
+model SpaceBackupModel {
+  spaceId     String
+  userId      String
+  spaceMember SpaceMember @relation(fields: [spaceId, userId], references: [spaceId, userId], onDelete: Cascade)
+  provider    String
+  modelId     String
+  position    Int
+
+  @@id([spaceId, userId, position])
+  @@unique([spaceId, userId, provider, modelId])
+  @@map("space_backup_models")
 }
 
 model SpaceVoicePreference {

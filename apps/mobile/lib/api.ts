@@ -885,6 +885,7 @@ export type MobileBotSection = BotSection;
 
 export type MobileMe = Pick<
   Me,
+  | "userId"
   | "name"
   | "email"
   | "spaceId"

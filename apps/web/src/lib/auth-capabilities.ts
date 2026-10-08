@@ -7,8 +7,27 @@ export type { AuthCapabilities } from "@rakazo/contracts";
 const TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
+let capabilitiesRequest: Promise<AuthCapabilities> | undefined;
+
+export function fetchAuthCapabilities(): Promise<AuthCapabilities> {
+  // Auth can briefly remount during session refresh; the gate uses the same deployment lookup.
+  capabilitiesRequest ??= loadAuthCapabilities().then(
+    (capabilities) => {
+      if (capabilities.sso && capabilities.sso.availability !== "available") {
+        capabilitiesRequest = undefined;
+      }
+      return capabilities;
+    },
+    (error: unknown) => {
+      capabilitiesRequest = undefined;
+      throw error;
+    },
+  );
+  return capabilitiesRequest;
+}
+
 /** Public deployment capabilities, bounded in time and size so a stalled API cannot hang the UI. */
-export async function fetchAuthCapabilities(): Promise<AuthCapabilities> {
+async function loadAuthCapabilities(): Promise<AuthCapabilities> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {

@@ -1,5 +1,11 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { fetchAuthCapabilities } from "./auth-capabilities";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { AuthCapabilities } from "./auth-capabilities";
+
+let fetchAuthCapabilities: () => Promise<AuthCapabilities>;
+beforeEach(async () => {
+  vi.resetModules();
+  ({ fetchAuthCapabilities } = await import("./auth-capabilities"));
+});
 
 afterEach(() => vi.unstubAllGlobals());
 const capability = {
@@ -53,3 +59,50 @@ it("accepts old capabilities for the bundled desktop client", async () => {
     billing: false,
   });
 });
+
+it.each([null, { ...capability.sso, availability: "available" }])(
+  "shares the pending and successful deployment lookup across callers with SSO %j",
+  async (sso) => {
+    const available = { ...capability, sso };
+    let resolve!: (response: Response) => void;
+    const fetch = vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const auth = fetchAuthCapabilities();
+    const gate = fetchAuthCapabilities();
+    expect(gate).toBe(auth);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    resolve(Response.json(available));
+    await expect(auth).resolves.toEqual(available);
+    await expect(fetchAuthCapabilities()).resolves.toEqual(available);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("retries a failed deployment lookup", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({}, { status: 503 }))
+    .mockResolvedValueOnce(Response.json(capability));
+  vi.stubGlobal("fetch", fetch);
+  await expect(fetchAuthCapabilities()).rejects.toThrow();
+  await expect(fetchAuthCapabilities()).resolves.toEqual(capability);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it.each(["checking", "unavailable"])(
+  "refreshes %s SSO discovery on the next lookup",
+  async (availability) => {
+    const fetch = vi.fn(async () =>
+      Response.json({ ...capability, sso: { ...capability.sso, availability } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await fetchAuthCapabilities();
+    await fetchAuthCapabilities();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  },
+);

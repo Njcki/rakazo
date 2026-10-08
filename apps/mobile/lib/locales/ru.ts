@@ -710,6 +710,9 @@ export const RU_MESSAGES: Record<string, string> = {
     "Встроенный голос телефона — бесплатно, без аккаунта",
   "Speaks with your phone's own text-to-speech instead of a connected provider.":
     "Озвучивает встроенным синтезом речи телефона вместо подключённого провайдера.",
+
+  "Open external link?": "Открыть внешнюю ссылку?",
+  Open: "Открыть",
   // ai-data-sharing
   "AI models": "Модели ИИ",
   Memory: "Память",

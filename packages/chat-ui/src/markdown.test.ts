@@ -6,6 +6,8 @@ import {
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
+  markdownLinkDisplayParts,
+  markdownLinkRequiresConfirmation,
   plainTextLinkParts,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
@@ -122,6 +124,82 @@ describe("sanitizeMarkdownUrl", () => {
     expect(sanitizeMarkdownUrl("javascript:alert(1)", true)).toBeUndefined();
     expect(sanitizeMarkdownUrl("data:text/html,<script>alert(1)</script>", true)).toBeUndefined();
     expect(sanitizeMarkdownUrl("/docs")).toBeUndefined();
+  });
+});
+
+describe("markdownLinkRequiresConfirmation", () => {
+  const origin = "https://app.example.test";
+
+  it("asks before an http(s) url on another origin", () => {
+    expect(markdownLinkRequiresConfirmation("https://evil.example/a?b=1", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("http://evil.example", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation(" HTTPS://evil.example/a ", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("//evil.example/a", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("https://files.app.example.test/a", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("https://app.example.test:8443/a", origin)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("http://app.example.test/a", origin)).toBe(true);
+  });
+
+  it("opens same-origin and in-app routes without asking", () => {
+    expect(markdownLinkRequiresConfirmation("https://app.example.test/threads/1", origin)).toBe(
+      false,
+    );
+    expect(markdownLinkRequiresConfirmation("https://app.example.test:443/threads/1", origin)).toBe(
+      false,
+    );
+    expect(markdownLinkRequiresConfirmation("https://USER:pw@app.example.test/a", origin)).toBe(
+      false,
+    );
+    expect(markdownLinkRequiresConfirmation("/threads/1", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("./notes.md", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("../notes.md", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("#section", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("?tab=files", origin)).toBe(false);
+  });
+
+  it("opens mailto and tel without asking", () => {
+    expect(markdownLinkRequiresConfirmation("mailto:hello@example.test", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("mailto:hello@example.test?subject=Hi", origin)).toBe(
+      false,
+    );
+    expect(markdownLinkRequiresConfirmation("tel:+15551212", origin)).toBe(false);
+  });
+
+  it("treats absolute http(s) urls as external when the app origin is unknown", () => {
+    expect(markdownLinkRequiresConfirmation("https://evil.example/a", null)).toBe(true);
+    expect(markdownLinkRequiresConfirmation("/threads/1", null)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("mailto:hello@example.test", null)).toBe(false);
+  });
+
+  it("does not ask for schemes the sanitizer will not open", () => {
+    expect(markdownLinkRequiresConfirmation("javascript:alert(1)", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("data:text/html,hi", origin)).toBe(false);
+    expect(markdownLinkRequiresConfirmation("", origin)).toBe(false);
+  });
+});
+
+describe("markdownLinkDisplayParts", () => {
+  it("emphasizes the host, including a port, and leaves userinfo outside it", () => {
+    expect(markdownLinkDisplayParts("https://evil.example:8443/a?b=1#c")).toEqual({
+      before: "https://",
+      host: "evil.example:8443",
+      after: "/a?b=1#c",
+    });
+    expect(markdownLinkDisplayParts("https://user:secret@evil.example/a")).toEqual({
+      before: "https://user:secret@",
+      host: "evil.example",
+      after: "/a",
+    });
+    expect(markdownLinkDisplayParts("https://[2001:db8::1]/a")).toEqual({
+      before: "https://",
+      host: "[2001:db8::1]",
+      after: "/a",
+    });
+  });
+
+  it("returns nothing for addresses that are not web links", () => {
+    expect(markdownLinkDisplayParts("mailto:hello@example.test")).toBeUndefined();
+    expect(markdownLinkDisplayParts("/threads/1")).toBeUndefined();
   });
 });
 
@@ -251,5 +329,18 @@ describe("link labels", () => {
     for (const href of ["mailto:a@example.com", "tel:+15555550100", "/docs", "#top", ""]) {
       expect(linkFaviconOrigin(href)).toBeUndefined();
     }
+  });
+});
+
+it("highlights the destination host after userinfo containing the same host text", () => {
+  expect(markdownLinkDisplayParts("https://docs.example.test@docs.example/a")).toEqual({
+    before: "https://docs.example.test@",
+    host: "docs.example",
+    after: "/a",
+  });
+  expect(markdownLinkDisplayParts("https://docs.example:docs.example@docs.example/a")).toEqual({
+    before: "https://docs.example:docs.example@",
+    host: "docs.example",
+    after: "/a",
   });
 });

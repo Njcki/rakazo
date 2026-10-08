@@ -45,6 +45,13 @@ vi.mock("react-native", () => {
     },
     Platform: { OS: "ios", select: (options: { ios?: unknown }) => options.ios },
     Linking: linking,
+    Alert: {
+      alert: (
+        _title: string,
+        _message: string,
+        buttons: Array<{ text: string; onPress?: () => void }>,
+      ) => buttons.find((button) => button.text === "Open")?.onPress?.(),
+    },
     I18nManager: { isRTL: false },
   };
 });

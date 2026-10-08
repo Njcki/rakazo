@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+const alert = vi.hoisted(() => vi.fn());
+
 const linking = vi.hoisted(() => ({
   canOpenURL: vi.fn(async () => true),
   openURL: vi.fn(async () => undefined),
@@ -147,6 +149,7 @@ vi.mock("react-native", async () => {
         options.ios ?? options.default ?? options.android,
     },
     Linking: linking,
+    Alert: { alert },
     I18nManager: i18n,
   };
 });
@@ -160,6 +163,7 @@ import {
   ChatMarkdown,
   LinkFaviconsContext,
   LinkifiedText,
+  MarkdownLinkPromptProvider,
   RemoteImagesContext,
   RemoteMarkdownImage,
 } from "./markdown.native";
@@ -396,6 +400,10 @@ describe("user message links", () => {
     await act(async () => {
       link?.click();
     });
+    expect(linking.openURL).not.toHaveBeenCalled();
+    await act(async () => {
+      alert.mock.calls.at(-1)?.[2][1].onPress();
+    });
     await vi.waitFor(() => {
       expect(linking.openURL).toHaveBeenCalledWith("https://example.com/docs");
     });
@@ -569,6 +577,10 @@ describe("native markdown images", () => {
     const liveLink = container.querySelector<HTMLElement>("[data-accessibility-role='link']");
     await act(async () => {
       liveLink?.click();
+    });
+    expect(linking.openURL).not.toHaveBeenCalled();
+    await act(async () => {
+      alert.mock.calls.at(-1)?.[2][1].onPress();
     });
     await vi.waitFor(() => {
       expect(linking.openURL).toHaveBeenCalledWith("https://ci.example.test/tap-linked");
@@ -1057,5 +1069,113 @@ describe("native website links", () => {
     expect(mail?.querySelector("rn-view")).toBeNull();
     expect(mail?.getAttribute("data-color")).toBe(lightTokens.link);
     await view.cleanup();
+  });
+});
+
+describe("native external link confirmation", () => {
+  async function renderMarkdown(markdown: string, appOrigin?: string) {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    linking.openURL.mockClear();
+    alert.mockClear();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const body = <ChatMarkdown>{markdown}</ChatMarkdown>;
+    await act(async () => {
+      root.render(
+        appOrigin ? (
+          <MarkdownLinkPromptProvider appOrigin={appOrigin}>{body}</MarkdownLinkPromptProvider>
+        ) : (
+          body
+        ),
+      );
+    });
+    return {
+      container,
+      async cleanup() {
+        await act(async () => {
+          root.unmount();
+        });
+        container.remove();
+      },
+    };
+  }
+
+  it("asks before an external link and leaves it closed on cancel", async () => {
+    const view = await renderMarkdown("[Docs](https://example.test/docs?x=1)");
+    await act(async () => {
+      view.container.querySelector<HTMLElement>("[data-accessibility-role='link']")?.click();
+    });
+    expect(alert).toHaveBeenCalledWith(
+      "Open external link?",
+      "example.test\n\nhttps://example.test/docs?x=1",
+      expect.any(Array),
+      { cancelable: true },
+    );
+    expect(alert.mock.calls.at(-1)?.[2][0]).toMatchObject({ text: "Cancel", style: "cancel" });
+    expect(linking.openURL).not.toHaveBeenCalled();
+    expect(view.container.textContent).not.toContain("Open external link?");
+    await view.cleanup();
+  });
+
+  it("opens mailto and tel without asking", async () => {
+    const view = await renderMarkdown("[mail](mailto:user@example.test) [call](tel:+15551212)");
+    const links = view.container.querySelectorAll<HTMLElement>("[data-accessibility-role='link']");
+    expect(links).toHaveLength(2);
+    await act(async () => {
+      links[0]?.click();
+    });
+    await act(async () => {
+      links[1]?.click();
+    });
+    expect(view.container.textContent).not.toContain("Open external link?");
+    await vi.waitFor(() => {
+      expect(linking.openURL).toHaveBeenCalledWith("mailto:user@example.test");
+      expect(linking.openURL).toHaveBeenCalledWith("tel:+15551212");
+    });
+    await view.cleanup();
+  });
+
+  it("opens a same-origin link without asking", async () => {
+    const view = await renderMarkdown(
+      "[thread](https://app.example.test/threads/1)",
+      "https://app.example.test",
+    );
+    await act(async () => {
+      view.container.querySelector<HTMLElement>("[data-accessibility-role='link']")?.click();
+    });
+    expect(view.container.textContent).not.toContain("Open external link?");
+    await vi.waitFor(() => {
+      expect(linking.openURL).toHaveBeenCalledWith("https://app.example.test/threads/1");
+    });
+    await view.cleanup();
+  });
+});
+
+it("shows a full long native URL and opens it only on confirmation", async () => {
+  const url = `https://example.test/${"a".repeat(10000)}`;
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  alert.mockClear();
+  linking.openURL.mockClear();
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<ChatMarkdown>{`[Docs](${url})`}</ChatMarkdown>);
+  });
+  await act(async () => {
+    container.querySelector<HTMLElement>("[data-accessibility-role='link']")?.click();
+  });
+  const [title, message, buttons, options] = alert.mock.calls.at(-1)!;
+  expect(title).toBe("Open external link?");
+  expect(message).toBe(`example.test\n\n${url}`);
+  expect(buttons.map((button: { text: string }) => button.text)).toEqual(["Cancel", "Open"]);
+  expect(options).toEqual({ cancelable: true });
+  expect(linking.openURL).not.toHaveBeenCalled();
+  await act(async () => {
+    buttons[1].onPress();
+  });
+  expect(linking.openURL).toHaveBeenCalledWith(url);
+  await act(async () => {
+    root.unmount();
   });
 });

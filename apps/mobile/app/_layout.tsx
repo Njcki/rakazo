@@ -1,5 +1,9 @@
 import type { LinkFavicons } from "@rakazo/chat-ui/native";
-import { LinkFaviconsContext, RemoteImagesContext } from "@rakazo/chat-ui/native";
+import {
+  LinkFaviconsContext,
+  MarkdownLinkPromptProvider,
+  RemoteImagesContext,
+} from "@rakazo/chat-ui/native";
 import { DarkTheme, router, Stack, ThemeProvider } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import * as SplashScreen from "expo-splash-screen";
@@ -60,15 +64,21 @@ function ChatContentProviders({
   loadRemoteImages: boolean;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const endpoint = useSyncExternalStore(subscribeApiBase, currentApiBase, currentApiBase);
   const linkFavicons = useMemo<LinkFavicons>(
     () => ({ endpoint, load: (origin) => loadLinkFavicon(origin, endpoint), globe: <LinkGlobe /> }),
     [endpoint],
   );
   return (
-    <RemoteImagesContext.Provider value={loadRemoteImages}>
-      <LinkFaviconsContext.Provider value={linkFavicons}>{children}</LinkFaviconsContext.Provider>
-    </RemoteImagesContext.Provider>
+    <MarkdownLinkPromptProvider
+      appOrigin={endpoint}
+      copy={{ title: t("Open external link?"), cancel: t("Cancel"), open: t("Open") }}
+    >
+      <RemoteImagesContext.Provider value={loadRemoteImages}>
+        <LinkFaviconsContext.Provider value={linkFavicons}>{children}</LinkFaviconsContext.Provider>
+      </RemoteImagesContext.Provider>
+    </MarkdownLinkPromptProvider>
   );
 }
 

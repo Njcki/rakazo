@@ -706,6 +706,8 @@ export const DE_MESSAGES: Record<string, string> = {
   Transcript: "Transkript",
   Unmute: "Stummschaltung aufheben",
   "Voice chat": "Sprachchat",
+  "Open external link?": "Externen Link öffnen?",
+  Open: "Öffnen",
   // ai-data-sharing
   "AI models": "KI-Modelle",
   Memory: "Gedächtnis",

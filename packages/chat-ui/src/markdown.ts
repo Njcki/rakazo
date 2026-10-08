@@ -114,6 +114,65 @@ export function sanitizeMarkdownUrl(url: string, allowRelative = false): string 
   return undefined;
 }
 
+const httpUrlProtocols = new Set(["http:", "https:"]);
+
+function markdownLinkBase(appOrigin?: string | null) {
+  if (!appOrigin) return "https://app.invalid";
+  try {
+    return new URL(appOrigin).origin;
+  } catch {
+    return "https://app.invalid";
+  }
+}
+
+export function markdownLinkRequiresConfirmation(url: string, appOrigin?: string | null): boolean {
+  const value = url.trim();
+  if (!value) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value, markdownLinkBase(appOrigin));
+  } catch {
+    return false;
+  }
+  if (!httpUrlProtocols.has(parsed.protocol)) return false;
+  const explicitDestination = /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith("//");
+  if (!explicitDestination) return false;
+  if (!appOrigin) return true;
+  try {
+    return parsed.origin !== new URL(appOrigin).origin;
+  } catch {
+    return true;
+  }
+}
+
+export type MarkdownLinkDisplayParts = {
+  before: string;
+  host: string;
+  after: string;
+};
+
+export function markdownLinkDisplayParts(url: string): MarkdownLinkDisplayParts | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+  if (!httpUrlProtocols.has(parsed.protocol)) return undefined;
+  const href = parsed.href;
+  const authorityAt = href.indexOf("//") + 2;
+  const userinfoLength =
+    parsed.username || parsed.password
+      ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ""}@`.length
+      : 0;
+  const hostAt = authorityAt + userinfoLength;
+  return {
+    before: href.slice(0, hostAt),
+    host: parsed.host,
+    after: href.slice(hostAt + parsed.host.length),
+  };
+}
+
 const imageLinkProtocols = new Set(["http", "https"]);
 
 export function sanitizeMarkdownImageUrl(url: string): string | undefined {

@@ -689,6 +689,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Your phone's built-in voice — free, no account needed": "手机自带的语音 — 免费，无需账户",
   "Speaks with your phone's own text-to-speech instead of a connected provider.":
     "使用手机自带的语音朗读，而不是已连接的语音服务。",
+
+  "Open external link?": "打开外部链接？",
+  Open: "打开",
   // ai-data-sharing
   "AI models": "AI 模型",
   Memory: "记忆",

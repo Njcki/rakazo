@@ -11,7 +11,7 @@ import Markdown, {
   MarkdownStream,
 } from "@ronradtke/react-native-markdown-display";
 import type { ReactNode } from "react";
-import { createContext, memo, useContext, useMemo, useState } from "react";
+import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
 import type {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -20,6 +20,7 @@ import type {
   ViewStyle,
 } from "react-native";
 import {
+  Alert,
   I18nManager,
   Image,
   Linking,
@@ -38,6 +39,7 @@ import {
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
+  markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
   plainTextLinkParts,
   RemoteImagesContext,
@@ -46,6 +48,8 @@ import {
   sanitizeMarkdownUrl,
   useLinkFavicon,
 } from "./markdown";
+
+import { useMarkdownLinkAppOrigin, useMarkdownLinkCopy } from "./markdown-link-prompt";
 
 function keepMarkdownLinkToken(_url: string) {
   return true;
@@ -236,9 +240,69 @@ async function openSafeLink(url: string) {
   if (await Linking.canOpenURL(safeUrl)) await Linking.openURL(safeUrl);
 }
 
-function openMarkdownLink(href: string, event: { defaultPrevented: boolean }) {
-  if (event.defaultPrevented) return;
-  void openSafeLink(href);
+const OpenLinkContext = createContext<(url: string) => void>(() => undefined);
+
+function useNativeLinkConfirm() {
+  const appOrigin = useMarkdownLinkAppOrigin();
+  const copy = useMarkdownLinkCopy();
+  return useCallback(
+    (raw: string) => {
+      const url = sanitizeMarkdownUrl(raw);
+      if (!url) return;
+      if (!markdownLinkRequiresConfirmation(url, appOrigin)) {
+        void openSafeLink(url);
+        return;
+      }
+      // Keep the actual host visible even when userinfo or the path is very long.
+      Alert.alert(
+        copy.title,
+        `${new URL(url).host}\n\n${url}`,
+        [
+          { text: copy.cancel, style: "cancel" },
+          {
+            text: copy.open,
+            onPress: () => {
+              void openSafeLink(url);
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+    },
+    [appOrigin, copy],
+  );
+}
+
+function NativeLink({
+  block = false,
+  href,
+  ...props
+}: {
+  block?: boolean;
+  href: string;
+  children?: ReactNode;
+  style?: StyleProp<TextStyle> | StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
+}) {
+  const open = useContext(OpenLinkContext);
+  const onPress = (event: { defaultPrevented: boolean }) => {
+    if (!event.defaultPrevented) open(href);
+  };
+  return block ? (
+    <Pressable
+      {...props}
+      style={props.style as StyleProp<ViewStyle>}
+      accessibilityRole="link"
+      onPress={onPress}
+    />
+  ) : (
+    <Text
+      {...props}
+      style={props.style as StyleProp<TextStyle>}
+      accessibilityRole="link"
+      onPress={onPress}
+    />
+  );
 }
 
 function linkHost(href: string): string {
@@ -739,12 +803,11 @@ function renderMarkdownLink(
   if (!block && isWebsiteLink(node)) {
     const text = astText(node);
     return (
-      <Text
-        accessibilityRole="link"
+      <NativeLink
+        href={href}
         accessibilityLabel={text === undefined ? undefined : linkLabel(text, href)}
         key={node.key}
         style={styleMap.website_link}
-        onPress={(event) => openMarkdownLink(href, event)}
       >
         <LinkFavicon href={href} plate={styleMap.link_favicon_plate} />
         {WORD_JOINER}
@@ -755,30 +818,20 @@ function renderMarkdownLink(
           <Text style={styleMap.website_link_label}>{linkLabel(text, href)}</Text>
         )}
         {POP_ISOLATE}
-      </Text>
+      </NativeLink>
     );
   }
   if (!block) {
     return (
-      <Text
-        accessibilityRole="link"
-        key={node.key}
-        style={styleMap.link}
-        onPress={(event) => openMarkdownLink(href, event)}
-      >
+      <NativeLink href={href} key={node.key} style={styleMap.link}>
         {children}
-      </Text>
+      </NativeLink>
     );
   }
   return (
-    <Pressable
-      accessibilityRole="link"
-      key={node.key}
-      onPress={(event) => openMarkdownLink(href, event)}
-      style={styleMap.blocklink}
-    >
+    <NativeLink block href={href} key={node.key} style={styleMap.blocklink}>
       <View style={styleMap.image}>{children}</View>
-    </Pressable>
+    </NativeLink>
   );
 }
 
@@ -799,13 +852,7 @@ function LinkedRemoteImage({
   const [, setRevision] = useState(0);
   if (remoteImageRenders(image.href, loadRemote, false)) {
     return (
-      <Pressable
-        accessibilityRole="link"
-        onPress={() => {
-          void openSafeLink(href);
-        }}
-        style={styleMap.blocklink}
-      >
+      <NativeLink block href={href} style={styleMap.blocklink}>
         <View style={styleMap.image}>
           <FitImage
             indicator
@@ -815,7 +862,7 @@ function LinkedRemoteImage({
             accessibilityLabel={alt}
           />
         </View>
-      </Pressable>
+      </NativeLink>
     );
   }
   return (
@@ -829,15 +876,9 @@ function LinkedRemoteImage({
         styleMap={styleMap}
         onLoad={() => setRevision((revision) => revision + 1)}
       />
-      <Text
-        accessibilityRole="link"
-        style={styleMap.link}
-        onPress={() => {
-          void openSafeLink(href);
-        }}
-      >
+      <NativeLink href={href} style={styleMap.link}>
         {linkHost(href)}
-      </Text>
+      </NativeLink>
     </View>
   );
 }
@@ -918,6 +959,7 @@ export const LinkifiedText = memo(function LinkifiedText({
   linkColor,
   palette,
 }: LinkifiedTextProps) {
+  const openLink = useNativeLinkConfirm();
   const labelStyle: TextStyle = {
     color,
     fontWeight: "500",
@@ -934,7 +976,7 @@ export const LinkifiedText = memo(function LinkifiedText({
       {plainTextLinkParts(children).map((part, index) => {
         if (part.type === "text") return part.value;
         const open = () => {
-          void openSafeLink(part.href);
+          openLink(part.href);
         };
         if (!linkFaviconOrigin(part.href)) {
           return (
@@ -978,6 +1020,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   palette = darkTokens,
   colorScheme = "dark",
 }: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
+  const openLink = useNativeLinkConfirm();
   const styles = useMemo(() => markdownStyles(palette), [palette]);
   const sharedProps = {
     colorScheme,
@@ -985,23 +1028,25 @@ export const ChatMarkdown = memo(function ChatMarkdown({
     style: styles,
     rules: renderRules,
     onLinkPress: (url: string) => {
-      void openSafeLink(url);
+      openLink(url);
       return false;
     },
   };
 
   return (
-    <View style={layout.wrap}>
-      <LinkFaviconsPausedContext.Provider value={streaming}>
-        {streaming ? (
-          <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-            {children}
-          </MarkdownStream>
-        ) : (
-          <Markdown {...sharedProps}>{children}</Markdown>
-        )}
-      </LinkFaviconsPausedContext.Provider>
-    </View>
+    <OpenLinkContext.Provider value={openLink}>
+      <View style={layout.wrap}>
+        <LinkFaviconsPausedContext.Provider value={streaming}>
+          {streaming ? (
+            <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+              {children}
+            </MarkdownStream>
+          ) : (
+            <Markdown {...sharedProps}>{children}</Markdown>
+          )}
+        </LinkFaviconsPausedContext.Provider>
+      </View>
+    </OpenLinkContext.Provider>
   );
 });
 
@@ -1053,3 +1098,5 @@ const layout = StyleSheet.create({
 
 export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
 export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
+
+export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

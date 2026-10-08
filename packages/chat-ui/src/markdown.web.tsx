@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { createContext, memo, useCallback, useContext, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -6,6 +6,16 @@ import type { HastNode } from "./table-utils";
 import "./markdown.web.css";
 import "./markdown-table.css";
 import { droppedTableHtmlText } from "@rakazo/contracts";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@rakazo/ui-web";
 import { CheckIcon, CopyIcon, GlobeIcon, ImageIcon } from "./icons";
 import type { ChatMarkdownProps } from "./markdown";
 import {
@@ -14,6 +24,8 @@ import {
   LinkFaviconsPausedContext,
   linkFaviconOrigin,
   linkLabel,
+  markdownLinkDisplayParts,
+  markdownLinkRequiresConfirmation,
   markRemoteImageLoaded,
   plainTextLinkParts,
   RemoteImagesContext,
@@ -22,6 +34,7 @@ import {
   sanitizeMarkdownUrl,
   useLinkFavicon,
 } from "./markdown";
+import { useMarkdownLinkCopy } from "./markdown-link-prompt";
 import { MarkdownTable, MarkdownTableSourceContext } from "./markdown-table";
 
 function preserveSkippedTableText() {
@@ -78,6 +91,89 @@ function CodeBlock(props: React.ComponentPropsWithoutRef<"pre">) {
 type EnclosingLink = false | "open" | "rejected";
 
 const InsideLinkContext = createContext<EnclosingLink>(false);
+
+const ConfirmLinkContext = createContext<(url: string) => void>(() => undefined);
+
+function pageOrigin() {
+  if (typeof window === "undefined") return null;
+  const origin = window.location.origin;
+  return origin && origin !== "null" ? origin : null;
+}
+
+function holdExternalLink(event: MouseEvent<HTMLAnchorElement>, request: (url: string) => void) {
+  if (event.button !== 0 && event.button !== 1) return;
+  const destination = event.currentTarget.href;
+  if (!destination || !markdownLinkRequiresConfirmation(destination, pageOrigin())) return;
+  event.preventDefault();
+  request(destination);
+}
+
+function ExternalLinkUrl({ url }: { url: string }) {
+  const parts = markdownLinkDisplayParts(url);
+  if (!parts) return url;
+  return (
+    <>
+      {parts.before}
+      <strong className="font-semibold">{parts.host}</strong>
+      {parts.after}
+    </>
+  );
+}
+
+function ExternalLinkAlert({ url, onDismiss }: { url: string; onDismiss: () => void }) {
+  const copy = useMarkdownLinkCopy();
+  return (
+    <AlertDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onDismiss();
+      }}
+    >
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader className="place-items-start text-left">
+          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
+          <AlertDialogDescription className="break-all text-left text-foreground">
+            <ExternalLinkUrl url={url} />
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{copy.cancel}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              window.open(url, "_blank", "noopener,noreferrer");
+              onDismiss();
+            }}
+          >
+            {copy.open}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function useExternalLinkConfirm() {
+  const [url, setUrl] = useState<string | null>(null);
+  const request = useCallback((destination: string) => {
+    setUrl(destination);
+  }, []);
+  const dialog = url ? <ExternalLinkAlert url={url} onDismiss={() => setUrl(null)} /> : null;
+  return { request, dialog };
+}
+
+function ConfirmableAnchor({ href, ...props }: React.ComponentPropsWithoutRef<"a">) {
+  const request = useContext(ConfirmLinkContext);
+  return (
+    <a
+      {...props}
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      onClick={(event) => holdExternalLink(event, request)}
+      onAuxClick={(event) => holdExternalLink(event, request)}
+    />
+  );
+}
 
 type MarkdownHast = {
   type?: string;
@@ -197,7 +293,7 @@ function LinkedRemoteImage({
   const [, setRevision] = useState(0);
   if (remoteImageRenders(image.href, loadRemote, false)) {
     return (
-      <a href={href} target="_blank" rel="noreferrer noopener">
+      <ConfirmableAnchor href={href}>
         <img
           src={image.href}
           alt={alt ?? ""}
@@ -205,7 +301,7 @@ function LinkedRemoteImage({
           loading="lazy"
           referrerPolicy="no-referrer"
         />
-      </a>
+      </ConfirmableAnchor>
     );
   }
   return (
@@ -216,9 +312,7 @@ function LinkedRemoteImage({
         title={title}
         onLoad={() => setRevision((revision) => revision + 1)}
       />
-      <a href={href} target="_blank" rel="noreferrer noopener">
-        {linkHost(href)}
-      </a>
+      <ConfirmableAnchor href={href}>{linkHost(href)}</ConfirmableAnchor>
     </span>
   );
 }
@@ -267,11 +361,11 @@ function WebsiteLink({
   ...props
 }: React.ComponentPropsWithoutRef<"a"> & { href: string; children: ReactNode }) {
   return (
-    <a {...props} href={href} target="_blank" rel="noreferrer noopener" className="rk-chat-link">
+    <ConfirmableAnchor {...props} href={href} className="rk-chat-link">
       <LinkFavicon href={href} />
       {/* bdi: direction characters in a label cannot reorder the text around the link. */}
       <bdi className="rk-chat-link-label">{children}</bdi>
-    </a>
+    </ConfirmableAnchor>
   );
 }
 
@@ -294,7 +388,7 @@ function MarkdownAnchor({
         {text === undefined ? props.children : linkLabel(text, href)}
       </WebsiteLink>
     ) : opens ? (
-      <a {...props} target="_blank" rel="noreferrer noopener" />
+      <ConfirmableAnchor {...props} />
     ) : (
       <span>{props.children}</span>
     );
@@ -325,24 +419,24 @@ const components: Components = {
 };
 
 export function LinkifiedText({ children }: { children: string }) {
-  return plainTextLinkParts(children).map((part, index) =>
-    part.type === "text" ? (
-      part.value
-    ) : linkFaviconOrigin(part.href) ? (
-      <WebsiteLink key={index} href={part.href}>
-        {linkLabel(part.value, part.href)}
-      </WebsiteLink>
-    ) : (
-      <a
-        key={index}
-        href={part.href}
-        target="_blank"
-        rel="noreferrer noopener"
-        className="text-link underline"
-      >
-        {part.value}
-      </a>
-    ),
+  const { request, dialog } = useExternalLinkConfirm();
+  return (
+    <ConfirmLinkContext.Provider value={request}>
+      {plainTextLinkParts(children).map((part, index) =>
+        part.type === "text" ? (
+          part.value
+        ) : linkFaviconOrigin(part.href) ? (
+          <WebsiteLink key={index} href={part.href}>
+            {linkLabel(part.value, part.href)}
+          </WebsiteLink>
+        ) : (
+          <ConfirmableAnchor key={index} href={part.href} className="text-link underline">
+            {part.value}
+          </ConfirmableAnchor>
+        ),
+      )}
+      {dialog}
+    </ConfirmLinkContext.Provider>
   );
 }
 
@@ -350,30 +444,38 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   children,
   streaming = false,
 }: ChatMarkdownProps) {
+  const { request, dialog } = useExternalLinkConfirm();
   const source = streaming ? closeUnterminatedFence(children) : children;
 
   return (
-    <div className={streaming ? "rk-chat-markdown rk-chat-markdown-streaming" : "rk-chat-markdown"}>
-      <LinkFaviconsPausedContext.Provider value={streaming}>
-        <MarkdownTableSourceContext.Provider value={source}>
-          <ReactMarkdown
-            components={components}
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[preserveSkippedTableText]}
-            skipHtml
-            // MarkdownImage decides what an image source may do, so it receives the source as written.
-            urlTransform={(url, key) =>
-              key === "src" ? url : (sanitizeMarkdownUrl(url, true) ?? "")
-            }
-          >
-            {source}
-          </ReactMarkdown>
-        </MarkdownTableSourceContext.Provider>
-      </LinkFaviconsPausedContext.Provider>
-      {streaming ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
-    </div>
+    <ConfirmLinkContext.Provider value={request}>
+      <div
+        className={streaming ? "rk-chat-markdown rk-chat-markdown-streaming" : "rk-chat-markdown"}
+      >
+        <LinkFaviconsPausedContext.Provider value={streaming}>
+          <MarkdownTableSourceContext.Provider value={source}>
+            <ReactMarkdown
+              components={components}
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[preserveSkippedTableText]}
+              skipHtml
+              // MarkdownImage decides what an image source may do, so it receives the source as written.
+              urlTransform={(url, key) =>
+                key === "src" ? url : (sanitizeMarkdownUrl(url, true) ?? "")
+              }
+            >
+              {source}
+            </ReactMarkdown>
+          </MarkdownTableSourceContext.Provider>
+        </LinkFaviconsPausedContext.Provider>
+        {streaming ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
+      </div>
+      {dialog}
+    </ConfirmLinkContext.Provider>
   );
 });
 
 export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
 export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
+
+export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";

@@ -1,6 +1,6 @@
 import type { AuthCapabilities } from "@rakazo/contracts";
 import { authCapabilitiesSchema, legacyAuthCapabilitiesSchema } from "@rakazo/contracts";
-import { readBoundedJsonResponse } from "@rakazo/core";
+import { ResponseBodyTooLargeError, readBoundedJsonResponse } from "@rakazo/core";
 
 export type { AuthCapabilities } from "@rakazo/contracts";
 
@@ -33,11 +33,30 @@ async function loadAuthCapabilities(): Promise<AuthCapabilities> {
   try {
     const response = await fetch("/api/auth/capabilities", { signal: controller.signal });
     if (!response.ok) throw new Error("Could not load authentication capabilities");
-    return authCapabilitiesSchema
-      .or(legacyAuthCapabilitiesSchema)
-      .parse(
-        await readBoundedJsonResponse<unknown>(response, MAX_RESPONSE_BYTES, controller.signal),
+    const length = Number(response.headers.get("content-length") ?? Number.NaN);
+    let body: unknown;
+    if (
+      response.type === "basic" &&
+      !response.headers.has("content-encoding") &&
+      Number.isSafeInteger(length) &&
+      length >= 0 &&
+      length <= MAX_RESPONSE_BYTES
+    ) {
+      // For an uncompressed same-origin fetch, HTTP framing bounds the body by Content-Length.
+      // Native consumption avoids Chromium cancelling a completed manually read response stream.
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength > MAX_RESPONSE_BYTES) {
+        throw new ResponseBodyTooLargeError(MAX_RESPONSE_BYTES);
+      }
+      body = JSON.parse(new TextDecoder().decode(bytes));
+    } else {
+      body = await readBoundedJsonResponse<unknown>(
+        response,
+        MAX_RESPONSE_BYTES,
+        controller.signal,
       );
+    }
+    return authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
   } finally {
     clearTimeout(timer);
   }

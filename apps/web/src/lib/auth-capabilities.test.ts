@@ -7,7 +7,10 @@ beforeEach(async () => {
   ({ fetchAuthCapabilities } = await import("./auth-capabilities"));
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 const capability = {
   passwordAuth: false,
   sso: { name: "Example", availability: "unavailable" },
@@ -106,3 +109,109 @@ it.each(["checking", "unavailable"])(
     expect(fetch).toHaveBeenCalledTimes(2);
   },
 );
+
+function networkResponse(body: string, headers: Record<string, string>) {
+  const response = new Response(body, { headers });
+  vi.spyOn(response, "type", "get").mockReturnValue("basic");
+  return response;
+}
+
+it("consumes a bounded uncompressed same-origin response natively", async () => {
+  const body = JSON.stringify(capability);
+  const response = networkResponse(body, { "content-length": String(body.length) });
+  const arrayBuffer = vi.spyOn(response, "arrayBuffer");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  await expect(fetchAuthCapabilities()).resolves.toEqual(capability);
+  expect(arrayBuffer).toHaveBeenCalledOnce();
+});
+
+it("rejects an oversized native body even if its declared length is small", async () => {
+  const response = networkResponse(" ".repeat(64 * 1024 + 1), { "content-length": "1" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow("Response body exceeds");
+});
+
+it("rejects malformed JSON in a bounded native response", async () => {
+  const response = networkResponse("invalid", { "content-length": "7" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toBeInstanceOf(SyntaxError);
+});
+
+it.each<Record<string, string>>([
+  {},
+  { "content-length": "invalid" },
+  { "content-length": "-1" },
+  { "content-length": "1.5" },
+  { "content-length": "1", "content-encoding": "gzip" },
+])("bounds unknown or decoded response lengths while streaming: %j", async (headers) => {
+  const cancel = vi.fn();
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024 + 1));
+      },
+      cancel,
+    }),
+    { headers },
+  );
+  vi.spyOn(response, "type", "get").mockReturnValue("basic");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow("Response body exceeds");
+  await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+});
+
+it("does not trust Content-Length on a synthetic response", async () => {
+  const cancel = vi.fn();
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(64 * 1024 + 1));
+      },
+      cancel,
+    }),
+    { headers: { "content-length": "1" } },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow("Response body exceeds");
+  await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+});
+
+it("times out while consuming a native network body", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal;
+      const response = new Response(
+        new ReadableStream({
+          start(controller) {
+            signal?.addEventListener("abort", () => controller.error(signal.reason), {
+              once: true,
+            });
+          },
+        }),
+        { headers: { "content-length": "1" } },
+      );
+      vi.spyOn(response, "type", "get").mockReturnValue("basic");
+      return response;
+    }),
+  );
+  const rejected = expect(fetchAuthCapabilities()).rejects.toMatchObject({ name: "AbortError" });
+  await vi.advanceTimersByTimeAsync(8_000);
+  await rejected;
+});

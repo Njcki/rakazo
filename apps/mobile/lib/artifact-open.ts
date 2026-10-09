@@ -7,6 +7,14 @@ import { createKeyedPromiseCache } from "./inline-image";
 
 export type MobileArtifactTarget = { botId: string } | { groupId: string };
 
+/**
+ * An artifact travels as base64 inside the RPC body: up to the attachment limit (10 MiB) plus
+ * a third of encoding overhead. The default RPC timeout is sized for small JSON replies and
+ * gives up on a multi-megabyte photo over a relayed cellular link, so downloads get a budget
+ * of their own.
+ */
+export const ARTIFACT_DOWNLOAD_TIMEOUT_MS = 120_000;
+
 /** Writes an artifact's bytes to its cache file; no network call. */
 export function writeArtifactCacheFile(
   artifactId: string,
@@ -24,10 +32,11 @@ async function cacheMobileArtifact(
   artifactId: string,
   mimeType: string,
 ): Promise<File> {
-  const artifact = await rpc<{ contentBase64: string }>("artifacts/get", {
-    ...target,
-    artifactId,
-  });
+  const artifact = await rpc<{ contentBase64: string }>(
+    "artifacts/get",
+    { ...target, artifactId },
+    { timeoutMs: ARTIFACT_DOWNLOAD_TIMEOUT_MS },
+  );
   return writeArtifactCacheFile(artifactId, mimeType, artifact.contentBase64);
 }
 

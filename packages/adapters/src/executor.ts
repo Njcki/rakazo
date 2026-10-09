@@ -364,7 +364,7 @@ import {
   currentTurnFilesInstruction,
   materializeCurrentTurnFiles,
 } from "./thread-artifacts.js";
-import { advanceToolCallLoopGuard } from "./tool-loop.js";
+import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
 import { textContentArg } from "./tool-text.js";
 import {
   botMessageOutcomeFromMidTurn,
@@ -3645,6 +3645,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               { id: bot.id, name: bot.name },
               `Could not complete the delegated request: ${message}`,
               "status",
+              { forceUnread: true },
             ).catch((error) => getLogger().error("bot message failure return", error));
           }
           if (!failed.continuationRunId) {
@@ -5598,7 +5599,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   run,
                   "bot",
                   [{ kind: "voice_call", ...(callId ? { callId } : {}), title, farewell }],
-                  undefined,
+                  true,
                   nonce,
                 );
                 markerId = marker.id;
@@ -6070,7 +6071,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               run,
               "bot",
               [{ kind: "text", text }],
-              undefined,
+              true,
               userProgressClientNonce(run.id, midTurnProgressCount++),
             );
             midTurnUserTexts.push(text);
@@ -6720,9 +6721,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 hasStreamedText = false;
                 pendingProgress = "";
               }
-              await publishMessage(deps, run, "bot", [
-                { kind: "computer", state: "Needs you", text: safeReason },
-              ]);
+              await publishMessage(
+                deps,
+                run,
+                "bot",
+                [{ kind: "computer", state: "Needs you", text: safeReason }],
+                true,
+              );
               await workspaceCheckpoint.flush();
               if (!(await holdComputerExecutionLeaseForTakeover(deps.prisma, computerLease))) {
                 throw new Error("Computer lease expired before takeover");
@@ -6778,7 +6783,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
                 await workspaceCheckpoint.flush();
                 terminalCheckpointComplete = true;
-                const stuckText = `I got stuck calling ${humanizeToolName(event.name)} with the same input ${toolCallStreak.count} times in a row without making progress, so I stopped early. Try rephrasing this, or ask me to try a different approach.`;
+                const stuckText = loopGuardStopText(
+                  humanizeToolName(event.name),
+                  toolCallStreak.count,
+                );
                 const stopped = await deps.events.finalizeRun({
                   spaceId: run.spaceId,
                   threadId: thread.id,
@@ -6803,6 +6811,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     { ...run, sourceMessageId: run.sourceMessageId },
                     { id: bot.id, name: bot.name },
                     stuckText,
+                    "result",
+                    { forceUnread: true },
                   ).catch((error) => getLogger().error("bot message loop-guard return", error));
                 }
                 runAbortController?.abort();
@@ -6873,7 +6883,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 },
               });
               if (event.status === "completed" || event.status === "failed") {
-                publishedTerminalSubagent ||= !subagentMarksUnread(run.trigger, event.status);
+                publishedTerminalSubagent ||= !subagentMarksUnread(
+                  run.trigger,
+                  event.status,
+                  peerMessage?.repliesToRequest === true,
+                );
                 await publishMessage(
                   deps,
                   run,
@@ -6889,7 +6903,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       result: safeResult,
                     },
                   ],
-                  subagentMarksUnread(run.trigger, event.status),
+                  subagentMarksUnread(
+                    run.trigger,
+                    event.status,
+                    peerMessage?.repliesToRequest === true,
+                  ),
                 );
               }
             } else if (event.type === "usage" && !event.accounted) {
@@ -7016,7 +7034,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             leaseFence: fence,
             outcome: "completed",
             blocks,
-            markUnread: completionMarksUnread(run.trigger, text),
+            markUnread: completionMarksUnread(
+              run.trigger,
+              text,
+              peerMessage?.repliesToRequest === true,
+            ),
           });
           if (!completed) return;
           if (completed.continuationRunId) {
@@ -7109,6 +7131,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               { id: bot.id, name: bot.name },
               `Could not complete the delegated request: ${message}`,
               "status",
+              { forceUnread: true },
             ).catch((returnError) => getLogger().error("bot message failure return", returnError));
           }
           if (runSendsFinishNotification(run.trigger) && !failed.continuationRunId) {
@@ -7864,7 +7887,12 @@ export function completionNotificationPreview(text: string): string {
   return truncatedPlainText(text, COMPLETION_NOTIFICATION_MAX_CHARS);
 }
 
-export function completionMarksUnread(trigger: string, text: string): boolean {
+export function completionMarksUnread(
+  trigger: string,
+  text: string,
+  userFacingPeerReply = false,
+): boolean {
+  if (trigger === "bot_message") return userFacingPeerReply;
   return trigger !== "routine" || Boolean(text);
 }
 
@@ -7906,8 +7934,16 @@ export async function settleSteeringAttachmentLoads<TImage, TFile>(
   };
 }
 
-export function subagentMarksUnread(trigger: string, status: "running" | "completed" | "failed") {
-  return status === "failed" || trigger !== "routine";
+export function subagentMarksUnread(
+  trigger: string,
+  status: "running" | "completed" | "failed",
+  userFacingPeerReply = false,
+) {
+  return (
+    status === "failed" ||
+    (trigger === "bot_message" && userFacingPeerReply) ||
+    (trigger !== "routine" && trigger !== "bot_message")
+  );
 }
 
 function computerRunRequeueData(
@@ -8013,10 +8049,10 @@ function isUniqueViolation(error: unknown): boolean {
 
 async function publishMessage(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: { id: string; spaceId: string; threadId: string; botId: string; trigger: string },
   role: "user" | "bot" | "system",
   blocks: MessageBlock[],
-  markUnread?: boolean,
+  markUnread: boolean | undefined = run.trigger === "bot_message" ? false : undefined,
   clientNonce?: string,
 ) {
   const committed = await deps.prisma.$transaction((tx) =>

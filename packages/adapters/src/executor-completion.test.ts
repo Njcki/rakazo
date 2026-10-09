@@ -132,6 +132,11 @@ describe("completionMarksUnread", () => {
     expect(completionMarksUnread("user", "")).toBe(true);
   });
 
+  it("keeps peer completions quiet except the requester’s final answer", () => {
+    expect(completionMarksUnread("bot_message", "The result")).toBe(false);
+    expect(completionMarksUnread("bot_message", "The result", true)).toBe(true);
+  });
+
   it("keeps empty-run done. fallback unread and notifying", () => {
     const segments = completionMessageSegments([]);
     const text = completionNotificationBody("", segments);
@@ -334,5 +339,8 @@ describe("subagentMarksUnread", () => {
     expect(subagentMarksUnread("routine", "completed")).toBe(false);
     expect(subagentMarksUnread("routine", "failed")).toBe(true);
     expect(subagentMarksUnread("user", "completed")).toBe(true);
+    expect(subagentMarksUnread("bot_message", "completed")).toBe(false);
+    expect(subagentMarksUnread("bot_message", "failed")).toBe(true);
+    expect(subagentMarksUnread("bot_message", "completed", true)).toBe(true);
   });
 });

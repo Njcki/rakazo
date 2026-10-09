@@ -11,9 +11,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeActionButton } from "../../components/native-action-button";
+import { NativeSwitch } from "../../components/native-switch";
 import { Checkmark } from "../../components/row-accessories";
 import { rpc } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
+import {
+  loadCallSoundsEnabled,
+  loadWaitSoundEnabled,
+  playCallCue,
+  saveCallSoundsEnabled,
+  saveWaitSoundEnabled,
+} from "../../lib/call-sounds";
 import { loadDeviceVoiceEnabled, saveDeviceVoiceEnabled } from "../../lib/device-voice";
 import { useI18n } from "../../lib/i18n";
 import { native, useThemedStyles } from "../../lib/native";
@@ -54,6 +62,11 @@ export default function VoiceSettings() {
   const speechModelSave = useRef<string | null>(null);
   const [deviceVoice, setDeviceVoice] = useState(false);
   const [deviceVoiceReady, setDeviceVoiceReady] = useState(false);
+  const [callSounds, setCallSounds] = useState<boolean | null>(null);
+  const [waitSound, setWaitSound] = useState<boolean | null>(null);
+  // Prevent stale reads from overwriting a saved preference.
+  const soundPrefsRevision = useRef(0);
+  const soundPrefSaving = useRef(false);
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<
     "connect" | "disconnect" | "voice" | "speech" | "test" | "device-voice" | null
@@ -100,11 +113,58 @@ export default function VoiceSettings() {
           setDeviceVoiceReady(true);
           setError(errorText(err, t("Could not load voice settings")));
         });
+      const soundRevision = soundPrefsRevision.current;
+      void Promise.allSettled([loadCallSoundsEnabled(), loadWaitSoundEnabled()]).then(
+        ([calls, waiting]) => {
+          if (soundPrefSaving.current || soundPrefsRevision.current !== soundRevision) return;
+          setCallSounds(calls.status === "fulfilled" ? calls.value : null);
+          setWaitSound(waiting.status === "fulfilled" ? waiting.value : null);
+          const failed = [calls, waiting].find((result) => result.status === "rejected");
+          if (failed?.status === "rejected") {
+            setError(errorText(failed.reason, t("Could not load voice settings")));
+          }
+        },
+      );
       void load()
         .catch((err: unknown) => setError(errorText(err, t("Could not load voice settings"))))
         .finally(() => setLoading(false));
     }, [load, t]),
   );
+
+  /** One sound-switch save at a time; a failed save rolls back only that switch. */
+  async function saveSoundPref(
+    next: boolean,
+    show: (value: boolean) => void,
+    save: (value: boolean) => Promise<void>,
+  ): Promise<boolean> {
+    if (soundPrefSaving.current) return false;
+    soundPrefSaving.current = true;
+    soundPrefsRevision.current += 1;
+    show(next);
+    try {
+      await save(next);
+      return true;
+    } catch {
+      show(!next);
+      setError(t("Could not save that preference"));
+      return false;
+    } finally {
+      soundPrefSaving.current = false;
+      soundPrefsRevision.current += 1;
+    }
+  }
+
+  async function toggleWaitSound(next: boolean) {
+    if (waitSound === null) return;
+    await saveSoundPref(next, setWaitSound, saveWaitSoundEnabled);
+  }
+
+  async function toggleCallSounds(next: boolean) {
+    if (callSounds === null) return;
+    const saved = await saveSoundPref(next, setCallSounds, saveCallSoundsEnabled);
+    // The preview is a courtesy: if it cannot play, the saved choice still stands.
+    if (saved && next) await playCallCue("start").catch(() => undefined);
+  }
 
   async function saveDeviceVoice(next: boolean): Promise<boolean> {
     deviceVoiceSaveInFlight.current = true;
@@ -405,6 +465,30 @@ export default function VoiceSettings() {
             onPress={() => void testVoice()}
           />
         ) : null}
+        <View style={styles.group}>
+          <View style={styles.groupRow}>
+            <View style={styles.rowCopy}>
+              <Text style={styles.cardTitle}>{t("Call sounds")}</Text>
+            </View>
+            <NativeSwitch
+              accessibilityLabel={t("Call sounds")}
+              value={callSounds === true}
+              disabled={callSounds === null}
+              onValueChange={(next) => void toggleCallSounds(next)}
+            />
+          </View>
+          <View style={[styles.groupRow, styles.groupDivider]}>
+            <View style={styles.rowCopy}>
+              <Text style={styles.cardTitle}>{t("Waiting sound")}</Text>
+            </View>
+            <NativeSwitch
+              accessibilityLabel={t("Waiting sound")}
+              value={waitSound === true}
+              disabled={waitSound === null}
+              onValueChange={(next) => void toggleWaitSound(next)}
+            />
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

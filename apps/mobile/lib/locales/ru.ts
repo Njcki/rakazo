@@ -738,11 +738,17 @@ export const RU_MESSAGES: Record<string, string> = {
     "Встроенный голос телефона — бесплатно, без аккаунта",
   "Speaks with your phone's own text-to-speech instead of a connected provider.":
     "Озвучивает встроенным синтезом речи телефона вместо подключённого провайдера.",
+  "Call sounds": "Звуки звонка",
+  "Hello {name}, {bot} here.": "Привет, {name}, это {bot}.",
+  "Hello, {bot} here.": "Привет, это {bot}.",
+  "OK, switching to {name}.": "Хорошо, переключаю на {name}.",
+  "{bot} here. Hi {name}.": "Это {bot}. Привет, {name}.",
+  "{bot} here.": "Это {bot}.",
+  "Waiting sound": "Звук ожидания",
   "Device voice": "Голос устройства",
   "Could not load voices": "Не удалось загрузить голоса",
   "Hi, I'm {name}.": "Привет, я {name}.",
   "Hi, this is how I'll sound.": "Привет, вот так я звучу.",
-
   "Open external link?": "Открыть внешнюю ссылку?",
   Open: "Открыть",
   // ai-data-sharing

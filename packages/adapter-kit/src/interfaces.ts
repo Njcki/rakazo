@@ -104,6 +104,8 @@ export interface SandboxProvider {
     },
     context: AdapterContext,
   ): Promise<ComputerRef>;
+  /** Read-only probe: true only when this exact reference is already running. */
+  isRunning?(computer: ComputerRef, context: AdapterContext): Promise<boolean>;
   /** Perform idempotent provider setup after the lifecycle has captured the reference. */
   prepare(computer: ComputerRef, context: AdapterContext): Promise<void>;
   execute(

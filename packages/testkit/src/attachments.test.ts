@@ -96,18 +96,56 @@ describeAttachments("chat attachments", () => {
     });
     expect(fetched.contentBase64).toBe(tinyPng.toString("base64"));
 
+    const zipBytes = Buffer.from("PK\x03\x04zip");
+    let zip!: { id: string; mimeType: string };
+    for (const mimeType of [
+      "application/zip",
+      "application/x-zip-compressed",
+      "application/x-zip",
+      "multipart/x-zip",
+      "application/octet-stream",
+    ]) {
+      zip = await rpc(app, cookie, "artifacts/create", {
+        botId: bot.id,
+        name: "bundle.ZIP",
+        mimeType,
+        contentBase64: zipBytes.toString("base64"),
+      });
+      expect(zip.mimeType).toBe("application/zip");
+    }
+    await sendAndWait(app, cookie, bot.id, { artifactIds: [zip.id] });
+    snapshot = await rpc<ThreadSnapshot>(app, cookie, "threads/get", { botId: bot.id });
+    const zipMessage = snapshot.messages.find((message) =>
+      message.blocks.some((block) => block.kind === "file" && block.name === "bundle.ZIP"),
+    );
+    expect(zipMessage?.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "file",
+          artifactId: zip.id,
+          mimeType: "application/zip",
+          name: "bundle.ZIP",
+        }),
+      ]),
+    );
+    const fetchedZip = await rpc<{ contentBase64: string }>(app, cookie, "artifacts/get", {
+      botId: bot.id,
+      artifactId: zip.id,
+    });
+    expect(Buffer.from(fetchedZip.contentBase64, "base64")).toEqual(zipBytes);
+
     const badMime = await raw(app, cookie, "artifacts/create", {
       botId: bot.id,
-      name: "evil.zip",
-      mimeType: "application/zip",
-      contentBase64: Buffer.from("zip").toString("base64"),
+      name: "payload.exe",
+      mimeType: "application/octet-stream",
+      contentBase64: Buffer.from("nope").toString("base64"),
     });
     expect(badMime.status).toBeGreaterThanOrEqual(400);
 
     const oversize = await raw(app, cookie, "artifacts/create", {
       botId: bot.id,
-      name: "big.bin",
-      mimeType: "text/plain",
+      name: "big.zip",
+      mimeType: "application/zip",
       contentBase64: Buffer.alloc(10 * 1024 * 1024 + 1, 1).toString("base64"),
     });
     expect(oversize.status).toBeGreaterThanOrEqual(400);

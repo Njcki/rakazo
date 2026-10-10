@@ -3801,6 +3801,87 @@ describe("groups.archive", () => {
   });
 });
 
+describe("boards.rename", () => {
+  const actor = {
+    spaceId: "workspace-1",
+    userId: "user-1",
+    email: "user@rakazo.test",
+    isDeploymentOwner: true,
+  } satisfies Actor;
+
+  function boardRow(ticketPrefix = "RAK") {
+    return {
+      id: "board-1",
+      spaceId: "workspace-1",
+      name: "Personal",
+      ticketPrefix,
+      nextNumber: 2,
+      createdAt: new Date("2026-06-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-06-01T00:00:00.000Z"),
+    };
+  }
+
+  function renameDeps(tickets: number, ticketPrefix = "RAK") {
+    const count = vi.fn(async () => tickets);
+    const update = vi.fn(async ({ data }: { data: { name?: string; ticketPrefix?: string } }) => ({
+      ...boardRow(ticketPrefix),
+      ...data,
+      updatedAt: new Date("2026-06-02T00:00:00.000Z"),
+    }));
+    const prisma = {
+      board: {
+        findUnique: vi.fn(async () => boardRow(ticketPrefix)),
+        update,
+      },
+      ticket: { count },
+    } as unknown as PrismaClient;
+    const deps = { prisma, env: { ticketBoardEnabled: true } } as unknown as RouterDeps;
+    return { count, update, handler: new RPCHandler(createRouter(deps)) };
+  }
+
+  async function rename(handler: RPCHandler<never>, body: unknown) {
+    const { response } = await handler.handle(
+      new Request("http://127.0.0.1/rpc/boards/rename", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json: body }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    return response;
+  }
+
+  it("rejects a prefix change after tickets exist", async () => {
+    const { count, update, handler } = renameDeps(2);
+    const response = await rename(handler, { ticketPrefix: "OPS" });
+    expect(response?.status).toBe(400);
+    await expect(response?.json()).resolves.toEqual({
+      json: expect.objectContaining({
+        code: "BAD_REQUEST",
+        message: "Cannot change the ticket prefix once tickets exist.",
+      }),
+    });
+    expect(count).toHaveBeenCalledWith({
+      where: { boardId: "board-1", spaceId: "workspace-1" },
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("renames the board without changing the prefix", async () => {
+    const { count, update, handler } = renameDeps(2);
+    const response = await rename(handler, { name: "Launch" });
+    expect(response?.status).toBe(200);
+    await expect(response?.json()).resolves.toEqual({
+      json: expect.objectContaining({ name: "Launch", ticketPrefix: "RAK" }),
+    });
+    expect(count).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "board-1" },
+      data: { name: "Launch" },
+    });
+  });
+});
+
 describe("export.bot", () => {
   const actor = {
     spaceId: "workspace-1",

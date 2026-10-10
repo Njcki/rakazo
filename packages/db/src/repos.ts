@@ -1,14 +1,9 @@
-import {
-  type Actor,
-  BOT_COLORS,
-  type Bot,
-  type BotSection,
-  type MessageBlock,
-  type SpaceBot,
-} from "@rakazo/contracts";
-import { userVisibleMessages } from "@rakazo/core";
+import type { Actor, Bot, BotSection, MessageBlock, SpaceBot } from "@rakazo/contracts";
+import { BOT_COLORS } from "@rakazo/contracts";
+import { BACKGROUND_RUN_TRIGGERS, isBackgroundRunTrigger, userVisibleMessages } from "@rakazo/core";
 import type { PrismaClient } from "./client.js";
-import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
+import type { ComputerMode } from "./computers.js";
+import { ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
@@ -310,15 +305,26 @@ export function createRepos(prisma: PrismaClient) {
           ),
         ),
       ];
-      const peerRuns = candidateRunIds.length
-        ? await prisma.run.findMany({
-            where: { id: { in: candidateRunIds }, trigger: "bot_message" },
-            select: { id: true },
-          })
-        : [];
-      const peerRunIds = new Set(peerRuns.map((run) => run.id));
-      // Cache negative results too; ordinary runs were already checked in the batch above.
-      const checkedRunIds = new Set(candidateRunIds);
+      const checkedRunIds = new Set<string>();
+      const peerRunIds = new Set<string>();
+      const backgroundRunIds = new Set<string>();
+      const classifyRunIds = async (ids: string[]) => {
+        const missing = ids.filter((id) => !checkedRunIds.has(id));
+        if (missing.length === 0) return;
+        const rows = await prisma.run.findMany({
+          where: {
+            id: { in: missing },
+            trigger: { in: ["bot_message", ...BACKGROUND_RUN_TRIGGERS] },
+          },
+          select: { id: true, trigger: true },
+        });
+        for (const row of rows) {
+          if (isBackgroundRunTrigger(row.trigger)) backgroundRunIds.add(row.id);
+          else peerRunIds.add(row.id);
+        }
+        for (const id of missing) checkedRunIds.add(id);
+      };
+      await classifyRunIds(candidateRunIds);
       return Promise.all(
         bots.map(async (bot) => {
           let messages = bot.thread?.messages ?? [];
@@ -328,12 +334,7 @@ export function createRepos(prisma: PrismaClient) {
               ...new Set(messages.flatMap((message) => (message.runId ? [message.runId] : []))),
             ].filter((runId) => !checkedRunIds.has(runId));
             if (windowRunIds.length > 0) {
-              const morePeers = await prisma.run.findMany({
-                where: { id: { in: windowRunIds }, trigger: "bot_message" },
-                select: { id: true },
-              });
-              for (const run of morePeers) peerRunIds.add(run.id);
-              for (const runId of windowRunIds) checkedRunIds.add(runId);
+              await classifyRunIds(windowRunIds);
             }
             const visible = userVisibleMessages(
               messages.map((message) => ({
@@ -341,7 +342,11 @@ export function createRepos(prisma: PrismaClient) {
                 blocks: message.blocks as MessageBlock[],
                 runId: message.runId ?? undefined,
               })),
-              { knownPeerRunIds: peerRunIds, includeDelegatedReplyText: false },
+              {
+                knownPeerRunIds: peerRunIds,
+                backgroundRunIds,
+                includeDelegatedReplyText: false,
+              },
             );
             preview = previewFromBlocks(visible[0]?.blocks);
             if (preview || messages.length === 0 || !bot.thread || attempt === 4) break;

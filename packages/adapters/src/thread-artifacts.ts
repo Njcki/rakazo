@@ -55,7 +55,7 @@ export async function attachWorkspaceFileToThread(
   const name = (input.name?.trim() || fileName).slice(0, ARTIFACT_NAME_MAX_LENGTH);
   validateAttachmentMimeType(mimeType);
   if (input.bytes.byteLength > ATTACHMENT_MAX_BYTES) {
-    throw new Error("file exceeds the 10 MiB attachment limit");
+    throw new Error("file exceeds the 100 MiB attachment limit");
   }
 
   const context = {
@@ -150,7 +150,7 @@ export async function materializeCurrentTurnFiles(
     if (!row) throw new Error(`Attached file is unavailable: ${block.name}`);
     const bytes = await deps.artifacts.get(row.storageKey, input.context);
     if (bytes.byteLength > ATTACHMENT_MAX_BYTES) {
-      throw new Error(`Attached file exceeds the 10 MiB limit: ${row.name}`);
+      throw new Error(`Attached file exceeds the 100 MiB limit: ${row.name}`);
     }
     const relativePath = `attachments/${row.id}${attachmentExtensionForMimeType(row.mimeType)}`;
     input.markWorkspaceDirty?.();

@@ -1,4 +1,4 @@
-export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+export const ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
 export const ATTACHMENT_MAX_COUNT = 4;
 export const ARTIFACT_NAME_MAX_LENGTH = 255;
 export const ARTIFACT_DESCRIPTION_MAX_LENGTH = 280;
@@ -20,6 +20,7 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
   "text/html",
   "application/json",
   "application/zip",
+  "application/octet-stream",
 ] as const;
 
 export const ATTACHMENT_ALLOWED_MIME_TYPES = [

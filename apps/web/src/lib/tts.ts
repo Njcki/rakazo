@@ -1,7 +1,7 @@
 import { readBoundedResponseBytes } from "@rakazo/core";
+import { getActiveUiLocale } from "./i18n.js";
 import { rpc, selectedSpaceId, withSpaceHeaders } from "./rpc.js";
 import { errorText } from "./user-error.js";
-import { getActiveUiLocale } from "./i18n.js";
 
 export type SpeechStatus = "idle" | "preparing" | "speaking";
 
@@ -175,7 +175,12 @@ export class Speaker {
           method: "POST",
           headers: withSpaceHeaders({ "content-type": "application/json" }, spaceId),
           credentials: "include",
-          body: JSON.stringify({ text, voiceId: opts.voiceId, botId: opts.botId, language: getActiveUiLocale() }),
+          body: JSON.stringify({
+            text,
+            voiceId: opts.voiceId,
+            botId: opts.botId,
+            language: getActiveUiLocale(),
+          }),
           signal: deadline.signal,
         }),
       );

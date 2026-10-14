@@ -6312,15 +6312,15 @@ export const Composer = memo(function Composer({
                   {t`Continue`}
                 </Button>
               ) : null}
-            <Button
-              size="icon"
-              aria-label={t`Send`}
-              disabled={sending || !canSend || disabled}
-              onClick={send}
-              className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
-            >
-              <ArrowUp size={16} strokeWidth={2.2} />
-            </Button>
+              <Button
+                size="icon"
+                aria-label={t`Send`}
+                disabled={sending || !canSend || disabled}
+                onClick={send}
+                className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
+              >
+                <ArrowUp size={16} strokeWidth={2.2} />
+              </Button>
             </>
           )}
         </div>

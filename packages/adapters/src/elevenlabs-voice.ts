@@ -106,7 +106,6 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
   }
 }
 
-
 function elevenSpeechBody(request: VoiceSynthesizeRequest): {
   text: string;
   model_id: string;

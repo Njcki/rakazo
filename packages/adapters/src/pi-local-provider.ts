@@ -120,11 +120,15 @@ function extraLocalModels(): ExtraLocalModel[] {
         id: String(m.id).trim(),
         upstreamId: String(m.upstreamId || m.id).trim(),
         name: String(m.name || m.id),
-        contextWindow: Number.isSafeInteger(m.contextWindow) && m.contextWindow > 0 ? m.contextWindow : DEFAULT_CONTEXT_WINDOW,
-        maxTokens: Number.isSafeInteger(m.maxTokens) && m.maxTokens > 0 ? m.maxTokens : DEFAULT_MAX_TOKENS,
+        contextWindow:
+          Number.isSafeInteger(m.contextWindow) && m.contextWindow > 0
+            ? m.contextWindow
+            : DEFAULT_CONTEXT_WINDOW,
+        maxTokens:
+          Number.isSafeInteger(m.maxTokens) && m.maxTokens > 0 ? m.maxTokens : DEFAULT_MAX_TOKENS,
       }));
-  } catch (error) {
-    console.error("[local-provider] invalid extra local models config", error);
+  } catch {
+    // Malformed extras must not hide the base local models; ignore them.
     return [];
   }
 }
@@ -135,7 +139,9 @@ function extraLocalModel(extra: ExtraLocalModel): Model<"openai-completions"> {
     ...base,
     id: extra.id,
     name: extra.name,
-    input: inputModalities(localVisionModelIds().has(extra.id) || localVisionModelIds().has(extra.upstreamId)),
+    input: inputModalities(
+      localVisionModelIds().has(extra.id) || localVisionModelIds().has(extra.upstreamId),
+    ),
     contextWindow: extra.contextWindow,
     maxTokens: extra.maxTokens,
   };

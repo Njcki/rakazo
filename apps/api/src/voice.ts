@@ -344,7 +344,13 @@ export async function prepareVoice(
 export async function synthesizeVoice(
   deps: VoiceDeps,
   actor: Actor,
-  input: { text: string; voiceId?: string; botId?: string; language?: string; signal?: AbortSignal },
+  input: {
+    text: string;
+    voiceId?: string;
+    botId?: string;
+    language?: string;
+    signal?: AbortSignal;
+  },
 ) {
   const target = await resolveVoiceTarget(deps, actor, input);
   const text = input.text.trim();

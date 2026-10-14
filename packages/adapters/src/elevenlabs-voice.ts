@@ -74,7 +74,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
           "content-type": "application/json",
           accept: "audio/mpeg",
         },
-        body: JSON.stringify({ text: request.text, model_id: MODEL }),
+        body: JSON.stringify(elevenSpeechBody(request)),
         signal,
       },
     );
@@ -104,6 +104,28 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
     const text = String((body as { text?: unknown } | null)?.text ?? "").trim();
     return { text };
   }
+}
+
+
+function elevenSpeechBody(request: VoiceSynthesizeRequest): {
+  text: string;
+  model_id: string;
+  language_code?: string;
+} {
+  const body: { text: string; model_id: string; language_code?: string } = {
+    text: request.text,
+    model_id: MODEL,
+  };
+  const languageCode = toElevenLanguageCode(request.language);
+  if (languageCode) body.language_code = languageCode;
+  return body;
+}
+
+/** ISO 639-1 primary subtag. pt-BR -> pt, zh-CN -> zh, it-IT -> it. */
+function toElevenLanguageCode(language: string | undefined): string | undefined {
+  if (!language) return undefined;
+  const primary = language.trim().toLowerCase().replaceAll("_", "-").split("-")[0] ?? "";
+  return /^[a-z]{2}$/.test(primary) ? primary : undefined;
 }
 
 function asLabel(labels: unknown, key: string): string {

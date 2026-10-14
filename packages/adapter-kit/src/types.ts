@@ -608,6 +608,8 @@ export interface VoiceSynthesizeRequest {
   apiKey: string;
   /** Connection speech model. Fish uses this, then `FISH_TTS_MODEL`, then s2.1-pro. */
   model?: string;
+  /** UI locale (BCP-47). ElevenLabs maps the primary subtag to language_code. */
+  language?: string;
   signal?: AbortSignal;
 }
 

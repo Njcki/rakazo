@@ -173,6 +173,9 @@ export function inferAttachmentMimeType(
   if (extensionType === "text/markdown" && (!reportedType || reportedType === "text/plain")) {
     return extensionType;
   }
+  // RAKAZO PATCH (attachments): octet-stream is allowed as the any-type fallback, so a
+  // known extension must still beat a generic octet-stream report (e.g. .zip).
+  if (reportedType === "application/octet-stream" && extensionType) return extensionType;
   if (reportedType && isAllowedAttachmentMimeType(reportedType)) return reportedType;
   return extensionType ?? "application/octet-stream";
 }

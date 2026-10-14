@@ -14,7 +14,9 @@ import {
 describe("attachment helpers", () => {
   it("accepts zip archives and rejects unsupported mime types and empty payloads", () => {
     expect(() => validateAttachmentMimeType("application/zip")).not.toThrow();
-    expect(() => validateAttachmentMimeType("application/octet-stream")).toThrow(
+    // RAKAZO PATCH: octet-stream is the allowed any-type fallback.
+    expect(() => validateAttachmentMimeType("application/octet-stream")).not.toThrow();
+    expect(() => validateAttachmentMimeType("application/x-unknown")).toThrow(
       AttachmentValidationError,
     );
     expect(() => decodeAttachmentBase64("")).toThrow(AttachmentValidationError);
@@ -35,7 +37,7 @@ describe("attachment helpers", () => {
 
     // A base64 string decoding to just over the 10 MiB byte limit must still
     // be rejected for size — and, same regression, without a stack overflow.
-    const oversized = "A".repeat(15 * 1024 * 1024);
+    const oversized = "A".repeat(140 * 1024 * 1024); // RAKAZO: limit is 100 MiB
     expect(() => decodeAttachmentBase64(oversized)).not.toThrow(RangeError);
     expect(() => decodeAttachmentBase64(oversized)).toThrow(AttachmentValidationError);
   });

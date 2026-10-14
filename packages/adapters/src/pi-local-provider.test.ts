@@ -115,3 +115,29 @@ describe("local model provider", () => {
     expect(withLocal.getModel(LOCAL_PROVIDER_ID, "qwen3:4b")).toBeDefined();
   });
 });
+
+describe("local model provider extra aliases (RAKAZO gsq-voice)", () => {
+  afterEach(() => {
+    delete process.env.RAKAZO_LOCAL_EXTRA_MODELS;
+  });
+
+  it("adds a labelled alias with its own limits next to the base model", () => {
+    setModels("qwen3.8-27b");
+    process.env.RAKAZO_LOCAL_EXTRA_MODELS = JSON.stringify([
+      {
+        id: "qwen3.8-27b-gsq",
+        upstreamId: "qwen3.8-27b",
+        name: "Qwen GSQ locale (262K)",
+        contextWindow: 262144,
+        maxTokens: 16384,
+      },
+    ]);
+    const models = localProvider()?.getModels() ?? [];
+    expect(models.map((m) => m.id)).toEqual(["qwen3.8-27b", "qwen3.8-27b-gsq"]);
+    expect(models[1]).toMatchObject({
+      name: "Qwen GSQ locale (262K)",
+      contextWindow: 262144,
+      maxTokens: 16384,
+    });
+  });
+});

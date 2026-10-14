@@ -1800,6 +1800,26 @@ export function ShellPage() {
   );
   const transcriptRunning = workingRuns.length > 0;
   const composerRunning = currentRuns.some((run) => isActive(run.status));
+  // RAKAZO PATCH (continua): soft Continua button. (1) answers a pending AskCard while
+  // waiting_input, or (2) resumes when the last bot turn looks unfinished and no run is active.
+  const answerableAskMessage =
+    answerableAskMessageId == null
+      ? null
+      : (activeSnapshot?.messages.find((message) => message.id === answerableAskMessageId) ?? null);
+  const lastBotMessage = [...(activeSnapshot?.messages ?? [])]
+    .reverse()
+    .find((message) => message.role === "bot");
+  const lastBotText = (lastBotMessage?.blocks ?? [])
+    .map((block) => (block.kind === "text" ? block.text : ""))
+    .join("\n")
+    .trim();
+  const lastLooksUnfinished =
+    /\b(stato\s*:|continua|in corso|prossimo passo|todo:|let me |i('|’)ll )\b/i.test(lastBotText) ||
+    /(\.{3}|…)\s*$/.test(lastBotText);
+  const showContinua =
+    !recordingSkill &&
+    (Boolean(answerableAskMessage) ||
+      (!composerRunning && Boolean(lastBotMessage) && lastLooksUnfinished));
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
   const displayedRunError = !sendError ? runError : null;
   const displayedRunErrorId = displayedRunError ? (activeSnapshot?.run?.id ?? null) : null;
@@ -3705,6 +3725,30 @@ export function ShellPage() {
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
             running={composerRunning}
+            showContinua={showContinua}
+            onContinue={() => {
+              void (async () => {
+                try {
+                  if (answerableAskMessage) {
+                    const askBlock = answerableAskMessage.blocks.find(
+                      (block) => block.kind === "ask" && block.status !== "answered",
+                    );
+                    const actions = askBlock?.kind === "ask" ? (askBlock.actions ?? []) : [];
+                    const continua =
+                      actions.find(
+                        (action) =>
+                          action.id === "choice-1" ||
+                          action.label.trim().toLowerCase() === "continua",
+                      ) ?? actions[0];
+                    await answerMessage(answerableAskMessage, continua?.id ?? "choice-1");
+                    return;
+                  }
+                  await sendMessage("Continua", [], newClientId());
+                } catch (error) {
+                  setSendError(error instanceof Error ? error.message : t`Could not continue`);
+                }
+              })();
+            }}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
             attachmentNotice={attachmentNotice}
@@ -5390,6 +5434,8 @@ export const Composer = memo(function Composer({
   artifactTarget,
   activeName,
   running,
+  showContinua,
+  onContinue,
   disabled,
   pendingAttachments,
   attachmentNotice,
@@ -5416,6 +5462,8 @@ export const Composer = memo(function Composer({
 }: {
   activeName?: string;
   running: boolean;
+  showContinua?: boolean;
+  onContinue?: () => void;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
   attachmentNotice: string | null;
@@ -6216,6 +6264,19 @@ export const Composer = memo(function Composer({
           ) : null}
           {running ? (
             <>
+              {showContinua ? (
+                <Button
+                  variant="outline"
+                  data-testid="continua-button"
+                  aria-label={t`Continue`}
+                  title={t`Continue`}
+                  disabled={sending || disabled}
+                  onClick={() => onContinue?.()}
+                  className="h-8 shrink-0 rounded-full border border-border bg-muted px-3 text-[13px] font-medium text-foreground/85 shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {t`Continue`}
+                </Button>
+              ) : null}
               <Button
                 size="icon"
                 aria-label={t`Send`}
@@ -6237,6 +6298,20 @@ export const Composer = memo(function Composer({
               </Button>
             </>
           ) : (
+            <>
+              {showContinua ? (
+                <Button
+                  variant="outline"
+                  data-testid="continua-button"
+                  aria-label={t`Continue`}
+                  title={t`Continue`}
+                  disabled={sending || disabled}
+                  onClick={() => onContinue?.()}
+                  className="h-8 shrink-0 rounded-full border border-border bg-muted px-3 text-[13px] font-medium text-foreground/85 shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {t`Continue`}
+                </Button>
+              ) : null}
             <Button
               size="icon"
               aria-label={t`Send`}
@@ -6246,6 +6321,7 @@ export const Composer = memo(function Composer({
             >
               <ArrowUp size={16} strokeWidth={2.2} />
             </Button>
+            </>
           )}
         </div>
       </div>

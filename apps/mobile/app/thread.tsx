@@ -3822,7 +3822,8 @@ function MessageTextCard({
   const contentText = blockText(message);
   if (!contentText) return null;
   return (
-    <View
+    <Pressable
+      {...actionProps}
       style={{
         flexShrink: 1,
         minWidth: 0,

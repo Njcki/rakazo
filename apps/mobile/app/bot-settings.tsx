@@ -15,6 +15,7 @@ import {
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { Voice } from "expo-speech";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentProps } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { ComputerModePicker } from "../components/computer-mode-picker";
@@ -24,6 +25,7 @@ import { MenuPicker, MenuPickerMenu } from "../components/menu-picker";
 import { NativeActionButton } from "../components/native-action-button";
 import { NativeSwitch } from "../components/native-switch";
 import { NativeSymbol } from "../components/native-symbol";
+import { PlanSection } from "../components/plan-section";
 import { Chevron } from "../components/row-accessories";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
@@ -388,7 +390,7 @@ export default function BotSettingsScreen() {
             <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />
           </View>
         ) : null}
-        <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{t("Name")}</Text>
+        <SectionLabel ios="person" android="person-outline" label={t("Name")} />
         <TextInput
           value={name}
           maxLength={BOT_NAME_MAX_LENGTH}
@@ -403,9 +405,7 @@ export default function BotSettingsScreen() {
             color: tokens.foreground,
           }}
         />
-        <Text style={{ color: tokens.mutedForeground, marginTop: 16, fontSize: 14 }}>
-          {t("Title")}
-        </Text>
+        <SectionLabel ios="tag" android="pricetag-outline" label={t("Title")} top={16} />
         <TextInput
           value={title}
           maxLength={BOT_TITLE_MAX_LENGTH}
@@ -420,9 +420,7 @@ export default function BotSettingsScreen() {
             color: tokens.foreground,
           }}
         />
-        <Text style={{ color: tokens.mutedForeground, marginTop: 16, fontSize: 14 }}>
-          {t("Description")}
-        </Text>
+        <SectionLabel ios="text.alignleft" android="document-text-outline" label={t("Description")} top={16} />
         <TextInput
           value={description}
           maxLength={BOT_DESCRIPTION_MAX_LENGTH}
@@ -440,9 +438,7 @@ export default function BotSettingsScreen() {
             textAlignVertical: "top",
           }}
         />
-        <Text style={{ color: tokens.mutedForeground, marginTop: 16, fontSize: 14 }}>
-          {t("Color")}
-        </Text>
+        <SectionLabel ios="paintpalette" android="color-palette-outline" label={t("Color")} top={16} />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -469,9 +465,17 @@ export default function BotSettingsScreen() {
         </ScrollView>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
         <View style={[styles.row, { marginTop: 20 }]}>
-          <Text style={[styles.rowLabel, { color: tokens.mutedForeground }]}>
-            {t("Read replies aloud")}
-          </Text>
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <NativeSymbol
+              ios="speaker.wave.2"
+              android="volume-high-outline"
+              size={16}
+              color={tokens.mutedForeground}
+            />
+            <Text style={[styles.rowLabel, { color: tokens.mutedForeground }]}>
+              {t("Read replies aloud")}
+            </Text>
+          </View>
           <NativeSwitch
             accessibilityLabel={t("Read replies aloud")}
             onValueChange={setAutoSpeak}
@@ -492,6 +496,7 @@ export default function BotSettingsScreen() {
             voiceRow
           )
         ) : null}
+        {botId ? <PlanSection botId={botId} /> : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Advanced")}
@@ -505,11 +510,20 @@ export default function BotSettingsScreen() {
             justifyContent: "space-between",
           }}
         >
-          <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{t("Advanced")}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <NativeSymbol
+              ios="slider.horizontal.3"
+              android="options-outline"
+              size={16}
+              color={tokens.mutedForeground}
+            />
+            <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{t("Advanced")}</Text>
+          </View>
           <Chevron expanded={advancedOpen} />
         </Pressable>
         {advancedOpen ? (
           <View>
+            <SectionLabel ios="cpu" android="hardware-chip-outline" label={t("Model")} top={8} />
             <View
               style={{
                 marginTop: 8,
@@ -542,14 +556,46 @@ export default function BotSettingsScreen() {
           </View>
         ) : null}
         {error ? <Text style={{ color: tokens.destructive, marginTop: 16 }}>{error}</Text> : null}
+      </ScrollView>
+      {/* Sticky Save, like the web settings rail. */}
+      <View
+        style={{
+          paddingHorizontal: 24,
+          paddingTop: 12,
+          paddingBottom: 20,
+          backgroundColor: tokens.background,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: tokens.border,
+        }}
+      >
         <NativeActionButton
           disabled={!name.trim() || pending || !bot}
           label={pending ? t("Saving…") : t("Save")}
           onPress={() => void save()}
-          style={{ marginTop: 24 }}
         />
-      </ScrollView>
+      </View>
     </>
+  );
+}
+
+/** Section title with a self-explanatory icon (mirrors web rail 0019/0020). */
+function SectionLabel({
+  ios,
+  android,
+  label,
+  top = 0,
+}: {
+  ios: string;
+  android: ComponentProps<typeof NativeSymbol>["android"];
+  label: string;
+  top?: number;
+}) {
+  const tokens = useMobileTokens();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: top }}>
+      <NativeSymbol ios={ios} android={android} size={16} color={tokens.mutedForeground} />
+      <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{label}</Text>
+    </View>
   );
 }
 

@@ -112,7 +112,7 @@ export function PlanSection({
 
   if (!plan) {
     return (
-      <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan-empty">
+      <div className="mt-6 border-t border-border/70 pt-5" data-testid="bot-plan-empty">
         <div className="mb-2 flex items-center gap-2 text-[14px] text-muted-foreground">
           <ListTodo size={15} strokeWidth={1.8} aria-hidden />
           <Trans>Plan</Trans>
@@ -128,7 +128,7 @@ export function PlanSection({
   const { done, total, percent } = plan.progress;
 
   return (
-    <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan">
+    <div className="mt-6 border-t border-border/70 pt-5" data-testid="bot-plan">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-[14px] text-muted-foreground">
           <ListTodo size={15} strokeWidth={1.8} aria-hidden />

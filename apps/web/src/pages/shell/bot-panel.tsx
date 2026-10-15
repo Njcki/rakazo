@@ -520,7 +520,7 @@ export function BotSettings({
           className="mt-1.5"
         />
       </label>
-      <div className="mt-6 flex items-center justify-between pt-4 border-t border-border/20">
+      <div className="mt-6 flex items-center justify-between border-t border-border/60 pt-5">
         <div className="space-y-0.5 pe-4">
           <div
             id={`${ids}-notify-finish-label`}
@@ -550,7 +550,7 @@ export function BotSettings({
       </ErrorBoundary>
       <details
         data-testid="bot-settings-advanced"
-        className="group mt-5"
+        className="group mt-6 border-t border-border/60 pt-4"
         onToggle={(event) => {
           if (event.currentTarget.open) setAdvancedOpened(true);
         }}
@@ -729,32 +729,37 @@ export function BotSettings({
         {advancedOpened ? <BotCredentialsSection botId={bot.id} /> : null}
       </details>
       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
-      <div className="mt-5 flex flex-col items-start gap-3">
-        <Button
-          disabled={saving}
-          onClick={() => {
-            void enqueueSave({
-              name,
-              title,
-              description,
-              color,
-              notifyOnFinish,
-            });
-          }}
-        >
-          <Trans>Save</Trans>
-        </Button>
-        <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
-          <Trans>Export</Trans>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ms-2.5 text-destructive hover:text-destructive"
-          onClick={onClear}
-        >
-          <Trans>Clear conversation</Trans>
-        </Button>
+      <div
+        data-testid="bot-settings-footer"
+        className="sticky bottom-0 z-10 -mx-5 mt-6 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur"
+      >
+        <div className="flex flex-col items-start gap-2">
+          <Button
+            disabled={saving}
+            onClick={() => {
+              void enqueueSave({
+                name,
+                title,
+                description,
+                color,
+                notifyOnFinish,
+              });
+            }}
+          >
+            <Trans>Save</Trans>
+          </Button>
+          <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
+            <Trans>Export</Trans>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ms-2.5 text-destructive hover:text-destructive"
+            onClick={onClear}
+          >
+            <Trans>Clear conversation</Trans>
+          </Button>
+        </div>
       </div>
     </div>
   );

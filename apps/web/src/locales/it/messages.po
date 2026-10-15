@@ -4803,3 +4803,11 @@ msgstr "Nessun piano attivo. Il bot ne crea uno per i lavori a più passi."
 #: src/pages/PlanSection.tsx
 msgid "Could not load plan"
 msgstr "Impossibile caricare il piano"
+
+#: src/pages/PlanSection.tsx
+msgid "Completed"
+msgstr "Completato"
+
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr "Nessun piano ancora. Il bot ne crea uno per i lavori a più passi; i piani completati restano qui finché non vengono sostituiti."

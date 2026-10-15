@@ -77,6 +77,7 @@ import {
   listBotSecretMetadata,
   listPiCatalog,
   getActivePlan,
+  getDisplayPlan,
   listPlansForBot,
   listScratchpadItems,
   McpOAuthBroker,
@@ -3592,7 +3593,8 @@ export function createRouter(deps: RouterDeps) {
     plans: {
       active: authed.plans.active.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
-        return getActivePlan(
+        // Sidebar: keep showing the latest completed plan until a new one replaces it.
+        return getDisplayPlan(
           { prisma: deps.prisma },
           { spaceId: context.actor.spaceId, botId: input.botId },
         );

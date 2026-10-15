@@ -126,7 +126,7 @@ function pickNextStep(steps: PlanStepDto[]): PlanStepDto | null {
 
 function buildGuidance(plan: Omit<PlanDto, "guidance">): string {
   if (plan.status === "completed") {
-    return "Plan is completed. Do not reopen it unless the user asks for more work; then call plan_create for a new plan.";
+    return "Plan is completed and remains visible in the sidebar until you call plan_create for new work (use replaceActive if an active plan exists). Do not clear or hide it.";
   }
   if (plan.status === "cancelled") {
     return "Plan was cancelled. Call plan_create if the user wants a new ordered plan.";
@@ -178,6 +178,21 @@ export async function getActivePlan(
 ): Promise<PlanDto | null> {
   const row = await deps.prisma.agentPlan.findFirst({
     where: { spaceId: input.spaceId, botId: input.botId, status: "active" },
+    include: planInclude,
+    orderBy: { updatedAt: "desc" },
+  });
+  return row ? mapPlan(row) : null;
+}
+
+/** Plan shown in the sidebar: active if any, else the latest completed (not cancelled). */
+export async function getDisplayPlan(
+  deps: PlanToolDeps,
+  input: { spaceId: string; botId: string },
+): Promise<PlanDto | null> {
+  const active = await getActivePlan(deps, input);
+  if (active) return active;
+  const row = await deps.prisma.agentPlan.findFirst({
+    where: { spaceId: input.spaceId, botId: input.botId, status: "completed" },
     include: planInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -448,12 +463,19 @@ export async function planStatusFromTool(
   deps: PlanToolDeps,
   input: { spaceId: string; botId: string },
 ): Promise<{ plan: PlanDto | null; guidance: string }> {
-  const plan = await getActivePlan(deps, input);
+  const plan = await getDisplayPlan(deps, input);
   if (!plan) {
     return {
       plan: null,
       guidance:
-        "No active plan. For any multi-step user request (2+ distinct actions), call plan_create with ordered steps BEFORE starting work, then plan_update_step as you go.",
+        "No plan on file. For any multi-step user request (2+ distinct actions), call plan_create with ordered steps BEFORE starting work, then plan_update_step as you go.",
+    };
+  }
+  if (plan.status === "completed") {
+    return {
+      plan,
+      guidance:
+        "The last plan is completed and stays visible for the user. For new multi-step work call plan_create (optionally replaceActive). Do not hide or delete the completed plan.",
     };
   }
   return { plan, guidance: plan.guidance };

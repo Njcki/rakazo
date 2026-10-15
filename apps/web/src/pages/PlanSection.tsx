@@ -102,7 +102,8 @@ export function PlanSection({
   }, [botId]);
 
   useEffect(() => {
-    if (!plan || plan.status !== "active") return;
+    // Poll while active; also when completed so a replaceActive/create refreshes the panel.
+    if (!plan) return;
     const id = window.setInterval(() => {
       void refresh();
     }, pollMs);
@@ -118,7 +119,7 @@ export function PlanSection({
           <Trans>Plan</Trans>
         </div>
         <div className="py-1 text-[13px] text-muted-foreground/75">
-          <Trans>No active plan. The bot creates one for multi-step work.</Trans>
+          <Trans>No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced.</Trans>
         </div>
         {error ? <div className="mt-1 text-[12.5px] text-destructive">{error}</div> : null}
       </div>
@@ -136,6 +137,11 @@ export function PlanSection({
             <Trans>Plan</Trans>
             {plan.title ? ` · ${plan.title}` : ""}
           </span>
+          {plan.status === "completed" ? (
+            <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+              <Trans>Completed</Trans>
+            </span>
+          ) : null}
         </div>
         <span className="shrink-0 text-[12px] tabular-nums text-muted-foreground">
           {done}/{total} · {percent}%
@@ -150,7 +156,9 @@ export function PlanSection({
         aria-label={t`Plan progress`}
       >
         <div
-          className="h-full rounded-full bg-sky-500 transition-[width] duration-300"
+          className={`h-full rounded-full transition-[width] duration-300 ${
+            plan.status === "completed" ? "bg-emerald-500" : "bg-sky-500"
+          }`}
           style={{ width: `${percent}%` }}
         />
       </div>

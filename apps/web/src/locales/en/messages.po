@@ -4860,3 +4860,11 @@ msgstr "No active plan. The bot creates one for multi-step work."
 #: src/pages/PlanSection.tsx
 msgid "Could not load plan"
 msgstr "Could not load plan"
+
+#: src/pages/PlanSection.tsx
+msgid "Completed"
+msgstr "Completed"
+
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."

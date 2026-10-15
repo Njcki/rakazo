@@ -1,5 +1,11 @@
 # Personal Android build (com.rakazo.fork) — custom mods
 
+## 1.0.9 (vc9) — 2026-10-16
+- Bot chat ⋮ menu: modern bottom sheet (rounded card, Ionicons, red destructive rows); message menu rows got icons too.
+- Piano section moved just under Description.
+- Bot reorder: long-press bot → Sposta su / Sposta giù, persisted via bots/reorder (server position).
+- Home header long-press toasts (Account, Attività, Cerca, Artefatti).
+
 ## 1.0.8 (vc8) — 2026-10-16
 - Rebased on upstream origin/main 7d5e64c (159 mobile commits: offline outbox, keyboard fix, Expo SDK 57, (settings) sheet).
 - Kept: package/slug/API URL, Italian locale (+95 new upstream strings translated), LAN-only cleartext network_security_config,

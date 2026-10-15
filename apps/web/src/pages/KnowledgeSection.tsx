@@ -10,6 +10,7 @@ import {
   TabsTrigger,
   Textarea,
 } from "@rakazo/ui-web";
+import { BookOpen, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
@@ -36,10 +37,12 @@ export function KnowledgeSection({
     <section className="mt-6" data-testid="bot-knowledge">
       <Tabs defaultValue="memory">
         <TabsList aria-label={t`Knowledge`}>
-          <TabsTrigger value="memory">
+          <TabsTrigger value="memory" className="gap-2">
+            <BookOpen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
             <Trans>Memory</Trans>
           </TabsTrigger>
-          <TabsTrigger value="skills">
+          <TabsTrigger value="skills" className="gap-2">
+            <Sparkles size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
             <Trans>Shared skills</Trans>
           </TabsTrigger>
         </TabsList>

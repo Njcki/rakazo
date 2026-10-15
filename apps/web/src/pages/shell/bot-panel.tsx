@@ -30,7 +30,19 @@ import {
   Textarea,
   Toggle,
 } from "@rakazo/ui-web";
-import { AlignLeft, Bell, SlidersHorizontal, Tag, UserRound, X } from "lucide-react";
+import {
+  AlignLeft,
+  Bell,
+  Brain,
+  Cpu,
+  Monitor,
+  SlidersHorizontal,
+  Tag,
+  UserRound,
+  Volume2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
 import { botProfilePatch } from "../../lib/bot-profile-patch";
@@ -67,7 +79,8 @@ function ComputerModePicker({
 }) {
   return (
     <div className="mt-4">
-      <div className="text-[14px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
+        <Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
         <Trans>Computer</Trans>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -598,7 +611,10 @@ export function BotSettings({
         ) : null}
         <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-model">
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
-          <Trans>Model</Trans>
+          <span className="flex items-center gap-2">
+            <Cpu size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Model</Trans>
+          </span>
           <NativeSelect
             id={`${ids}-model`}
             className="mt-2 w-full"
@@ -650,7 +666,10 @@ export function BotSettings({
         </div>
         {memoryProviderConfigured ? (
           <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-memory">
-            <Trans>Memory scope</Trans>
+            <span className="flex items-center gap-2">
+              <Brain size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+              <Trans>Memory scope</Trans>
+            </span>
             <div className="mt-2 flex gap-2">
               {(
                 [
@@ -685,7 +704,10 @@ export function BotSettings({
             checked={autoSpeak}
             onCheckedChange={(checked) => setAutoSpeak(checked)}
           />
-          <Trans>Read replies aloud</Trans>
+          <span className="flex items-center gap-2">
+            <Volume2 size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
+            <Trans>Read replies aloud</Trans>
+          </span>
         </label>
         {voices.length ? (
           <label htmlFor={`${ids}-voice`} className={fieldLabelClass}>
@@ -708,7 +730,10 @@ export function BotSettings({
         </div>
         <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-tools">
         <label htmlFor={`${ids}-disabled-tools`} className={fieldLabelClass}>
-          <Trans>Disabled tools</Trans>
+          <span className="flex items-center gap-2">
+            <Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Disabled tools</Trans>
+          </span>
           <Input
             id={`${ids}-disabled-tools`}
             value={toolNameDraft}

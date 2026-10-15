@@ -472,7 +472,10 @@ export function BotSettings({
   }
 
   return (
-    <div data-testid="bot-settings">
+    <div
+      data-testid="bot-settings"
+      className="[&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background"
+    >
       <div className="flex justify-center py-4">
         <AvatarStudioPopover
           value={color}
@@ -563,10 +566,10 @@ export function BotSettings({
             ›
           </span>
         </summary>
-        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-computer">
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-computer">
           <ComputerModePicker value={computerMode} onChange={setComputerMode} />
         </div>
-        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-scratchpad">
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-scratchpad">
           <ErrorBoundary fallback={<SectionLoadFailed />}>
             <Suspense fallback={null}>
               <ScratchpadSection botId={bot.id} />
@@ -574,7 +577,7 @@ export function BotSettings({
           </ErrorBoundary>
         </div>
         {advancedOpened ? (
-          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-knowledge">
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-knowledge">
             <ErrorBoundary fallback={<SectionLoadFailed />}>
               <Suspense fallback={null}>
                 <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
@@ -582,7 +585,7 @@ export function BotSettings({
             </ErrorBoundary>
           </div>
         ) : null}
-        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-model">
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-model">
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
           <Trans>Model</Trans>
           <NativeSelect
@@ -635,7 +638,7 @@ export function BotSettings({
         ) : null}
         </div>
         {memoryProviderConfigured ? (
-          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0 text-[14px] text-muted-foreground" data-testid="bot-settings-advanced-memory">
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-memory">
             <Trans>Memory scope</Trans>
             <div className="mt-2 flex gap-2">
               {(
@@ -661,7 +664,7 @@ export function BotSettings({
             </div>
           </div>
         ) : null}
-        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-voice">
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-voice">
         <label
           htmlFor={`${ids}-auto-speak`}
           className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
@@ -692,7 +695,7 @@ export function BotSettings({
           </label>
         ) : null}
         </div>
-        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-tools">
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-tools">
         <label htmlFor={`${ids}-disabled-tools`} className={fieldLabelClass}>
           <Trans>Disabled tools</Trans>
           <Input
@@ -739,7 +742,7 @@ export function BotSettings({
         ))}
         </div>
         {advancedOpened ? (
-          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-credentials">
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-credentials">
             <BotCredentialsSection botId={bot.id} />
           </div>
         ) : null}

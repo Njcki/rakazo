@@ -543,6 +543,11 @@ export function BotSettings({
           }}
         />
       </div>
+      <ErrorBoundary fallback={<SectionLoadFailed />}>
+        <Suspense fallback={null}>
+          <PlanSection botId={bot.id} />
+        </Suspense>
+      </ErrorBoundary>
       <details
         data-testid="bot-settings-advanced"
         className="group mt-5"
@@ -559,11 +564,6 @@ export function BotSettings({
           </span>
         </summary>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-        <ErrorBoundary fallback={<SectionLoadFailed />}>
-          <Suspense fallback={null}>
-            <PlanSection botId={bot.id} />
-          </Suspense>
-        </ErrorBoundary>
         <ErrorBoundary fallback={<SectionLoadFailed />}>
           <Suspense fallback={null}>
             <ScratchpadSection botId={bot.id} />

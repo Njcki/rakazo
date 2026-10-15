@@ -3815,7 +3815,11 @@ export function ShellPage() {
         panel={panel ?? "closed"}
       >
         {panel && (active || activeGroup || panel === "create") ? (
-          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
+          <div
+            className={`rk-scroll h-full w-full overflow-y-auto px-5 pt-[17px] ${
+              panel === "settings" ? "pb-0" : "pb-[17px]"
+            }`}
+          >
             {panel !== "routine" &&
             panel !== "create" &&
             panel !== "create-group" &&

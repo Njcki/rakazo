@@ -563,19 +563,26 @@ export function BotSettings({
             ›
           </span>
         </summary>
-        <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-        <ErrorBoundary fallback={<SectionLoadFailed />}>
-          <Suspense fallback={null}>
-            <ScratchpadSection botId={bot.id} />
-          </Suspense>
-        </ErrorBoundary>
-        {advancedOpened ? (
+        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-computer">
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        </div>
+        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-scratchpad">
           <ErrorBoundary fallback={<SectionLoadFailed />}>
             <Suspense fallback={null}>
-              <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+              <ScratchpadSection botId={bot.id} />
             </Suspense>
           </ErrorBoundary>
+        </div>
+        {advancedOpened ? (
+          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-knowledge">
+            <ErrorBoundary fallback={<SectionLoadFailed />}>
+              <Suspense fallback={null}>
+                <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
         ) : null}
+        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-model">
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
           <Trans>Model</Trans>
           <NativeSelect
@@ -626,8 +633,9 @@ export function BotSettings({
             </NativeSelect>
           </label>
         ) : null}
+        </div>
         {memoryProviderConfigured ? (
-          <div className="mt-4 text-[14px] text-muted-foreground">
+          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0 text-[14px] text-muted-foreground" data-testid="bot-settings-advanced-memory">
             <Trans>Memory scope</Trans>
             <div className="mt-2 flex gap-2">
               {(
@@ -653,6 +661,7 @@ export function BotSettings({
             </div>
           </div>
         ) : null}
+        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-voice">
         <label
           htmlFor={`${ids}-auto-speak`}
           className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
@@ -682,6 +691,8 @@ export function BotSettings({
             </NativeSelect>
           </label>
         ) : null}
+        </div>
+        <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-tools">
         <label htmlFor={`${ids}-disabled-tools`} className={fieldLabelClass}>
           <Trans>Disabled tools</Trans>
           <Input
@@ -726,12 +737,17 @@ export function BotSettings({
             />
           </label>
         ))}
-        {advancedOpened ? <BotCredentialsSection botId={bot.id} /> : null}
+        </div>
+        {advancedOpened ? (
+          <div className="mt-3 rounded-xl border border-border/45 bg-muted/25 p-3.5 [&>*]:mt-0" data-testid="bot-settings-advanced-credentials">
+            <BotCredentialsSection botId={bot.id} />
+          </div>
+        ) : null}
       </details>
       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
       <div
         data-testid="bot-settings-footer"
-        className="sticky bottom-0 z-10 -mx-5 mt-6 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur"
+        className="sticky bottom-0 z-10 -mx-5 -mb-[17px] mt-6 border-t border-border/70 bg-background/95 px-5 pt-3 pb-[17px] backdrop-blur"
       >
         <div className="flex flex-col items-start gap-2">
           <Button

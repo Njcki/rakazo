@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@rakazo/contracts";
-import { isToolActivityBlock } from "@rakazo/core";
+import { BOT_MESSAGE_MAX_LENGTH, isToolActivityBlock } from "@rakazo/core";
 
 /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
 export const USER_PROGRESS_MESSAGE_MAX_LENGTH = 500;
@@ -9,6 +9,20 @@ export function clampUserProgressMessage(text: string): string {
   if (!trimmed) return "";
   if (trimmed.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH) return trimmed;
   return `${trimmed.slice(0, USER_PROGRESS_MESSAGE_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+/**
+ * Mid-turn narration is the model's own reply text that happened to precede a
+ * tool call (e.g. a full status report). It streamed in full, so clamp it at the
+ * final-message limit rather than the short progress-beat cap.
+ */
+export const MID_TURN_NARRATION_MAX_LENGTH = BOT_MESSAGE_MAX_LENGTH;
+
+export function clampMidTurnNarration(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  if (trimmed.length <= MID_TURN_NARRATION_MAX_LENGTH) return trimmed;
+  return `${trimmed.slice(0, MID_TURN_NARRATION_MAX_LENGTH - 1).trimEnd()}…`;
 }
 
 /**

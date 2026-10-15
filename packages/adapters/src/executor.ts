@@ -375,6 +375,7 @@ import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
 import { textContentArg } from "./tool-text.js";
 import {
   botMessageOutcomeFromMidTurn,
+  clampMidTurnNarration,
   clampUserProgressMessage,
   extractNarrationText,
   finalBlocksAfterMidTurnProgress,
@@ -3983,7 +3984,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
         const publishMidTurnNarration = async () => {
           const extracted = extractNarrationText(messageSegments, currentTextSegment);
-          const narration = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
+          const narration = clampMidTurnNarration(redactSecrets(extracted.text, runSecrets));
           messageSegments = extracted.remaining;
           currentTextSegment = "";
           if (!narration) return;
@@ -6787,7 +6788,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               // does not treat pre-takeover text as the delegated final result.
               await publishMidTurnNarration();
               if (assembled.trim()) {
-                const narration = clampUserProgressMessage(redactSecrets(assembled, runSecrets));
+                const narration = clampMidTurnNarration(redactSecrets(assembled, runSecrets));
                 if (narration && runPromotesMidTurnNarration(run.trigger)) {
                   await publishMessage(
                     deps,

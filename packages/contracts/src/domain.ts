@@ -489,6 +489,49 @@ export const CreateScratchpadItemInput = z.object({
   notes: z.string().max(4_000).default(""),
 });
 
+
+export const AgentPlanStatusSchema = z.enum(["active", "completed", "cancelled"]);
+export type AgentPlanStatus = z.infer<typeof AgentPlanStatusSchema>;
+
+export const AgentPlanStepStatusSchema = z.enum([
+  "todo",
+  "in_progress",
+  "done",
+  "blocked",
+  "skipped",
+]);
+export type AgentPlanStepStatus = z.infer<typeof AgentPlanStepStatusSchema>;
+
+export const AgentPlanStepSchema = z.object({
+  id: Id,
+  index: z.number().int().positive(),
+  title: z.string(),
+  status: AgentPlanStepStatusSchema,
+  notes: z.string(),
+  blockedBy: z.array(z.number().int().positive()),
+  updatedAt: z.string(),
+});
+export type AgentPlanStep = z.infer<typeof AgentPlanStepSchema>;
+
+export const AgentPlanSchema = z.object({
+  id: Id,
+  botId: Id,
+  title: z.string(),
+  status: AgentPlanStatusSchema,
+  summary: z.string(),
+  progress: z.object({
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    percent: z.number().int().nonnegative(),
+  }),
+  nextStep: AgentPlanStepSchema.nullable(),
+  steps: z.array(AgentPlanStepSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  guidance: z.string().optional(),
+});
+export type AgentPlan = z.infer<typeof AgentPlanSchema>;
+
 export const TaughtSkillStatusSchema = z.enum(["recording", "drafting", "draft", "saved"]);
 export type TaughtSkillStatus = z.infer<typeof TaughtSkillStatusSchema>;
 

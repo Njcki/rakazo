@@ -44,6 +44,10 @@ const ScratchpadSection = lazy(() =>
   import("../ScratchpadSection").then((module) => ({ default: module.ScratchpadSection })),
 );
 
+const PlanSection = lazy(() =>
+  import("../PlanSection").then((module) => ({ default: module.PlanSection })),
+);
+
 const KnowledgeSection = lazy(() =>
   import("../KnowledgeSection").then((module) => ({ default: module.KnowledgeSection })),
 );
@@ -555,6 +559,11 @@ export function BotSettings({
           </span>
         </summary>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        <ErrorBoundary fallback={<SectionLoadFailed />}>
+          <Suspense fallback={null}>
+            <PlanSection botId={bot.id} />
+          </Suspense>
+        </ErrorBoundary>
         <ErrorBoundary fallback={<SectionLoadFailed />}>
           <Suspense fallback={null}>
             <ScratchpadSection botId={bot.id} />

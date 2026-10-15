@@ -800,6 +800,102 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "plan_create",
+    description:
+      "Create an ordered execution plan for multi-step work (2+ distinct actions). Call this BEFORE starting such work. Pass replaceActive=true to replace an existing active plan. Each step needs a short title; optional blockedBy lists 1-based step indexes that must finish first. After creating, mark steps in_progress/done with plan_update_step as you work. Do not claim the overall task finished while steps remain open.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short plan title." },
+        summary: { type: "string", description: "Optional goal summary." },
+        replaceActive: {
+          type: "boolean",
+          description: "Cancel the current active plan and replace it. Default false.",
+        },
+        steps: {
+          type: "array",
+          description: "Ordered steps (1..N).",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              blockedBy: {
+                type: "array",
+                items: { type: "integer" },
+                description: "1-based indexes of steps that must complete first.",
+              },
+              notes: { type: "string" },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: ["title", "steps"],
+    },
+  },
+  {
+    name: "plan_status",
+    description:
+      "Read the active execution plan, progress, next ready step, and guidance. Call when unsure what to do next or after compaction.",
+    inputSchema: { type: "object", properties: {} },
+    readOnly: true,
+  },
+  {
+    name: "plan_update_step",
+    description:
+      "Update a plan step: set status to in_progress when you start it, done when finished, blocked if stuck (with notes), or skipped if no longer needed. Identify the step by stepId or index from plan_create/plan_status. Keep the plan accurate — the user sees it in the sidebar.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        stepId: { type: "string" },
+        index: { type: "integer", description: "1-based step index." },
+        status: {
+          type: "string",
+          enum: ["todo", "in_progress", "done", "blocked", "skipped"],
+        },
+        title: { type: "string" },
+        notes: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "plan_add_step",
+    description:
+      "Add a step to the active plan when you discover more work mid-flight (decomposition). Optional afterIndex inserts after that step; default appends.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        afterIndex: { type: "integer" },
+        blockedBy: { type: "array", items: { type: "integer" } },
+        notes: { type: "string" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "plan_complete",
+    description:
+      "Close the active plan when every step is done or skipped. Rejects if open steps remain unless force=true with reason (user cancelled remaining work). Call this before telling the user the overall multi-step task is finished.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        force: { type: "boolean" },
+        reason: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "plan_cancel",
+    description: "Cancel the active plan (user abandoned the work). Prefer plan_complete when steps are done.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string" },
+      },
+    },
+  },
+  {
     name: "board_tickets",
     description: "List tickets. Continue with nextCursor when returned.",
     inputSchema: {

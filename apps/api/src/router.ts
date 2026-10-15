@@ -76,6 +76,8 @@ import {
   listAvailablePiCatalog,
   listBotSecretMetadata,
   listPiCatalog,
+  getActivePlan,
+  listPlansForBot,
   listScratchpadItems,
   McpOAuthBroker,
   mapScratchpadItem,
@@ -3585,6 +3587,26 @@ export function createRouter(deps: RouterDeps) {
           getLogger().error("routine testRun enqueue", error);
         });
         return { runId: run.id };
+      }),
+    },
+    plans: {
+      active: authed.plans.active.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+        return getActivePlan(
+          { prisma: deps.prisma },
+          { spaceId: context.actor.spaceId, botId: input.botId },
+        );
+      }),
+      list: authed.plans.list.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+        return listPlansForBot(
+          { prisma: deps.prisma },
+          {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            includeClosed: input.includeClosed,
+          },
+        );
       }),
     },
     scratchpad: {

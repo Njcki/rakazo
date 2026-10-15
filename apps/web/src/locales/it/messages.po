@@ -4783,3 +4783,23 @@ msgstr "Il tuo nome"
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "Il tuo team di agenti sempre attivi<0/>a cui puoi dare lavoro vero."
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr "Piano"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr "Avanzamento piano"
+
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr "Dipende da"
+
+#: src/pages/PlanSection.tsx
+msgid "No active plan. The bot creates one for multi-step work."
+msgstr "Nessun piano attivo. Il bot ne crea uno per i lavori a più passi."
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr "Impossibile caricare il piano"

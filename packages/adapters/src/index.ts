@@ -111,6 +111,8 @@ export * from "./sandbox-provider-env.js";
 export * from "./schedule-tools.js";
 export * from "./scratchpad-context.js";
 export * from "./scratchpad-tools.js";
+export * from "./plan-tools.js";
+export * from "./plan-context.js";
 export * from "./scripted-auto-review.js";
 export * from "./scripted-runtime.js";
 export * from "./scripted-voice.js";

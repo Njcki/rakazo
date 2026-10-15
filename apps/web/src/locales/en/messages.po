@@ -4840,3 +4840,23 @@ msgstr "Your name"
 #: src/pages/Welcome.tsx
 msgid "Your team of always-on agents<0/>that you can give real work to."
 msgstr "Your team of always-on agents<0/>that you can give real work to."
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr "Plan"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr "Plan progress"
+
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr "Depends on"
+
+#: src/pages/PlanSection.tsx
+msgid "No active plan. The bot creates one for multi-step work."
+msgstr "No active plan. The bot creates one for multi-step work."
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr "Could not load plan"

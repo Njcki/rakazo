@@ -74,6 +74,7 @@ import {
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
   RoutineSchema,
+  AgentPlanSchema,
   ScratchpadItemSchema,
   ScratchpadItemStatusSchema,
   ServerUpdateCheckSchema,
@@ -553,6 +554,12 @@ export const appContract = {
         }),
       )
       .output(z.object({ runId: Id })),
+  },
+  plans: {
+    active: oc.input(z.object({ botId: Id })).output(AgentPlanSchema.nullable()),
+    list: oc
+      .input(z.object({ botId: Id, includeClosed: z.boolean().optional() }))
+      .output(z.array(AgentPlanSchema)),
   },
   scratchpad: {
     list: oc

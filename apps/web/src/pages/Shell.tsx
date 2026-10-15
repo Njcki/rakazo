@@ -120,8 +120,7 @@ import {
   X,
 } from "lucide-react";
 import type { ClipboardEvent, DragEvent, MutableRefObject, RefObject } from "react";
-import {
-  Fragment,
+import { lazy, Fragment,
   memo,
   Suspense,
   useCallback,
@@ -131,8 +130,7 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
-} from "react";
+  useSyncExternalStore, } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
@@ -148,7 +146,7 @@ import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { CallCard } from "../components/call/CallCard";
 import { VoiceChatCard } from "../components/call/VoiceChatCard";
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
-import { lazyOverlay } from "../components/ErrorBoundary";
+import { ErrorBoundary, lazyOverlay, SectionLoadFailed } from "../components/ErrorBoundary";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -265,6 +263,11 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
+
+const PlanSection = lazy(() =>
+  import("./PlanSection").then((module) => ({ default: module.PlanSection })),
+);
+
 import { BotCreatePicker } from "./shell/bot-picker";
 import { ComposerReplyPreview, ReplyLine, TimeSeparator } from "./shell/chat-context";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
@@ -3931,6 +3934,11 @@ export function ShellPage() {
                 <p className="mt-2 truncate text-[13.5px] text-muted-foreground" dir="auto">
                   {t`${active.name}'s screen`}
                 </p>
+                <ErrorBoundary fallback={<SectionLoadFailed />}>
+                  <Suspense fallback={null}>
+                    <PlanSection botId={active.id} />
+                  </Suspense>
+                </ErrorBoundary>
                 <RoutineListHeader
                   onCreate={() => {
                     setRoutineDraft(emptyRoutineDraft());

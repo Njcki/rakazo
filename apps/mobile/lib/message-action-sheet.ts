@@ -80,9 +80,13 @@ export function presentMessageActionSheet({
       {
         options: [...actions.map((action) => action.text), cancel],
         cancelButtonIndex: actions.length,
-        destructiveButtonIndex: actions.flatMap((action, index) =>
-          action.destructive ? [index] : [],
-        ),
+        ...(actions.some((action) => action.destructive)
+          ? {
+              destructiveButtonIndex: actions.flatMap((action, index) =>
+                action.destructive ? [index] : [],
+              ),
+            }
+          : {}),
         title,
         userInterfaceStyle: colorScheme,
       },

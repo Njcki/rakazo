@@ -138,7 +138,7 @@ import {
 } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import type { MobileArtifactTarget } from "../lib/artifact-open";
-import { openMobileArtifact } from "../lib/artifact-open";
+import { openMobileArtifact, shareMobileArtifact } from "../lib/artifact-open";
 import { nextAutoSpeakAction } from "../lib/auto-speak";
 import { confirmDeleteBot, restoreArchivedBot } from "../lib/bot-lifecycle";
 import { retainUnchangedBotRoster } from "../lib/bot-roster";
@@ -2796,6 +2796,33 @@ function threadItemKey(item: ThreadItem<MobileMessage>) {
   return item.kind === "voiceChat" ? item.key : item.message.id;
 }
 
+/** Share entries for each attachment of a message (Share stays separate from tap-to-open). */
+function shareAttachmentEntries(
+  message: MobileMessage,
+  target: MobileArtifactTarget | undefined,
+): { name: string; text: string; onPress: () => void }[] {
+  if (!target) return [];
+  const shareable = message.blocks.flatMap((block) =>
+    (block.kind === "image" || block.kind === "file") && block.artifactId
+      ? [
+          {
+            artifactId: block.artifactId,
+            name: block.name ?? (block.kind === "image" ? t("Image") : t("File")),
+            mimeType: block.mimeType ?? (block.kind === "image" ? "image/png" : "text/plain"),
+          },
+        ]
+      : [],
+  );
+  return shareable.map((item, index) => ({
+    name: `share-${index}`,
+    text: shareable.length === 1 ? t("Share") : t("Share {name}", { name: item.name }),
+    onPress: () =>
+      void shareMobileArtifact(target, item.artifactId, item.name, item.mimeType).catch((err) =>
+        Alert.alert(t("Could not share file"), err instanceof Error ? err.message : t("Try again.")),
+      ),
+  }));
+}
+
 type MessageRowActions = {
   reply: (message: MobileMessage) => void;
   quote: (message: MobileMessage) => void;
@@ -2932,6 +2959,8 @@ const MessageRow = memo(function MessageRow({
       ...(includeSpeak ? [{ name: "speak", text: t("Speak message"), onPress: speakMessage }] : []),
       ...(includeSelect ? [{ name: "select", text: t("Select text"), onPress: select }] : []),
       { name: "copy", text: t("Copy"), onPress: copy },
+      // Fork: tap opens attachments; sharing is an explicit entry in the main sheet.
+      ...shareAttachmentEntries(message, artifactTarget),
     ];
     const menu = buildMessageContextMenu({
       labels: {
@@ -2986,7 +3015,7 @@ const MessageRow = memo(function MessageRow({
         },
       },
     };
-  }, [message, actions, readOnly, onCall, colorScheme, t, locale]);
+  }, [message, actions, readOnly, onCall, colorScheme, t, locale, artifactTarget]);
   return (
     <View
       key={message.id}
@@ -3793,8 +3822,7 @@ function MessageTextCard({
   const contentText = blockText(message);
   if (!contentText) return null;
   return (
-    <Pressable
-      {...actionProps}
+    <View
       style={{
         flexShrink: 1,
         minWidth: 0,

@@ -1,6 +1,12 @@
 import { ActionSheetIOS, Alert, Platform } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { presentMessageActionSheet } from "./message-action-sheet";
+import {
+  actionsAreEmojiRow,
+  dismissMessageActionSheet,
+  presentMessageActionSheet,
+  subscribeMessageActionSheet,
+  type MessageActionSheetRequest,
+} from "./message-action-sheet";
 
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
@@ -21,7 +27,10 @@ function sheet() {
 }
 
 describe("native message action sheet", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dismissMessageActionSheet();
+  });
 
   it("preserves every iOS action, timestamp, appearance and cancellation", () => {
     Platform.OS = "ios";
@@ -39,23 +48,51 @@ describe("native message action sheet", () => {
       select(index);
       expect(actions[index]!.onPress).toHaveBeenCalledOnce();
     }
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 
-  it("keeps all Android actions reachable within the three-button limit", () => {
+  it("shows every Android action at once, with cancel separate and no Alert paging", () => {
     Platform.OS = "android";
+    const seen: Array<MessageActionSheetRequest | null> = [];
+    const unsubscribe = subscribeMessageActionSheet((request) => seen.push(request));
     const actions = sheet();
-    const [title, , firstPage, options] = vi.mocked(Alert.alert).mock.calls[0]!;
-    expect(title).toBe("12:34");
-    expect(options).toEqual({ cancelable: true });
-    expect(firstPage?.map((button) => button.text)).toEqual(["Reply", "React", "More"]);
-    firstPage?.[0]?.onPress?.();
-    firstPage?.[1]?.onPress?.();
-    firstPage?.[2]?.onPress?.();
-    const [, , secondPage, secondOptions] = vi.mocked(Alert.alert).mock.calls[1]!;
-    expect(secondPage?.map((button) => button.text)).toEqual(["Speak", "Copy", "Cancel"]);
-    expect(secondOptions).toEqual({ cancelable: true });
-    secondPage?.[0]?.onPress?.();
-    secondPage?.[1]?.onPress?.();
+    expect(Alert.alert).not.toHaveBeenCalled();
+    const request = seen.at(-1);
+    expect(request?.title).toBe("12:34");
+    expect(request?.cancel).toBe("Cancel");
+    expect(request?.colorScheme).toBe("light");
+    expect(request?.emojiRow).toBe(false);
+    expect(request?.actions.map((action) => action.text)).toEqual([
+      "Reply",
+      "React",
+      "Speak",
+      "Copy",
+    ]);
+    expect(request?.actions.some((action) => action.text === "More")).toBe(false);
+    for (const action of request?.actions ?? []) action.onPress();
     expect(actions.every((action) => action.onPress.mock.calls.length === 1)).toBe(true);
+    dismissMessageActionSheet();
+    expect(seen.at(-1)).toBeNull();
+    unsubscribe();
+  });
+
+  it("flags a reaction picker as a single emoji row", () => {
+    expect(actionsAreEmojiRow([{ text: "👍" }, { text: "❤️" }, { text: "😂" }])).toBe(true);
+    expect(actionsAreEmojiRow([{ text: "Reply" }, { text: "👍" }])).toBe(false);
+    Platform.OS = "android";
+    let latest: MessageActionSheetRequest | null = null;
+    const unsubscribe = subscribeMessageActionSheet((request) => {
+      latest = request;
+    });
+    presentMessageActionSheet({
+      actions: ["👍", "👎", "❤️", "😂", "🎉", "😮"].map((text) => ({ text, onPress: vi.fn() })),
+      cancel: "Cancel",
+      more: "More",
+      colorScheme: "dark",
+    });
+    expect(latest?.emojiRow).toBe(true);
+    expect(latest?.actions).toHaveLength(6);
+    unsubscribe();
+    dismissMessageActionSheet();
   });
 });

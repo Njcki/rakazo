@@ -31,6 +31,7 @@ import {
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
+  repairMarkdownTableDelimiters,
   sanitizeMarkdownUrl,
   useLinkFavicon,
 } from "./markdown";
@@ -445,7 +446,8 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   streaming = false,
 }: ChatMarkdownProps) {
   const { request, dialog } = useExternalLinkConfirm();
-  const source = streaming ? closeUnterminatedFence(children) : children;
+  const repaired = repairMarkdownTableDelimiters(children);
+  const source = streaming ? closeUnterminatedFence(repaired) : repaired;
 
   return (
     <ConfirmLinkContext.Provider value={request}>

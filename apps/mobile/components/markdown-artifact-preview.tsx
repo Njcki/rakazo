@@ -4,8 +4,8 @@ import { Alert, Modal, SafeAreaView, ScrollView, Text, View } from "react-native
 import { mobileTokens } from "../lib/appearance";
 import {
   type MobileArtifactTarget,
-  openMobileArtifact,
   readMobileArtifactText,
+  shareMobileArtifact,
 } from "../lib/artifact-open";
 import { useI18n } from "../lib/i18n";
 import { useResolvedAppearance } from "../lib/native";
@@ -84,7 +84,7 @@ export function MarkdownArtifactPreview({
               ios="square.and.arrow.up"
               android="share-social-outline"
               onPress={() =>
-                void openMobileArtifact(
+                void shareMobileArtifact(
                   threadTarget,
                   target.artifactId,
                   target.name,

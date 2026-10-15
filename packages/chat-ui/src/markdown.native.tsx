@@ -45,6 +45,7 @@ import {
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
+  repairMarkdownTableDelimiters,
   sanitizeMarkdownUrl,
   useLinkFavicon,
 } from "./markdown";
@@ -237,7 +238,13 @@ function markdownStyles(palette: ColorTokens) {
 async function openSafeLink(url: string) {
   const safeUrl = sanitizeMarkdownUrl(url);
   if (!safeUrl) return;
-  if (await Linking.canOpenURL(safeUrl)) await Linking.openURL(safeUrl);
+  try {
+    // Do not gate on canOpenURL — on Android it often returns false even for https
+    // and then silently blocks taps. sanitizeMarkdownUrl already allows only safe schemes.
+    await Linking.openURL(safeUrl);
+  } catch {
+    // Ignore — invalid or blocked by the OS.
+  }
 }
 
 const OpenLinkContext = createContext<(url: string) => void>(() => undefined);
@@ -1039,10 +1046,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
         <LinkFaviconsPausedContext.Provider value={streaming}>
           {streaming ? (
             <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-              {children}
+              {repairMarkdownTableDelimiters(children)}
             </MarkdownStream>
           ) : (
-            <Markdown {...sharedProps}>{children}</Markdown>
+            <Markdown {...sharedProps}>{repairMarkdownTableDelimiters(children)}</Markdown>
           )}
         </LinkFaviconsPausedContext.Provider>
       </View>

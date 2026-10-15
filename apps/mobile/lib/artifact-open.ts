@@ -6,6 +6,8 @@ import type { ApiRequestContext } from "./api";
 import { captureApiRequestContext, currentApiBase, rpc, selectedSpaceId } from "./api";
 import { artifactCacheSession } from "./artifact-cache-session";
 import { artifactCacheFileName, artifactShareFileName } from "./artifact-file";
+import { getContentUriAsync } from "expo-file-system/legacy";
+import { Platform } from "react-native";
 import { t } from "./i18n";
 import type { ImageSize } from "./inline-image";
 import { createKeyedPromiseCache } from "./inline-image";
@@ -154,7 +156,64 @@ export async function readMobileArtifactText(
   return file.text();
 }
 
+/** FLAG_GRANT_READ_URI_PERMISSION: lets the viewer app read our FileProvider content:// URI. */
+const FLAG_GRANT_READ_URI_PERMISSION = 1;
+
+
+function intentMimeType(mimeType: string): string {
+  const normalized = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (!normalized || normalized === "application/octet-stream") return "*/*";
+  return normalized;
+}
+
+/**
+ * ACTION_VIEW resolves only when the viewer returns (startActivityForResult), so do not wait for
+ * it: a launch failure (no app for this type) rejects right away, anything slower means the viewer
+ * is open. Returns false only when no viewer could be started.
+ */
+async function launchAndroidViewer(file: File, mimeType: string): Promise<boolean> {
+  let IntentLauncher: typeof import("expo-intent-launcher");
+  let contentUri: string;
+  try {
+    IntentLauncher = await import("expo-intent-launcher");
+    contentUri = await getContentUriAsync(file.uri);
+  } catch {
+    return false;
+  }
+  const launch = IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+    data: contentUri,
+    type: intentMimeType(mimeType),
+    flags: FLAG_GRANT_READ_URI_PERMISSION,
+  }).then(
+    () => true,
+    () => false,
+  );
+  const started = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 1200));
+  return Promise.race([launch, started]);
+}
+
+/**
+ * Tap on an attachment. Android: open the file in a viewer app (ACTION_VIEW on a FileProvider
+ * content:// URI); falls back to the share sheet only when no app can view it. iOS keeps the
+ * system share sheet (which also offers Quick Look / "Open in").
+ */
 export async function openMobileArtifact(
+  target: MobileArtifactTarget,
+  artifactId: string,
+  name: string,
+  mimeType: string,
+): Promise<void> {
+  const file = await cacheMobileArtifact(target, artifactId, mimeType);
+  if (
+    Platform.OS === "android" &&
+    (await launchAndroidViewer(namedCopy(file, mimeType, name), mimeType))
+  )
+    return;
+  await shareNamedFile(file, mimeType, name);
+}
+
+/** Explicit "Share" action: always the system share sheet. */
+export async function shareMobileArtifact(
   target: MobileArtifactTarget,
   artifactId: string,
   name: string,
@@ -235,13 +294,19 @@ export async function shareLocalFile(uri: string, mimeType: string, name: string
   await shareNamedFile(new File(uri), mimeType, name);
 }
 
-async function shareNamedFile(source: File, mimeType: string, name: string): Promise<void> {
+/** Copy with the real file name so viewer/share apps show it. */
+function namedCopy(source: File, mimeType: string, name: string): File {
   const root = new Directory(Paths.cache, "artifact-shares");
   if (!root.exists) root.create();
   const dir = new Directory(root, source.name || "attachment");
   if (!dir.exists) dir.create();
   const shared = new File(dir, artifactShareFileName(name, mimeType));
   source.copySync(shared, { overwrite: true });
+  return shared;
+}
+
+async function shareNamedFile(source: File, mimeType: string, name: string): Promise<void> {
+  const shared = namedCopy(source, mimeType, name);
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(shared.uri, { mimeType });
     return;

@@ -18,6 +18,7 @@ import { AvatarStyleProvider } from "../components/avatar-style";
 import { CallCard } from "../components/CallCard";
 import { ComputerUpdateProgress } from "../components/computer-update-progress";
 import { floatingHeaderOptions, glassHeaderOptions } from "../components/glass-title";
+import { MessageActionSheetHost } from "../components/message-action-sheet-host";
 import { NativeSymbol } from "../components/native-symbol";
 import { VoicePlayerBar } from "../components/voice-player-bar";
 import {
@@ -253,6 +254,7 @@ export default function Layout() {
                 </View>
                 <ComputerUpdateProgress />
                 <CallCard />
+                <MessageActionSheetHost />
               </ThemeProvider>
             </ChatContentProviders>
           </AvatarStyleProvider>

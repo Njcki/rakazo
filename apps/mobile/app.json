@@ -1,12 +1,11 @@
 {
   "expo": {
     "name": "Rakazo",
-    "slug": "rakazo",
-    "owner": "inbox-zero",
+    "slug": "rakazo-fork",
     "scheme": "rakazo",
-    "version": "1.0.5",
-    "orientation": "default",
-    "userInterfaceStyle": "automatic",
+    "version": "1.0.8",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
     "plugins": [
       [
@@ -45,9 +44,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Rakazo uses your photo library so you can attach images to a bot message.",
-          "cameraPermission": "Rakazo uses the camera so you can attach photos to a bot message.",
-          "microphonePermission": "Rakazo uses the microphone for voice calls with your bots."
+          "photosPermission": "Rakazo usa la libreria foto per allegare immagini a un messaggio del bot.",
+          "cameraPermission": "Rakazo usa la fotocamera per allegare foto a un messaggio del bot.",
+          "microphonePermission": "Rakazo usa il microfono per le chiamate vocali con i tuoi bot."
         }
       ],
       "expo-sharing",
@@ -73,31 +72,23 @@
       }
     },
     "android": {
-      "package": "com.rakazo.app",
-      "versionCode": 10,
+      "package": "com.rakazo.fork",
+      "versionCode": 8,
       "softwareKeyboardLayoutMode": "resize",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
         "backgroundImage": "./assets/icon-background.png"
-      }
+      },
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "router": {},
-      "supportsRTL": true,
-      "eas": {
-        "projectId": "07f7eb04-45e3-47fe-9374-99a2f991131e"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/07f7eb04-45e3-47fe-9374-99a2f991131e"
+      "supportsRTL": true
     }
   }
 }

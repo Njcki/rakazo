@@ -421,3 +421,73 @@ export function closeUnterminatedFence(markdown: string): string {
 
   return openFence ? `${markdown}\n${openFence.marker.repeat(openFence.length)}` : markdown;
 }
+
+/** Turn bare http(s) URLs into markdown links so they render as tappable even if the parser's linkify option is off. Skips fenced code blocks. */
+export function linkifyBareUrls(markdown: string): string {
+  const parts = markdown.split(/(```[\s\S]*?```|`[^`\n]+`)/g);
+  return parts
+    .map((part) => {
+      if (part.startsWith("```") || (part.startsWith("`") && part.endsWith("`"))) return part;
+      // Prefix is start-or-whitespace only — not "(" — so existing [text](https://...) stays intact.
+      return part.replace(
+        /(^|[\s])((?:https?:\/\/)[^\s<>\]"'`)]+)/g,
+        (_match, prefix: string, url: string) => {
+          const trimmed = url.replace(/[.,;:!?)]+$/u, "");
+          const trailing = url.slice(trimmed.length);
+          return `${prefix}[${trimmed}](${trimmed})${trailing}`;
+        },
+      );
+    })
+    .join("");
+}
+
+
+const SEPARATOR_CELL = /^\s*:?-{3,}:?\s*$/;
+
+/** Split a GFM pipe-table row into cell contents (trimmed). Returns null if not a pipe row. */
+function pipeRowCells(line: string): string[] | null {
+  const trimmed = line.trim();
+  // Prefer GFM-style rows that start with "|"; also allow a trailing-only pipe.
+  if (!trimmed.startsWith("|")) return null;
+  let body = trimmed.slice(1);
+  if (body.endsWith("|")) body = body.slice(0, -1);
+  return body.split("|").map((cell) => cell.trim());
+}
+
+function isSeparatorRow(cells: string[]): boolean {
+  return cells.length > 0 && cells.every((cell) => SEPARATOR_CELL.test(cell));
+}
+
+function formatPipeRow(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+/**
+ * remark-gfm rejects tables whose delimiter row column count ≠ header columns.
+ * LLMs often emit `|---|---|` under a 4-column header; the table then renders as a
+ * `<p>` and browsers collapse the newlines — looking like one pipe-filled line.
+ * Pad/trim delimiter cells to match the header (and leave fences alone).
+ */
+export function repairMarkdownTableDelimiters(markdown: string): string {
+  const parts = markdown.split(/(```[\s\S]*?```)/g);
+  return parts
+    .map((part) => {
+      if (part.startsWith("```")) return part;
+      const lines = part.split("\n");
+      for (let i = 0; i < lines.length - 1; i++) {
+        const headerCells = pipeRowCells(lines[i]!);
+        if (!headerCells || headerCells.length === 0) continue;
+        const sepCells = pipeRowCells(lines[i + 1]!);
+        if (!sepCells || !isSeparatorRow(sepCells)) continue;
+        if (sepCells.length === headerCells.length) continue;
+
+        const repaired =
+          sepCells.length < headerCells.length
+            ? [...sepCells, ...Array.from({ length: headerCells.length - sepCells.length }, () => "---")]
+            : sepCells.slice(0, headerCells.length);
+        lines[i + 1] = formatPipeRow(repaired);
+      }
+      return lines.join("\n");
+    })
+    .join("");
+}

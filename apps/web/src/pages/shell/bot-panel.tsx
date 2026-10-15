@@ -30,7 +30,7 @@ import {
   Textarea,
   Toggle,
 } from "@rakazo/ui-web";
-import { X } from "lucide-react";
+import { AlignLeft, Bell, SlidersHorizontal, Tag, UserRound, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
 import { botProfilePatch } from "../../lib/bot-profile-patch";
@@ -489,7 +489,10 @@ export function BotSettings({
         />
       </div>
       <label htmlFor={`${ids}-name`} className="mt-4 block text-[13.5px] text-muted-foreground/80">
-        <Trans>Name</Trans>
+        <span className="flex items-center gap-2">
+          <UserRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Name</Trans>
+        </span>
         <Input
           id={`${ids}-name`}
           value={name}
@@ -500,7 +503,10 @@ export function BotSettings({
         />
       </label>
       <label htmlFor={`${ids}-title`} className={fieldLabelClass}>
-        <Trans>Title</Trans>
+        <span className="flex items-center gap-2">
+          <Tag size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Title</Trans>
+        </span>
         <Input
           id={`${ids}-title`}
           value={title}
@@ -512,7 +518,10 @@ export function BotSettings({
         />
       </label>
       <label htmlFor={`${ids}-description`} className={fieldLabelClass}>
-        <Trans>Description</Trans>
+        <span className="flex items-center gap-2">
+          <AlignLeft size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Description</Trans>
+        </span>
         <Textarea
           id={`${ids}-description`}
           value={description}
@@ -527,8 +536,9 @@ export function BotSettings({
         <div className="space-y-0.5 pe-4">
           <div
             id={`${ids}-notify-finish-label`}
-            className="text-[13.5px] font-medium text-foreground"
+            className="flex items-center gap-2 text-[13.5px] font-medium text-foreground"
           >
+            <Bell size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
             <Trans>Notifications</Trans>
           </div>
           <div id={`${ids}-notify-finish-desc`} className="text-[12px] text-muted-foreground/70">
@@ -559,7 +569,8 @@ export function BotSettings({
         }}
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14px] text-muted-foreground">
-          <span className="text-muted-foreground">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <SlidersHorizontal size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
             <Trans>Advanced</Trans>
           </span>
           <span aria-hidden="true" className="transition-transform group-open:rotate-90">

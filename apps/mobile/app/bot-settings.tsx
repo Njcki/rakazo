@@ -438,6 +438,7 @@ export default function BotSettingsScreen() {
             textAlignVertical: "top",
           }}
         />
+        {botId ? <PlanSection botId={botId} /> : null}
         <SectionLabel ios="paintpalette" android="color-palette-outline" label={t("Color")} top={16} />
         <ScrollView
           horizontal
@@ -496,7 +497,6 @@ export default function BotSettingsScreen() {
             voiceRow
           )
         ) : null}
-        {botId ? <PlanSection botId={botId} /> : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Advanced")}

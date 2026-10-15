@@ -1,6 +1,12 @@
 import { ActionSheetIOS, Platform } from "react-native";
 
-export type MessageAction = { text: string; onPress: () => void };
+export type MessageAction = {
+  text: string;
+  onPress: () => void;
+  /** Ionicons name shown before the label on the Android sheet. */
+  icon?: string;
+  destructive?: boolean;
+};
 
 export type MessageActionSheetRequest = {
   actions: MessageAction[];
@@ -74,6 +80,9 @@ export function presentMessageActionSheet({
       {
         options: [...actions.map((action) => action.text), cancel],
         cancelButtonIndex: actions.length,
+        destructiveButtonIndex: actions.flatMap((action, index) =>
+          action.destructive ? [index] : [],
+        ),
         title,
         userInterfaceStyle: colorScheme,
       },

@@ -26,6 +26,8 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
+  ToastAndroid,
 } from "react-native";
 import { KeyboardController } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -782,13 +784,18 @@ function Home() {
       {nativeHeader ? null : (
         <View style={[styles.header, { paddingTop: Math.max(insets.top, 20) + 8 }]}>
           <View style={styles.circleButton}>
-            <HeaderButton accessibilityLabel={t("Account")} onPress={() => router.push("/account")}>
+            <HeaderButton
+              accessibilityLabel={t("Account")}
+              hint={t("Account: profile, server, models and settings")}
+              onPress={() => router.push("/account")}
+            >
               <Text style={styles.profileInitials}>{initials}</Text>
             </HeaderButton>
           </View>
           <View style={styles.headerActions}>
             <HeaderButton
               accessibilityLabel={t("Activity")}
+              hint={t("Activity: show only chats with recent news and work in progress")}
               active={activityMode}
               accent
               onPress={toggleActivityMode}
@@ -802,6 +809,7 @@ function Home() {
             </HeaderButton>
             <HeaderButton
               accessibilityLabel={t("Search")}
+              hint={t("Search: find bots, chats and messages")}
               active={searching}
               onPress={() =>
                 setSearching((open) => {
@@ -814,6 +822,7 @@ function Home() {
             </HeaderButton>
             <HeaderButton
               accessibilityLabel={t("Artifacts")}
+              hint={t("Artifacts: files and documents created by your bots")}
               onPress={() => router.push("/artifacts")}
             >
               <NativeSymbol ios="square.stack.3d.up" android="layers-outline" size={17} />
@@ -969,6 +978,35 @@ function Home() {
             await rpc("botSections/update", { sectionId, name });
             await loadBots();
           }}
+          onMove={
+            organizeTarget.kind === "bot"
+              ? async (direction) => {
+                  // Swap with the nearest bot in the same visible group (pinned + section),
+                  // then persist the full order with bots/reorder (server position).
+                  const ids = bots.map((bot) => bot.id);
+                  const from = ids.indexOf(organizeChat.id);
+                  const self = bots[from];
+                  if (from < 0 || !self) return;
+                  let to = from + direction;
+                  while (
+                    to >= 0 &&
+                    to < bots.length &&
+                    (Boolean(bots[to]?.pinned) !== Boolean(self.pinned) ||
+                      (bots[to]?.sectionId ?? null) !== (self.sectionId ?? null))
+                  )
+                    to += direction;
+                  if (to < 0 || to >= bots.length) return;
+                  const next = [...bots];
+                  [next[from], next[to]] = [next[to] as MobileBot, next[from] as MobileBot];
+                  setBots(next);
+                  try {
+                    await rpc("bots/reorder", { botIds: next.map((bot) => bot.id) });
+                  } finally {
+                    await loadBots();
+                  }
+                }
+              : undefined
+          }
         />
       ) : null}
     </View>
@@ -1166,8 +1204,11 @@ function HeaderButton({
   accessibilityLabel,
   active = false,
   accent = false,
+  hint,
 }: {
   children: ReactNode;
+  /** Long-press explanation shown as a short toast. */
+  hint?: string;
   onPress: () => void;
   accessibilityLabel: string;
   active?: boolean;
@@ -1180,6 +1221,13 @@ function HeaderButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected: active }}
       onPress={onPress}
+      onLongPress={
+        hint
+          ? () => {
+              if (Platform.OS === "android") ToastAndroid.show(hint, ToastAndroid.SHORT);
+            }
+          : undefined
+      }
       hitSlop={4}
       style={({ pressed }) => [
         styles.headerButton,

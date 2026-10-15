@@ -716,4 +716,10 @@ export const IT_MESSAGES: Record<string, string> = {
   "Send deletion code": "Invia codice di eliminazione",
   "Sign in to your existing account to link SSO": "Accedi al tuo account esistente per collegare SSO",
   "SSO is temporarily unavailable. Try again.": "SSO temporaneamente non disponibile. Riprova.",
+  "Account: profile, server, models and settings": "Account: profilo, server, modelli e impostazioni",
+  "Activity: show only chats with recent news and work in progress": "Attività: mostra solo le chat con novità e lavori in corso",
+  "Search: find bots, chats and messages": "Cerca: trova bot, chat e messaggi",
+  "Artifacts: files and documents created by your bots": "Artefatti: file e documenti creati dai tuoi bot",
+  "Move up": "Sposta su",
+  "Move down": "Sposta giù",
 };

@@ -31,6 +31,7 @@ export function BotOrganizeModal({
   onUpdate,
   onCreateSection,
   onRenameSection,
+  onMove,
 }: {
   bot: Pick<MobileBot, "name" | "pinned" | "sectionId"> &
     Partial<Pick<MobileBot, "notifyOnFinish">>;
@@ -39,6 +40,8 @@ export function BotOrganizeModal({
   onUpdate: (update: BotOrganizationUpdate) => Promise<void>;
   onCreateSection: (name: string) => Promise<void>;
   onRenameSection: (sectionId: string, name: string) => Promise<void>;
+  /** Move this bot one place up (-1) or down (1) in the list; saved on the server. */
+  onMove?: (direction: -1 | 1) => Promise<void>;
 }) {
   const styles = useThemedStyles(createBotOrganizeStyles);
   const { t } = useI18n();
@@ -102,6 +105,33 @@ export function BotOrganizeModal({
             />
             <Text style={styles.actionLabel}>{bot.pinned ? t("Unpin") : t("Pin")}</Text>
           </Pressable>
+          {onMove
+            ? ([-1, 1] as const).map((direction) => (
+                <Pressable
+                  key={direction}
+                  accessibilityRole="button"
+                  disabled={saving}
+                  onPress={() => {
+                    if (saving) return;
+                    setSaving(true);
+                    setError(null);
+                    void onMove(direction)
+                      .catch((err) => setError(errorText(err, t("Could not update chat"))))
+                      .finally(() => setSaving(false));
+                  }}
+                  style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+                >
+                  <NativeSymbol
+                    ios={direction < 0 ? "arrow.up" : "arrow.down"}
+                    android={direction < 0 ? "arrow-up" : "arrow-down"}
+                    size={18}
+                  />
+                  <Text style={styles.actionLabel}>
+                    {direction < 0 ? t("Move up") : t("Move down")}
+                  </Text>
+                </Pressable>
+              ))
+            : null}
           {typeof bot.notifyOnFinish === "boolean" ? (
             <Pressable
               accessibilityRole="button"

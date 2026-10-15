@@ -973,6 +973,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   const botActions = [
     {
       text: t("Chat settings"),
+      icon: "settings-outline",
       onPress: () =>
         router.push({
           pathname: "/bot-settings",
@@ -981,6 +982,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     },
     {
       text: t("Open computer"),
+      icon: "desktop-outline",
       onPress: () =>
         router.push({
           pathname: "/computer",
@@ -989,6 +991,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     },
     {
       text: t("Clear conversation"),
+      icon: "trash-bin-outline",
       destructive: true,
       onPress: () =>
         Alert.alert(
@@ -1004,6 +1007,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     },
     {
       text: t("Archive"),
+      icon: "archive-outline",
       onPress: () =>
         void rpc("bots/archive", { botId })
           .then(leaveBot)
@@ -1013,6 +1017,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     },
     {
       text: t("Delete…"),
+      icon: "trash-outline",
       destructive: true,
       onPress: () => confirmDeleteBot({ id: botId ?? "", name: displayName || t("Bot") }, leaveBot),
     },
@@ -1035,7 +1040,14 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
       );
       return;
     }
-    setBotActionsOpen(true);
+    // Modern bottom sheet (rounded card, icons) shared with the message menu.
+    presentMessageActionSheet({
+      actions: botActions,
+      title: name || displayName || t("Bot"),
+      cancel: t("Cancel"),
+      more: t("More"),
+      colorScheme,
+    });
   }
 
   /** Shows the chat's saved copy until live data for it arrives; never under a search jump. */
@@ -2800,7 +2812,7 @@ function threadItemKey(item: ThreadItem<MobileMessage>) {
 function shareAttachmentEntries(
   message: MobileMessage,
   target: MobileArtifactTarget | undefined,
-): { name: string; text: string; onPress: () => void }[] {
+): { name: string; text: string; icon: string; onPress: () => void }[] {
   if (!target) return [];
   const shareable = message.blocks.flatMap((block) =>
     (block.kind === "image" || block.kind === "file") && block.artifactId
@@ -2815,6 +2827,7 @@ function shareAttachmentEntries(
   );
   return shareable.map((item, index) => ({
     name: `share-${index}`,
+    icon: "share-social-outline",
     text: shareable.length === 1 ? t("Share") : t("Share {name}", { name: item.name }),
     onPress: () =>
       void shareMobileArtifact(target, item.artifactId, item.name, item.mimeType).catch((err) =>
@@ -2936,13 +2949,14 @@ const MessageRow = memo(function MessageRow({
     };
     const react = (reaction: MessageReaction) => actions.react(message, reaction);
     const menuActions = [
-      ...(!readOnly ? [{ name: "reply", text: t("Reply"), onPress: reply }] : []),
-      ...(includeQuote ? [{ name: "quote", text: t("Quote"), onPress: quote }] : []),
+      ...(!readOnly ? [{ name: "reply", text: t("Reply"), icon: "arrow-undo-outline", onPress: reply }] : []),
+      ...(includeQuote ? [{ name: "quote", text: t("Quote"), icon: "chatbox-ellipses-outline", onPress: quote }] : []),
       ...(includeReact
         ? [
             {
               name: "react",
               text: t("React"),
+              icon: "happy-outline",
               onPress: () =>
                 presentMessageActionSheet({
                   cancel: t("Cancel"),
@@ -2956,9 +2970,9 @@ const MessageRow = memo(function MessageRow({
             },
           ]
         : []),
-      ...(includeSpeak ? [{ name: "speak", text: t("Speak message"), onPress: speakMessage }] : []),
-      ...(includeSelect ? [{ name: "select", text: t("Select text"), onPress: select }] : []),
-      { name: "copy", text: t("Copy"), onPress: copy },
+      ...(includeSpeak ? [{ name: "speak", text: t("Speak message"), icon: "volume-high-outline", onPress: speakMessage }] : []),
+      ...(includeSelect ? [{ name: "select", text: t("Select text"), icon: "text-outline", onPress: select }] : []),
+      { name: "copy", text: t("Copy"), icon: "copy-outline", onPress: copy },
       // Fork: tap opens attachments; sharing is an explicit entry in the main sheet.
       ...shareAttachmentEntries(message, artifactTarget),
     ];

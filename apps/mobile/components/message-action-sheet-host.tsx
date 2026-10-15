@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Ionicons from "@react-native-vector-icons/ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   dismissMessageActionSheet,
@@ -141,7 +142,32 @@ export function MessageActionSheetHost() {
                       { backgroundColor: pressed ? tokens.accent : "transparent" },
                     ]}
                   >
-                    <Text style={[styles.rowLabel, { color: tokens.popoverForeground }]}>
+                    {action.icon ? (
+                      <View
+                        style={[
+                          styles.iconWrap,
+                          {
+                            backgroundColor: action.destructive
+                              ? "rgba(239,68,68,0.14)"
+                              : tokens.accent,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          name={action.icon as never}
+                          size={19}
+                          color={action.destructive ? tokens.destructive : tokens.popoverForeground}
+                        />
+                      </View>
+                    ) : null}
+                    <Text
+                      style={[
+                        styles.rowLabel,
+                        {
+                          color: action.destructive ? tokens.destructive : tokens.popoverForeground,
+                        },
+                      ]}
+                    >
                       {action.text}
                     </Text>
                   </Pressable>
@@ -187,11 +213,20 @@ const styles = StyleSheet.create({
   },
   titleSpacer: { height: 10 },
   row: {
-    minHeight: 52,
-    justifyContent: "center",
-    paddingHorizontal: 22,
+    minHeight: 54,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 18,
   },
-  rowLabel: { fontSize: 17, fontWeight: "500" },
+  iconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rowLabel: { fontSize: 16.5, fontWeight: "500", flex: 1 },
   emojiRow: {
     flexGrow: 1,
     flexDirection: "row",

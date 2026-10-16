@@ -75,7 +75,10 @@ cutover)
   "${NEWC[@]}" up -d --pull never --force-recreate supervisor api worker web
   "${NEWC[@]}" up -d --wait --wait-timeout 400 supervisor api worker web
   "${NEWC[@]}" ps
-  curl -fsS -o /dev/null -w "site %{http_code}\n" https://rakazo.example.com/ || true
+  # Optional healthcheck: set RAKAZO_HOST to your public hostname (no scheme).
+  if [ -n "${RAKAZO_HOST:-}" ]; then
+    curl -fsS -o /dev/null -w "site %{http_code}\n" "https://${RAKAZO_HOST}/" || true
+  fi
   echo "rollback: $0 rollback --yes  (snapshot $STAMP)" ;;
 rollback)
   need_yes

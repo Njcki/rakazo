@@ -228,7 +228,18 @@ export const appContract = {
     apply: oc.input(ServerUpdateRequestSchema).output(ServerUpdateRunSchema),
   },
   models: {
-    list: oc.output(z.array(ModelCatalogEntrySchema)),
+    /**
+     * Optional `providers` narrows the catalog to those provider ids (e.g. only the providers
+     * with a connected credential), so mobile pickers avoid downloading the full ~1500 entries.
+     * Omitted/empty → full available catalog (backward-compatible).
+     */
+    list: oc
+      .input(
+        z
+          .object({ providers: z.array(z.string().min(1).max(128)).max(64).optional() })
+          .nullish(),
+      )
+      .output(z.array(ModelCatalogEntrySchema)),
     credentials: oc.output(z.array(ModelCredentialSchema)),
     backups: oc.output(z.array(ModelBackupChoiceSchema)),
     setBackups: oc.input(ModelBackupListSchema).output(z.object({ ok: z.literal(true) })),

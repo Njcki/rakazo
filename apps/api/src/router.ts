@@ -1108,7 +1108,7 @@ export function createRouter(deps: RouterDeps) {
       }),
     },
     models: {
-      list: authed.models.list.handler(async ({ context }) => {
+      list: authed.models.list.handler(async ({ context, input }) => {
         const auth = await modelCredentialAuthKindsForSpace(
           deps.prisma,
           deps.secrets,
@@ -1131,7 +1131,11 @@ export function createRouter(deps: RouterDeps) {
         const catalog = live.size > 0 ? applyCodexLiveCatalog(available, auth, live) : available;
         // The scripted fixture only exists to drive the scripted runtime; a real
         // runtime cannot execute it, so it stays out of the user-facing catalog.
-        return deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
+        const full =
+          deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
+        // Fork: optional provider filter so clients can fetch only connected providers.
+        const providers = input?.providers?.length ? new Set(input.providers) : null;
+        return providers ? full.filter((entry) => providers.has(entry.provider)) : full;
       }),
       credentials: authed.models.credentials.handler(async ({ context }) => {
         const rows = await deps.prisma.userModelCredential.findMany({

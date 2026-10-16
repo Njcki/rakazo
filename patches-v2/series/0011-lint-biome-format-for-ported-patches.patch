@@ -1,0 +1,138 @@
+From 95e2bffabf9935db78cfa0021c91d588e764dbad Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:52:18 +0200
+Subject: [PATCH 11/11] lint: biome format for ported patches
+
+---
+ apps/api/src/voice.ts                      |  8 +++++++-
+ apps/web/src/lib/tts.ts                    |  9 +++++++--
+ apps/web/src/pages/Shell.tsx               | 18 +++++++++---------
+ packages/adapters/src/elevenlabs-voice.ts  |  1 -
+ packages/adapters/src/pi-local-provider.ts | 16 +++++++++++-----
+ 5 files changed, 34 insertions(+), 18 deletions(-)
+
+diff --git a/apps/api/src/voice.ts b/apps/api/src/voice.ts
+index 6f5a0860..a2f4d951 100644
+--- a/apps/api/src/voice.ts
++++ b/apps/api/src/voice.ts
+@@ -344,7 +344,13 @@ export async function prepareVoice(
+ export async function synthesizeVoice(
+   deps: VoiceDeps,
+   actor: Actor,
+-  input: { text: string; voiceId?: string; botId?: string; language?: string; signal?: AbortSignal },
++  input: {
++    text: string;
++    voiceId?: string;
++    botId?: string;
++    language?: string;
++    signal?: AbortSignal;
++  },
+ ) {
+   const target = await resolveVoiceTarget(deps, actor, input);
+   const text = input.text.trim();
+diff --git a/apps/web/src/lib/tts.ts b/apps/web/src/lib/tts.ts
+index 58d44689..05851c7c 100644
+--- a/apps/web/src/lib/tts.ts
++++ b/apps/web/src/lib/tts.ts
+@@ -1,7 +1,7 @@
+ import { readBoundedResponseBytes } from "@rakazo/core";
++import { getActiveUiLocale } from "./i18n.js";
+ import { rpc, selectedSpaceId, withSpaceHeaders } from "./rpc.js";
+ import { errorText } from "./user-error.js";
+-import { getActiveUiLocale } from "./i18n.js";
+ 
+ export type SpeechStatus = "idle" | "preparing" | "speaking";
+ 
+@@ -175,7 +175,12 @@ export class Speaker {
+           method: "POST",
+           headers: withSpaceHeaders({ "content-type": "application/json" }, spaceId),
+           credentials: "include",
+-          body: JSON.stringify({ text, voiceId: opts.voiceId, botId: opts.botId, language: getActiveUiLocale() }),
++          body: JSON.stringify({
++            text,
++            voiceId: opts.voiceId,
++            botId: opts.botId,
++            language: getActiveUiLocale(),
++          }),
+           signal: deadline.signal,
+         }),
+       );
+diff --git a/apps/web/src/pages/Shell.tsx b/apps/web/src/pages/Shell.tsx
+index e9424d1c..7a6e2fd0 100644
+--- a/apps/web/src/pages/Shell.tsx
++++ b/apps/web/src/pages/Shell.tsx
+@@ -6312,15 +6312,15 @@ export const Composer = memo(function Composer({
+                   {t`Continue`}
+                 </Button>
+               ) : null}
+-            <Button
+-              size="icon"
+-              aria-label={t`Send`}
+-              disabled={sending || !canSend || disabled}
+-              onClick={send}
+-              className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
+-            >
+-              <ArrowUp size={16} strokeWidth={2.2} />
+-            </Button>
++              <Button
++                size="icon"
++                aria-label={t`Send`}
++                disabled={sending || !canSend || disabled}
++                onClick={send}
++                className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
++              >
++                <ArrowUp size={16} strokeWidth={2.2} />
++              </Button>
+             </>
+           )}
+         </div>
+diff --git a/packages/adapters/src/elevenlabs-voice.ts b/packages/adapters/src/elevenlabs-voice.ts
+index 5bf7abfd..d2044f70 100644
+--- a/packages/adapters/src/elevenlabs-voice.ts
++++ b/packages/adapters/src/elevenlabs-voice.ts
+@@ -106,7 +106,6 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
+   }
+ }
+ 
+-
+ function elevenSpeechBody(request: VoiceSynthesizeRequest): {
+   text: string;
+   model_id: string;
+diff --git a/packages/adapters/src/pi-local-provider.ts b/packages/adapters/src/pi-local-provider.ts
+index 26b69e3b..9bea21e3 100644
+--- a/packages/adapters/src/pi-local-provider.ts
++++ b/packages/adapters/src/pi-local-provider.ts
+@@ -120,11 +120,15 @@ function extraLocalModels(): ExtraLocalModel[] {
+         id: String(m.id).trim(),
+         upstreamId: String(m.upstreamId || m.id).trim(),
+         name: String(m.name || m.id),
+-        contextWindow: Number.isSafeInteger(m.contextWindow) && m.contextWindow > 0 ? m.contextWindow : DEFAULT_CONTEXT_WINDOW,
+-        maxTokens: Number.isSafeInteger(m.maxTokens) && m.maxTokens > 0 ? m.maxTokens : DEFAULT_MAX_TOKENS,
++        contextWindow:
++          Number.isSafeInteger(m.contextWindow) && m.contextWindow > 0
++            ? m.contextWindow
++            : DEFAULT_CONTEXT_WINDOW,
++        maxTokens:
++          Number.isSafeInteger(m.maxTokens) && m.maxTokens > 0 ? m.maxTokens : DEFAULT_MAX_TOKENS,
+       }));
+-  } catch (error) {
+-    console.error("[local-provider] invalid extra local models config", error);
++  } catch {
++    // Malformed extras must not hide the base local models; ignore them.
+     return [];
+   }
+ }
+@@ -135,7 +139,9 @@ function extraLocalModel(extra: ExtraLocalModel): Model<"openai-completions"> {
+     ...base,
+     id: extra.id,
+     name: extra.name,
+-    input: inputModalities(localVisionModelIds().has(extra.id) || localVisionModelIds().has(extra.upstreamId)),
++    input: inputModalities(
++      localVisionModelIds().has(extra.id) || localVisionModelIds().has(extra.upstreamId),
++    ),
+     contextWindow: extra.contextWindow,
+     maxTokens: extra.maxTokens,
+   };
+-- 
+2.47.3
+

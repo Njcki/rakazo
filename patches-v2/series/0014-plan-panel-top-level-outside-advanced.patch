@@ -1,0 +1,63 @@
+From af2ba7eb074f1d8dbf5a52e8e3015218d8590374 Mon Sep 17 00:00:00 2001
+From: n <n@local>
+Date: Thu, 15 Oct 2026 21:30:38 +0000
+Subject: [PATCH] plan panel top-level outside Advanced
+
+---
+ apps/web/src/pages/PlanSection.tsx     |  4 ++--
+ apps/web/src/pages/shell/bot-panel.tsx | 10 +++++-----
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/apps/web/src/pages/PlanSection.tsx b/apps/web/src/pages/PlanSection.tsx
+index 88cabe4..1b77091 100644
+--- a/apps/web/src/pages/PlanSection.tsx
++++ b/apps/web/src/pages/PlanSection.tsx
+@@ -112,7 +112,7 @@ export function PlanSection({
+ 
+   if (!plan) {
+     return (
+-      <div className="mt-5" data-testid="bot-plan-empty">
++      <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan-empty">
+         <div className="mb-2 flex items-center gap-2 text-[14px] text-muted-foreground">
+           <ListTodo size={15} strokeWidth={1.8} aria-hidden />
+           <Trans>Plan</Trans>
+@@ -128,7 +128,7 @@ export function PlanSection({
+   const { done, total, percent } = plan.progress;
+ 
+   return (
+-    <div className="mt-5" data-testid="bot-plan">
++    <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan">
+       <div className="mb-2 flex items-center justify-between gap-2">
+         <div className="flex min-w-0 items-center gap-2 text-[14px] text-muted-foreground">
+           <ListTodo size={15} strokeWidth={1.8} aria-hidden />
+diff --git a/apps/web/src/pages/shell/bot-panel.tsx b/apps/web/src/pages/shell/bot-panel.tsx
+index bb50dd7..ae2cde9 100755
+--- a/apps/web/src/pages/shell/bot-panel.tsx
++++ b/apps/web/src/pages/shell/bot-panel.tsx
+@@ -543,6 +543,11 @@ export function BotSettings({
+           }}
+         />
+       </div>
++      <ErrorBoundary fallback={<SectionLoadFailed />}>
++        <Suspense fallback={null}>
++          <PlanSection botId={bot.id} />
++        </Suspense>
++      </ErrorBoundary>
+       <details
+         data-testid="bot-settings-advanced"
+         className="group mt-5"
+@@ -559,11 +564,6 @@ export function BotSettings({
+           </span>
+         </summary>
+         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+-        <ErrorBoundary fallback={<SectionLoadFailed />}>
+-          <Suspense fallback={null}>
+-            <PlanSection botId={bot.id} />
+-          </Suspense>
+-        </ErrorBoundary>
+         <ErrorBoundary fallback={<SectionLoadFailed />}>
+           <Suspense fallback={null}>
+             <ScratchpadSection botId={bot.id} />
+-- 
+2.54.0
+

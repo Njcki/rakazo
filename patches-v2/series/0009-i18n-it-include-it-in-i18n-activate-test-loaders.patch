@@ -1,0 +1,58 @@
+From e03e51a806e8f51c661f733d51974f5bf20db091 Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:49:27 +0200
+Subject: [PATCH 09/11] i18n-it: include it in i18n-activate test loaders
+
+---
+ apps/web/src/lib/i18n-activate.test.ts | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/apps/web/src/lib/i18n-activate.test.ts b/apps/web/src/lib/i18n-activate.test.ts
+index dfa873f3..43abb6de 100644
+--- a/apps/web/src/lib/i18n-activate.test.ts
++++ b/apps/web/src/lib/i18n-activate.test.ts
+@@ -53,6 +53,7 @@ describe("activateUiLocale", () => {
+       es: async () => ({ messages: { Settings: "Configuración" } }),
+       ru: async () => ({ messages: { Settings: "Настройки" } }),
+       fr: async () => ({ messages: { Settings: "Paramètres" } }),
++      it: async () => ({ messages: { Settings: "Paramètres" } }),
+     });
+ 
+     const locale = await activateUiLocale("de");
+@@ -94,6 +95,9 @@ describe("activateUiLocale", () => {
+       fr: async () => {
+         throw new Error("fr missing");
+       },
++      it: async () => {
++        throw new Error("it missing");
++      },
+     });
+ 
+     const locale = await activateUiLocale("ko");
+@@ -118,6 +122,7 @@ describe("activateUiLocale", () => {
+       es: async () => ({ messages: { Settings: "Configuración" } }),
+       ru: async () => ({ messages: { Settings: "Настройки" } }),
+       fr: async () => ({ messages: { Settings: "Paramètres" } }),
++      it: async () => ({ messages: { Settings: "Paramètres" } }),
+     });
+ 
+     const first = activateUiLocale("de");
+@@ -147,6 +152,7 @@ describe("activateUiLocale", () => {
+       es: async () => ({ messages: { Settings: "Configuración" } }),
+       ru: async () => ({ messages: { Settings: "Настройки" } }),
+       fr: async () => ({ messages: { Settings: "Paramètres" } }),
++      it: async () => ({ messages: { Settings: "Paramètres" } }),
+     });
+ 
+     await activateUiLocale("en");
+@@ -181,6 +187,7 @@ describe("activateUiLocale", () => {
+       es: async () => ({ messages: { Settings: "Configuración" } }),
+       ru: async () => ({ messages: { Settings: "Настройки" } }),
+       fr: async () => ({ messages: { Settings: "Paramètres" } }),
++      it: async () => ({ messages: { Settings: "Paramètres" } }),
+     });
+ 
+     await activateUiLocale("en");
+-- 
+2.47.3
+

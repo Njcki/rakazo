@@ -1,0 +1,119 @@
+From f15d052b14d2e3268e6a3ebdbb0dfd9a8a1b0795 Mon Sep 17 00:00:00 2001
+From: rakazo-fork <noreply@example.com>
+Date: Thu, 15 Oct 2026 02:44:39 +0200
+Subject: [PATCH] progress: mid-turn narration uses 8000-char final-message
+ limit (keep 500 for progress beats)
+
+---
+ packages/adapters/src/executor.ts           |  5 +++--
+ packages/adapters/src/user-progress.test.ts | 22 +++++++++++++++++++++
+ packages/adapters/src/user-progress.ts      | 16 ++++++++++++++-
+ 3 files changed, 40 insertions(+), 3 deletions(-)
+
+diff --git a/packages/adapters/src/executor.ts b/packages/adapters/src/executor.ts
+index 6cf99dd7..9d0d19aa 100644
+--- a/packages/adapters/src/executor.ts
++++ b/packages/adapters/src/executor.ts
+@@ -375,6 +375,7 @@ import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
+ import { textContentArg } from "./tool-text.js";
+ import {
+   botMessageOutcomeFromMidTurn,
++  clampMidTurnNarration,
+   clampUserProgressMessage,
+   extractNarrationText,
+   finalBlocksAfterMidTurnProgress,
+@@ -3983,7 +3984,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
+         };
+         const publishMidTurnNarration = async () => {
+           const extracted = extractNarrationText(messageSegments, currentTextSegment);
+-          const narration = clampUserProgressMessage(redactSecrets(extracted.text, runSecrets));
++          const narration = clampMidTurnNarration(redactSecrets(extracted.text, runSecrets));
+           messageSegments = extracted.remaining;
+           currentTextSegment = "";
+           if (!narration) return;
+@@ -6787,7 +6788,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
+               // does not treat pre-takeover text as the delegated final result.
+               await publishMidTurnNarration();
+               if (assembled.trim()) {
+-                const narration = clampUserProgressMessage(redactSecrets(assembled, runSecrets));
++                const narration = clampMidTurnNarration(redactSecrets(assembled, runSecrets));
+                 if (narration && runPromotesMidTurnNarration(run.trigger)) {
+                   await publishMessage(
+                     deps,
+diff --git a/packages/adapters/src/user-progress.test.ts b/packages/adapters/src/user-progress.test.ts
+index 7f449437..f99cd9e6 100644
+--- a/packages/adapters/src/user-progress.test.ts
++++ b/packages/adapters/src/user-progress.test.ts
+@@ -3,11 +3,13 @@ import { isToolActivityBlock } from "@rakazo/core";
+ import { describe, expect, it } from "vitest";
+ import {
+   botMessageOutcomeFromMidTurn,
++  clampMidTurnNarration,
+   clampUserProgressMessage,
+   extractNarrationText,
+   finalBlocksAfterMidTurnProgress,
+   isProgressMessageTruncated,
+   isUserProgressClientNonce,
++  MID_TURN_NARRATION_MAX_LENGTH,
+   USER_PROGRESS_MESSAGE_MAX_LENGTH,
+   userProgressClientNonce,
+ } from "./user-progress.js";
+@@ -102,3 +104,23 @@ describe("userProgressClientNonce", () => {
+     expect(isUserProgressClientNonce("other")).toBe(false);
+   });
+ });
++
++describe("clampMidTurnNarration", () => {
++  it("keeps a long status report that precedes a tool call intact", () => {
++    const report = `**Punto della situazione**\n\n${"dettaglio ".repeat(150)}`.trim();
++    expect(report.length).toBeGreaterThan(USER_PROGRESS_MESSAGE_MAX_LENGTH);
++    expect(clampMidTurnNarration(report)).toBe(report);
++  });
++
++  it("clamps only beyond the final-message limit", () => {
++    expect(MID_TURN_NARRATION_MAX_LENGTH).toBe(8_000);
++    const out = clampMidTurnNarration("x".repeat(MID_TURN_NARRATION_MAX_LENGTH + 10));
++    expect(out).toHaveLength(MID_TURN_NARRATION_MAX_LENGTH);
++    expect(out.endsWith("…")).toBe(true);
++    expect(clampMidTurnNarration("   ")).toBe("");
++  });
++
++  it("leaves the short progress-beat cap unchanged", () => {
++    expect(USER_PROGRESS_MESSAGE_MAX_LENGTH).toBe(500);
++  });
++});
+diff --git a/packages/adapters/src/user-progress.ts b/packages/adapters/src/user-progress.ts
+index 7d1c61d1..d266a8d3 100644
+--- a/packages/adapters/src/user-progress.ts
++++ b/packages/adapters/src/user-progress.ts
+@@ -1,5 +1,5 @@
+ import type { MessageBlock } from "@rakazo/contracts";
+-import { isToolActivityBlock } from "@rakazo/core";
++import { BOT_MESSAGE_MAX_LENGTH, isToolActivityBlock } from "@rakazo/core";
+ 
+ /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
+ export const USER_PROGRESS_MESSAGE_MAX_LENGTH = 500;
+@@ -11,6 +11,20 @@ export function clampUserProgressMessage(text: string): string {
+   return `${trimmed.slice(0, USER_PROGRESS_MESSAGE_MAX_LENGTH - 1).trimEnd()}…`;
+ }
+ 
++/**
++ * Mid-turn narration is the model's own reply text that happened to precede a
++ * tool call (e.g. a full status report). It streamed in full, so clamp it at the
++ * final-message limit rather than the short progress-beat cap.
++ */
++export const MID_TURN_NARRATION_MAX_LENGTH = BOT_MESSAGE_MAX_LENGTH;
++
++export function clampMidTurnNarration(text: string): string {
++  const trimmed = text.trim();
++  if (!trimmed) return "";
++  if (trimmed.length <= MID_TURN_NARRATION_MAX_LENGTH) return trimmed;
++  return `${trimmed.slice(0, MID_TURN_NARRATION_MAX_LENGTH - 1).trimEnd()}…`;
++}
++
+ /**
+  * True when the raw text a caller tried to post as a mid-turn progress update
+  * would not fit and got cut off by clampUserProgressMessage. Callers should
+-- 
+2.47.3
+

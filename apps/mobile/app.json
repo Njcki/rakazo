@@ -3,7 +3,7 @@
     "name": "Rakazo",
     "slug": "rakazo-fork",
     "scheme": "rakazo",
-    "version": "1.0.9",
+    "version": "1.0.11",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
@@ -73,7 +73,7 @@
     },
     "android": {
       "package": "com.rakazo.fork",
-      "versionCode": 9,
+      "versionCode": 11,
       "softwareKeyboardLayoutMode": "resize",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {

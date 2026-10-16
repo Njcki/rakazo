@@ -1,5 +1,14 @@
 # Personal Android build (com.rakazo.fork) — custom mods
 
+## 1.0.11 (vc11) — 2026-10-16
+- Tema Scuro meno scuro: background #181A1E, card/popover/muted #212328, secondary/input #25272D, accent #282A31, border #2C2F36, sidebar #1C1E22. Chiaro e Nero invariati.
+- Aspetto: nuovo picker 2×2 con anteprime (swatch sfondo + card + accento), Sistema metà chiaro/metà scuro, selezione con anello ring + spunta. SegmentedPills restano per le altre schermate.
+
+## 1.0.10 (vc10) — 2026-10-16
+- Model pickers: provider submenu then models (bot Advanced Model + backup add sheet); no more one endless flat list.
+- Piano steps: Ionicons matching web PlanSection (check / radio / outline / lock / minus) with emerald/sky/amber/muted colors — not chat checklist emoji.
+- Appearance: Sistema / Chiaro / Scuro / Nero (OLED #000 background, cards #0A0A0A); Sistema still follows phone light/dark. Debug signing unchanged (SHA-1 5E:8F…F6:25).
+
 ## 1.0.9 (vc9) — 2026-10-16
 - Bot chat ⋮ menu: modern bottom sheet (rounded card, Ionicons, red destructive rows); message menu rows got icons too.
 - Piano section moved just under Description.

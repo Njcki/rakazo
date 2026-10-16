@@ -1,5 +1,10 @@
 # Personal Android build (com.rakazo.fork) — custom mods
 
+## Unreleased — 2026-10-16
+- Parametri bot: niente più `models/list` completo (~1500 voci) all'apertura. Al mount solo `me` + `models/credentials`; il catalogo si carica quando apri Avanzate, filtrato ai soli provider collegati (+ provider del modello attuale e del default), con cache in memoria per la sessione. / Bot settings no longer fetch the full catalog on mount; deferred until Advanced, narrowed to connected providers, session-cached.
+- API: `models/list` accetta l'input opzionale `{ providers?: string[] }` (retrocompatibile; senza input = catalogo completo). / Optional backward-compatible provider filter.
+- Android: liste lunghe nei selettori (>12 voci) aprono un foglio a schermo intero scorrevole che rispetta status bar e barra di navigazione (safe area), con gruppi provider espandibili; le liste corte restano menu nativi. / Long pickers use a safe-area-aware scrollable sheet instead of the native popup that overflowed under the status bar.
+
 ## 1.0.11 (vc11) — 2026-10-16
 - Tema Scuro meno scuro: background #181A1E, card/popover/muted #212328, secondary/input #25272D, accent #282A31, border #2C2F36, sidebar #1C1E22. Chiaro e Nero invariati.
 - Aspetto: nuovo picker 2×2 con anteprime (swatch sfondo + card + accento), Sistema metà chiaro/metà scuro, selezione con anello ring + spunta. SegmentedPills restano per le altre schermate.

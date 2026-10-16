@@ -76,6 +76,7 @@ Funzioni aggiunte rispetto a upstream:
 - Allegati: «Apri» vs «Condividi».
 - Selettori del modello raggruppati per provider.
 - Temi **Sistema / Chiaro / Scuro / Nero**, tema scuro più leggibile, selettore aspetto 2×2.
+- Caricamento modelli selettivo/differito nei parametri bot (filtro `providers` su `models/list`) e selettori lunghi Android nella safe area.
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

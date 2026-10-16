@@ -42,6 +42,7 @@ L'app Android vive nello stesso monorepo, non in un repo separato. / *The Androi
 | vc9 | Menu ⋮ del bot moderno (bottom sheet, icone, righe distruttive in rosso); Piano sotto Descrizione; **riordino bot** (pressione lunga → Sposta su/giù, salvato sul server); suggerimenti con pressione lunga nell'intestazione. | Modern bot ⋮ menu (bottom sheet, icons, red destructive rows); Plan under Description; **bot reordering** (long-press → move up/down, saved on the server); long-press header hints. |
 | vc10 | **Menu modelli per provider** (sottomenu provider → modelli); **icone del Piano uguali al web**; temi **Sistema / Chiaro / Scuro / Nero** (Nero OLED). | **Provider-grouped model menus**; **Plan icons matching the web**; **System / Light / Dark / Black** themes (Black = OLED). |
 | vc11 | Tema Scuro più leggibile (meno nero); selettore Aspetto 2×2 con anteprime. | More readable, lighter Dark theme; 2×2 Appearance picker with previews. |
+| next | Parametri bot più leggeri: modelli caricati solo all'apertura di Avanzate e solo per i provider collegati; liste lunghe in un foglio che non finisce sotto la status bar. | Lighter bot settings: models loaded only when Advanced opens and only for connected providers; long lists in a sheet that stays below the status bar. |
 
 Storico completo / full history: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

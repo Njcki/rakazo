@@ -91,15 +91,15 @@ export default function BotSettingsScreen() {
       .catch((err) => setError(errorText(err, t("Could not load bot"))));
   }, [botId]);
 
+  // Mount: only the light metadata (space default + credentials). The model catalog is
+  // deferred until Advanced opens, and then narrowed to connected providers only.
   useEffect(() => {
     void Promise.all([
       rpc<MobileMe>("me"),
-      rpc<MobileModel[]>("models/list"),
       rpc<MobileModelCredential[]>("models/credentials"),
     ])
-      .then(([nextMe, nextCatalog, nextCredentials]) => {
+      .then(([nextMe, nextCredentials]) => {
         setMe(nextMe);
-        setCatalog(nextCatalog);
         setCredentials(nextCredentials);
         setModelMetaError(null);
         setModelMetaReady(true);
@@ -109,6 +109,30 @@ export default function BotSettingsScreen() {
         setModelMetaError(errorText(err, t("Could not load model settings")));
       });
   }, [t]);
+
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  useEffect(() => {
+    if (!advancedOpen || !modelMetaReady) return;
+    const providers = new Set(credentials.map((entry) => entry.provider));
+    const stored = modelKey ? parseModelOptionKey(modelKey) : null;
+    if (stored) providers.add(stored.provider);
+    if (me?.defaultProvider) providers.add(me.defaultProvider);
+    let current = true;
+    setCatalogLoading(true);
+    void loadConnectedCatalog([...providers])
+      .then((next) => {
+        if (current) setCatalog(next);
+      })
+      .catch((err) => {
+        if (current) setModelMetaError(errorText(err, t("Could not load model settings")));
+      })
+      .finally(() => {
+        if (current) setCatalogLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [advancedOpen, credentials, me?.defaultProvider, modelKey, modelMetaReady, t]);
 
   const connectedOptions = useMemo(
     () => connectedModelChoices(credentials, catalog),
@@ -553,7 +577,7 @@ export default function BotSettingsScreen() {
             >
               <MenuPicker
                 choices={modelChoices}
-                label={t("Model")}
+                label={catalogLoading ? `${t("Model")} …` : t("Model")}
                 onChange={selectModel}
                 value={selectedModelKey}
               />
@@ -654,3 +678,18 @@ const styles = StyleSheet.create({
   },
   rowValue: { fontSize: 14, flexShrink: 1, textAlign: "right" },
 });
+
+/** Session cache of narrowed catalogs, keyed by sorted provider list. */
+const connectedCatalogCache = new Map<string, Promise<MobileModel[]>>();
+
+function loadConnectedCatalog(providers: string[]): Promise<MobileModel[]> {
+  if (!providers.length) return Promise.resolve([]);
+  const key = [...providers].sort().join("|");
+  let pending = connectedCatalogCache.get(key);
+  if (!pending) {
+    pending = rpc<MobileModel[]>("models/list", { providers: key.split("|") });
+    pending.catch(() => connectedCatalogCache.delete(key));
+    connectedCatalogCache.set(key, pending);
+  }
+  return pending;
+}

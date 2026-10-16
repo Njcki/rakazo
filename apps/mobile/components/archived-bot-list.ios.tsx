@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { MobileBot } from "../lib/api";
 import { useI18n } from "../lib/i18n";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { iosAtLeast } from "../lib/native-controls";
 import type { ArchivedBotListProps } from "./archived-bot-list";
@@ -34,7 +35,7 @@ export function ArchivedBotList({
 }: ArchivedBotListProps) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   const tokens = useMobileTokens();
   function actions(bot: MobileBot) {
     return (

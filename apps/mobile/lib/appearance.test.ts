@@ -116,6 +116,19 @@ describe("mobile appearance", () => {
     expect(mobileTokens().secondary).not.toBe(mobileTokens().primary);
   });
 
+
+  it("maps black preference to dark native chrome and black tokens", async () => {
+    const { blackTokens } = await import("@rakazo/ui-tokens");
+    const { mobileTokens, resolveMobileAppearance, setAppearancePreference } = await import(
+      "./appearance"
+    );
+    await setAppearancePreference("black");
+    expect(colorSchemeOverride).toBe("dark");
+    expect(resolveMobileAppearance("black", "light")).toBe("black");
+    expect(mobileTokens()).toEqual(blackTokens);
+    await setAppearancePreference("system");
+  });
+
   it("keeps the latest native scheme and stored preference when writes overlap", async () => {
     const { UI_APPEARANCE_STORAGE_KEY } = await import("@rakazo/ui-tokens");
     const { setItemAsync } = await import("expo-secure-store");

@@ -7,6 +7,7 @@ import {
   tint,
   toggleStyle,
 } from "@expo/ui/swift-ui/modifiers";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useResolvedAppearance } from "../lib/native";
 import type { NativeSwitchProps } from "../lib/native-controls";
 
@@ -19,7 +20,7 @@ export function NativeSwitch({
   accessibilityHint: hint,
   tintColor,
 }: NativeSwitchProps) {
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   return (
     <Host colorScheme={scheme} ignoreSafeArea="container" matchContents>
       <Toggle

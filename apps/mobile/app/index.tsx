@@ -58,7 +58,7 @@ import {
   selectInitialSpace,
   selectSpace,
 } from "../lib/api";
-import { mobileTokens, resolveMobileAppearance } from "../lib/appearance";
+import { mobileTokens, resolveMobileAppearance, toNativeColorScheme } from "../lib/appearance";
 import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
 import { allowFocusPrompt, scheduleFocusPrompt } from "../lib/focus-prompt";
 import { t, useI18n } from "../lib/i18n";
@@ -713,7 +713,7 @@ function Home() {
                     attributes: { destructive: true, disabled: spaceBusy || !!spaceRecoveryId },
                   },
                 ]}
-                colorScheme={appearance}
+                colorScheme={toNativeColorScheme(appearance)}
                 onPressAction={() => {
                   if (item.space) confirmDeleteSpace(item.space);
                 }}
@@ -833,7 +833,7 @@ function Home() {
                 { id: "group", title: t("New group"), image: "person.2" },
                 { id: "space", title: t("New space"), image: "square.grid.2x2" },
               ]}
-              colorScheme={appearance}
+              colorScheme={toNativeColorScheme(appearance)}
               onPressAction={({ nativeEvent }) => {
                 const action = nativeEvent.event;
                 if (action === "bot" || action === "group" || action === "space") {

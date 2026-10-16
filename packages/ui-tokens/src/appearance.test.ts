@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ColorTokens,
   cssVariableName,
+  blackTokens,
   darkTokens,
   lightTokens,
   normalizeAppearancePreference,
@@ -27,6 +28,21 @@ describe("appearance preference", () => {
     expect(resolveAppearance("system", "dark")).toBe("dark");
     expect(resolveAppearance("dark", "light")).toBe("dark");
   });
+
+  it("resolves black preference and keeps system as light or dark only", () => {
+    expect(normalizeAppearancePreference("black")).toBe("black");
+    expect(resolveAppearance("black", "light")).toBe("black");
+    expect(resolveAppearance("system", "light")).toBe("light");
+  });
+
+  it("returns a near-black OLED palette for black", () => {
+    const black = tokensForAppearance("black");
+    expect(black).toBe(blackTokens);
+    expect(black.background).toBe("#000000");
+    expect(black.card).toBe("#0A0A0A");
+    expect(black.background).not.toBe(darkTokens.background);
+  });
+
 
   it("reads and writes storage", () => {
     const store = new Map<string, string>();
@@ -108,11 +124,13 @@ describe("tokens.css", () => {
     expect(onDisk).toBe(renderTokensCss());
   });
 
-  it("scopes light and dark under data-theme", () => {
+  it("scopes light, dark, and black under data-theme", () => {
     const css = renderTokensCss();
     expect(css).toContain('[data-theme="dark"] {\n  color-scheme: dark;');
     expect(css).toContain('[data-theme="light"] {\n  color-scheme: light;');
+    expect(css).toContain('[data-theme="black"] {\n  color-scheme: dark;');
     expect(css).toContain(`--background: ${lightTokens.background.toLowerCase()};`);
     expect(css).toContain(`--background: ${darkTokens.background.toLowerCase()};`);
+    expect(css).toContain(`--background: ${blackTokens.background.toLowerCase()};`);
   });
 });

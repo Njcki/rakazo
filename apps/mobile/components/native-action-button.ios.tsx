@@ -13,6 +13,7 @@ import {
   progressViewStyle,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 import type { ActionProminence, NativeActionButtonProps } from "../lib/native-controls";
 import { actionFills, actionProminence, iosAtLeast } from "../lib/native-controls";
@@ -32,7 +33,7 @@ export function NativeActionButton({
   selected,
 }: NativeActionButtonProps) {
   const tokens = useMobileTokens();
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   const inactive = disabled || busy;
   const stretches = actionFills(prominence, fill);
   const small = size === "compact";

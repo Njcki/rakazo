@@ -13,6 +13,7 @@ import { useImperativeHandle, useMemo, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useI18n } from "../lib/i18n";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 import type { ComposerSnapshot } from "../lib/thread-feedback";
 import { GlassSurface } from "./glass-surface";
@@ -65,7 +66,7 @@ export function ThreadComposer({
   onSlashAction,
 }: ThreadComposerProps) {
   const tokens = useMobileTokens();
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const { t } = useI18n();
   const [draft, setDraft] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);

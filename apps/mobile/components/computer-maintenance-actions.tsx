@@ -7,6 +7,7 @@ import { Alert, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { computerUpdates } from "../lib/computer-updates";
 import { useI18n } from "../lib/i18n";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { iosAtLeast } from "../lib/native-controls";
 import { errorText } from "../lib/user-error";
@@ -25,7 +26,7 @@ export function ComputerMaintenanceActions({
 }) {
   const { t } = useI18n();
   const tokens = useMobileTokens();
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   const navigation = useNavigation();
   const [pending, setPending] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);

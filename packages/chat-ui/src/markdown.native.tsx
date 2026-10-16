@@ -1029,8 +1029,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 }: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
   const openLink = useNativeLinkConfirm();
   const styles = useMemo(() => markdownStyles(palette), [palette]);
+  // react-native-markdown-display only knows light/dark; black uses dark chrome + black palette.
+  const markdownScheme = colorScheme === "light" ? "light" : "dark";
   const sharedProps = {
-    colorScheme,
+    colorScheme: markdownScheme,
     markdownit: markdownParser,
     style: styles,
     rules: renderRules,

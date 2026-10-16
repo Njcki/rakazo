@@ -3,40 +3,40 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --background: #0b0c0e;
+  --background: #181a1e;
   --foreground: #ececee;
-  --card: #141518;
+  --card: #212328;
   --card-foreground: #ececee;
-  --popover: #141518;
+  --popover: #212328;
   --popover-foreground: #ececee;
   --primary: #f1f1ef;
-  --primary-foreground: #0b0c0e;
-  --secondary: #18191e;
+  --primary-foreground: #181a1e;
+  --secondary: #25272d;
   --secondary-foreground: #ececee;
-  --chat-user: #22242b;
+  --chat-user: #2e3038;
   --chat-user-foreground: #ececee;
-  --muted: #141518;
-  --muted-foreground: #85858a;
-  --accent: #1a1b20;
+  --muted: #212328;
+  --muted-foreground: #95959b;
+  --accent: #282a31;
   --accent-foreground: #ececee;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: #1e2026;
-  --input: #18191e;
+  --border: #2c2f36;
+  --input: #25272d;
   --ring: #3b82f6;
-  --sidebar: #111215;
+  --sidebar: #1c1e22;
   --sidebar-foreground: #ececee;
-  --sidebar-border: #1c1d22;
-  --sidebar-accent: #1a1b20;
+  --sidebar-border: #2a2c33;
+  --sidebar-accent: #282a31;
   --sidebar-accent-foreground: #ececee;
   --link: #3b82f6;
   --favicon-plate: #ffffff;
   --success: #4ecb71;
   --warning: #e9c46a;
   --status-working: #3b82f6;
-  --overlay: rgba(4, 4, 5, 0.72);
-  --scrollbar: #1e2026;
-  --scrollbar-hover: #2e313a;
+  --overlay: rgba(8, 9, 11, 0.72);
+  --scrollbar: #2c2f36;
+  --scrollbar-hover: #3a3d47;
   --radius: 0.75rem;
 }
 
@@ -76,5 +76,44 @@
   --overlay: rgba(20, 20, 22, 0.45);
   --scrollbar: #c8c8c4;
   --scrollbar-hover: #a8a8a4;
+  --radius: 0.75rem;
+}
+
+[data-theme="black"] {
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #ececee;
+  --card: #0a0a0a;
+  --card-foreground: #ececee;
+  --popover: #0a0a0a;
+  --popover-foreground: #ececee;
+  --primary: #f1f1ef;
+  --primary-foreground: #000000;
+  --secondary: #111111;
+  --secondary-foreground: #ececee;
+  --chat-user: #1a1a1a;
+  --chat-user-foreground: #ececee;
+  --muted: #0a0a0a;
+  --muted-foreground: #85858a;
+  --accent: #111111;
+  --accent-foreground: #ececee;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #1a1a1a;
+  --input: #111111;
+  --ring: #3b82f6;
+  --sidebar: #000000;
+  --sidebar-foreground: #ececee;
+  --sidebar-border: #1a1a1a;
+  --sidebar-accent: #111111;
+  --sidebar-accent-foreground: #ececee;
+  --link: #3b82f6;
+  --favicon-plate: #ffffff;
+  --success: #4ecb71;
+  --warning: #e9c46a;
+  --status-working: #3b82f6;
+  --overlay: rgba(0, 0, 0, 0.8);
+  --scrollbar: #1a1a1a;
+  --scrollbar-hover: #2a2a2a;
   --radius: 0.75rem;
 }

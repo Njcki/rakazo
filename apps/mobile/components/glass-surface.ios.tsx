@@ -1,6 +1,7 @@
 import { Capsule, Circle, Host, RoundedRectangle } from "@expo/ui/swift-ui";
 import { foregroundStyle, glassEffect } from "@expo/ui/swift-ui/modifiers";
 import { StyleSheet, View } from "react-native";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useResolvedAppearance } from "../lib/native";
 import { iosAtLeast } from "../lib/native-controls";
 import type { GlassSurfaceProps } from "./glass-surface";
@@ -14,7 +15,7 @@ export function GlassSurface({
   fallbackStyle,
   children,
 }: GlassSurfaceProps) {
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   if (!iosAtLeast(26)) return <View style={[style, fallbackStyle]}>{children}</View>;
   const modifiers = [
     foregroundStyle("#00000000"),

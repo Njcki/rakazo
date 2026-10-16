@@ -2,6 +2,7 @@ import { MenuView } from "@expo/ui/community/menu";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import type { MobileBot } from "../lib/api";
 import { useI18n } from "../lib/i18n";
+import { toNativeColorScheme } from "../lib/appearance";
 import { native, useResolvedAppearance } from "../lib/native";
 import { Chevron } from "./row-accessories";
 
@@ -21,7 +22,7 @@ export function ArchivedBotList({
   onDelete,
 }: ArchivedBotListProps) {
   const { t } = useI18n();
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 20 }}>
       <View style={{ borderRadius: 14, backgroundColor: native.fill, overflow: "hidden" }}>

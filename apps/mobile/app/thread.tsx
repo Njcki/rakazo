@@ -136,7 +136,7 @@ import {
   selectSpace,
   subscribeThread,
 } from "../lib/api";
-import { mobileTokens } from "../lib/appearance";
+import { mobileTokens, toNativeColorScheme } from "../lib/appearance";
 import type { MobileArtifactTarget } from "../lib/artifact-open";
 import { openMobileArtifact, shareMobileArtifact } from "../lib/artifact-open";
 import { nextAutoSpeakAction } from "../lib/auto-speak";
@@ -444,7 +444,7 @@ function createThreadHeaderStyles() {
 }
 
 function Thread({ sessionEpoch }: { sessionEpoch: number }) {
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const tokens = mobileTokens();
   const styles = useThemedStyles(createThreadHeaderStyles);
   const [botActionsOpen, setBotActionsOpen] = useState(false);
@@ -2904,7 +2904,7 @@ const MessageRow = memo(function MessageRow({
   index,
 }: MessageRowProps) {
   const tokens = useMobileTokens();
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const { t, locale } = useI18n();
   const artifactTarget = useMemo<MobileArtifactTarget | undefined>(
     () => (groupId ? { groupId } : botId ? { botId } : undefined),
@@ -3182,7 +3182,7 @@ const MessageBubble = memo(function MessageBubble({
   onPreviewImage: (target: ImageArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const tokens = mobileTokens();
   const { t } = useI18n();
   const [peerExpanded, setPeerExpanded] = useState(false);
@@ -3831,7 +3831,7 @@ function MessageTextCard({
   speakerColor?: string;
   actionProps: MessageActionProps;
 }) {
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const tokens = mobileTokens();
   const contentText = blockText(message);
   if (!contentText) return null;
@@ -3883,7 +3883,7 @@ function AgentEventLabel({
   onToggle: () => void;
   actionProps: MessageActionProps;
 }) {
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const tokens = mobileTokens();
   const { t } = useI18n();
   return (

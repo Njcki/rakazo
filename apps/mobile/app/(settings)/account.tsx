@@ -15,10 +15,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { AppMark } from "../../components/app-mark";
+import { AppearancePicker } from "../../components/appearance-picker";
 import { useAvatarStyle } from "../../components/avatar-style";
 import { BotAvatar } from "../../components/bot-avatar";
 import { NativeActionButton } from "../../components/native-action-button";
-import { NativeSegmentedControl } from "../../components/native-segmented-control";
 import { NativeSymbol } from "../../components/native-symbol";
 import {
   SettingsGroup,
@@ -305,7 +305,7 @@ export default function Account() {
         text: UI_LOCALE_LABELS[code],
         onPress: () => applyLocale(code),
       })),
-      colorScheme,
+      colorScheme: colorScheme === "light" ? "light" : "dark",
       cancel: t("Cancel"),
       more: t("More"),
     });
@@ -380,14 +380,10 @@ export default function Account() {
 
         <View accessibilityLabel={t("Appearance")} style={styles.section}>
           <SettingsLabel>{t("Appearance")}</SettingsLabel>
-          <NativeSegmentedControl
+          <AppearancePicker
             accessibilityLabel={t("Appearance")}
             onChange={(value) => void setAppearancePreference(value)}
-            options={[
-              { value: "system", label: t("System") },
-              { value: "light", label: t("Light") },
-              { value: "dark", label: t("Dark") },
-            ]}
+            labels={{ system: t("System"), light: t("Light"), dark: t("Dark"), black: t("Black") }}
             value={appearance}
           />
         </View>

@@ -13,10 +13,17 @@ export function SegmentedPills<T extends string>({
   const tokens = useMobileTokens();
   // The selected segment sits lighter than the track in both palettes.
   const selectedFill = useResolvedAppearance() === "light" ? tokens.card : tokens.chatUser;
+  const wrap = options.length > 3;
   return (
     <View
       accessibilityLabel={accessibilityLabel}
-      style={{ flexDirection: "row", padding: 2, borderRadius: 10, backgroundColor: tokens.accent }}
+      style={{
+        flexDirection: "row",
+        flexWrap: wrap ? "wrap" : "nowrap",
+        padding: 2,
+        borderRadius: 10,
+        backgroundColor: tokens.accent,
+      }}
     >
       {options.map((option) => {
         const selected = value === option.value;
@@ -28,15 +35,22 @@ export function SegmentedPills<T extends string>({
             disabled={disabled}
             onPress={() => onChange(option.value)}
             style={{
-              flex: 1,
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: wrap ? "40%" : 0,
+              flex: wrap ? undefined : 1,
               alignItems: "center",
               backgroundColor: selected ? selectedFill : "transparent",
               borderRadius: 8,
               paddingVertical: 8,
+              paddingHorizontal: 4,
               opacity: disabled ? 0.5 : 1,
             }}
           >
-            <Text style={{ color: selected ? tokens.foreground : tokens.mutedForeground }}>
+            <Text
+              numberOfLines={1}
+              style={{ color: selected ? tokens.foreground : tokens.mutedForeground, fontSize: 14 }}
+            >
               {option.label}
             </Text>
           </Pressable>

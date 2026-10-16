@@ -1,6 +1,7 @@
 import { Host, Text } from "@expo/ui/swift-ui";
 import { font, glassEffect, lineLimit, padding } from "@expo/ui/swift-ui/modifiers";
 import { Text as RNText, StyleSheet, View } from "react-native";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useResolvedAppearance } from "../lib/native";
 import { iosAtLeast } from "../lib/native-controls";
 
@@ -9,7 +10,7 @@ import { iosAtLeast } from "../lib/native-controls";
  * so an invisible copy of the title gives the capsule its size on the first layout.
  */
 export function GlassTitle({ title }: { title: string }) {
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   if (!title.trim()) return null;
   return (
     <View accessibilityLabel={title} accessibilityRole="header" accessible style={styles.frame}>

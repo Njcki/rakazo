@@ -1,5 +1,6 @@
 import { Host, Picker, Text } from "@expo/ui/swift-ui";
 import { disabled as disable, labelsHidden, pickerStyle, tag } from "@expo/ui/swift-ui/modifiers";
+import { toNativeColorScheme } from "../lib/appearance";
 import { useResolvedAppearance } from "../lib/native";
 import type { NativeSegmentedControlProps } from "../lib/native-controls";
 import { SegmentedPills } from "./segmented-pills";
@@ -12,7 +13,7 @@ export function NativeSegmentedControl<T extends string>({
   options,
   disabled = false,
 }: NativeSegmentedControlProps<T>) {
-  const scheme = useResolvedAppearance();
+  const scheme = toNativeColorScheme(useResolvedAppearance());
   const selected = options.some((option) => option.value === value) ? value : undefined;
   if (selected === undefined) {
     return (

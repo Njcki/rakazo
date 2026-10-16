@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
+import type { ComponentProps } from "react";
+import Ionicons from "@react-native-vector-icons/ionicons";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { native, useMobileTokens } from "../lib/native";
@@ -22,14 +24,26 @@ type AgentPlan = {
   steps: PlanStep[];
 };
 
-/** Same marks used for checklists: ✅ done, ⏳ in progress, ⭕ to do. */
-const STATUS_MARK: Record<PlanStepStatus, string> = {
-  done: "✅",
-  in_progress: "⏳",
-  todo: "⭕",
-  blocked: "🔒",
-  skipped: "➖",
-};
+type IonName = ComponentProps<typeof Ionicons>["name"];
+
+/** Vector icons matching web PlanSection (lucide Check / CircleDot / Circle / Lock / Minus). */
+function statusIcon(
+  status: PlanStepStatus,
+  muted: string,
+): { ios: string; android: IonName; color: string } {
+  switch (status) {
+    case "done":
+      return { ios: "checkmark", android: "checkmark", color: "#10b981" };
+    case "in_progress":
+      return { ios: "circle.inset.filled", android: "radio-button-on", color: "#0ea5e9" };
+    case "blocked":
+      return { ios: "lock.fill", android: "lock-closed", color: "#f59e0b" };
+    case "skipped":
+      return { ios: "minus", android: "remove", color: muted };
+    default:
+      return { ios: "circle", android: "ellipse-outline", color: muted };
+  }
+}
 
 /** Native mirror of the web PlanSection: active plan, or the last completed one until replaced. */
 export function PlanSection({ botId, pollMs = 4000 }: { botId: string; pollMs?: number }) {
@@ -119,9 +133,12 @@ export function PlanSection({ botId, pollMs = 4000 }: { botId: string; pollMs?: 
           </View>
           {plan.steps.map((step) => {
             const doneLike = step.status === "done" || step.status === "skipped";
+            const icon = statusIcon(step.status, tokens.mutedForeground);
             return (
               <View key={step.id} style={{ flexDirection: "row", gap: 8, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 14 }}>{STATUS_MARK[step.status] ?? "⭕"}</Text>
+                <View style={{ marginTop: 2 }}>
+                  <NativeSymbol ios={icon.ios} android={icon.android} size={15} color={icon.color} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text
                     style={{

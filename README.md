@@ -17,6 +17,56 @@ OpenClaw, Hermes Agent, and Hark Pro.
 
 Rakazo is in beta. Learn more at [rakazo.com](https://rakazo.com).
 
+## Fork personale / Personal fork
+
+**IT —** Questo repository è un fork di [elie222/rakazo](https://github.com/elie222/rakazo) (Apache-2.0, attribuzione e `LICENSE` originali invariati) con le modifiche che uso sulla mia istanza self-hosted e sulla mia app Android personale. Nessun segreto è incluso: niente `.env`, chiavi, token o keystore — fornisci i tuoi.
+
+**EN —** This repository is a fork of [elie222/rakazo](https://github.com/elie222/rakazo) (Apache-2.0; upstream attribution and `LICENSE` unchanged) carrying the changes I run on my self-hosted instance and my personal Android app. No secrets are included: no `.env`, keys, tokens or keystores — bring your own.
+
+### Branch / Branches
+
+| Branch | Base | IT | EN |
+|---|---|---|---|
+| `main` | upstream `main` | Copia di upstream senza modifiche. | Untouched mirror of upstream. |
+| [`selfhost-v2`](https://github.com/Njcki/rakazo/tree/selfhost-v2) | upstream `0723154` | Patch web/server per il self-host (20 commit, uno per patch) + `patches-v2/` per l'immagine Docker. | Web/server self-host patches (20 commits, one per patch) + `patches-v2/` to build the Docker image. |
+| [`android-app`](https://github.com/Njcki/rakazo/tree/android-app) | upstream `main` | App Android personale in `apps/mobile` (package `com.rakazo.fork`). | Personal Android app in `apps/mobile` (package `com.rakazo.fork`). |
+
+L'app Android vive nello stesso monorepo, non in un repo separato. / *The Android app lives in the same monorepo, not in a separate repo.*
+
+### Modifiche in questo branch (`android-app`) / Changes in this branch
+
+| Versione | IT | EN |
+|---|---|---|
+| vc7 | **Build personale** `com.rakazo.fork` (convive con l'app ufficiale); **interfaccia in italiano**; allegati: tocco = **Apri** nel visualizzatore, **Condividi** azione separata; menu messaggi unico; link cliccabili; riparazione tabelle markdown. | **Personal build** `com.rakazo.fork` (installs next to the official app); **Italian UI**; attachments: tap = **Open** in a viewer, **Share** is a separate action; single message menu; tappable links; markdown table repair. |
+| vc8 | Sezione **Piano** nativa nelle impostazioni chat (✅ ⏳ ⭕, badge completato, aggiornamento ogni 4 s); icone sulle sezioni; **Salva** sempre visibile; +95 stringhe IT. | Native **Plan** section in chat settings (✅ ⏳ ⭕, completed badge, 4 s polling); section icons; always-visible **Save**; +95 IT strings. |
+| vc9 | Menu ⋮ del bot moderno (bottom sheet, icone, righe distruttive in rosso); Piano sotto Descrizione; **riordino bot** (pressione lunga → Sposta su/giù, salvato sul server); suggerimenti con pressione lunga nell'intestazione. | Modern bot ⋮ menu (bottom sheet, icons, red destructive rows); Plan under Description; **bot reordering** (long-press → move up/down, saved on the server); long-press header hints. |
+| vc10 | **Menu modelli per provider** (sottomenu provider → modelli); **icone del Piano uguali al web**; temi **Sistema / Chiaro / Scuro / Nero** (Nero OLED). | **Provider-grouped model menus**; **Plan icons matching the web**; **System / Light / Dark / Black** themes (Black = OLED). |
+| vc11 | Tema Scuro più leggibile (meno nero); selettore Aspetto 2×2 con anteprime. | More readable, lighter Dark theme; 2×2 Appearance picker with previews. |
+
+Storico completo / full history: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
+
+### Uso / Usage
+
+**Requisiti / Requirements:** Node 22+, pnpm, JDK 17, Android SDK (oppure/or Expo EAS), e un server Rakazo raggiungibile via HTTPS / a Rakazo server reachable over HTTPS.
+
+**IT —** L'URL del server **non** è nel codice: impostalo in fase di build con `EXPO_PUBLIC_API_URL` (es. `https://rakazo.example.com`). Il keystore di firma non è nel repo: generane uno tuo.
+**EN —** The server URL is **not** hardcoded: set it at build time with `EXPO_PUBLIC_API_URL`. The signing keystore is not in the repo: generate your own.
+
+```bash
+git checkout android-app
+pnpm install
+cd apps/mobile
+export EXPO_PUBLIC_API_URL=https://YOUR-HOST
+npx expo prebuild -p android
+cd android && ./gradlew assembleDebug        # oppure/or assembleRelease, oppure/or: eas build -p android
+# keystore release / release keystore:
+keytool -genkeypair -v -keystore my-release.keystore -alias rakazo -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Vedi anche / see also [FORK.md](FORK.md).
+
+---
+
 ## How Rakazo compares
 
 Once Rakazo is running, it is just chat, like Grok Bot: you set up a bot and manage it from that

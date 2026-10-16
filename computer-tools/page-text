@@ -1,0 +1,40 @@
+#!/bin/bash
+# page-text FILE PAGE
+# Print one page. Use the text layer when it has real words, otherwise OCR that page.
+set -euo pipefail
+if [[ $# -lt 1 ]]; then
+  echo "uso: page-text FILE [PAGINA]" >&2
+  exit 2
+fi
+file=$1
+page=${2:-1}
+if [[ ! -f "$file" ]]; then
+  echo "file non trovato: $file" >&2
+  exit 1
+fi
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+ext=${file##*.}
+ext=$(printf "%s" "$ext" | tr "[:upper:]" "[:lower:]")
+enough() {
+  local n
+  n=$(printf "%s" "$1" | tr -d "[:space:]" | wc -c)
+  [[ "$n" -ge 40 ]]
+}
+if [[ "$ext" == "djvu" ]]; then
+  txt=$(djvutxt -page="$page" "$file" 2>/dev/null || true)
+  if enough "$txt"; then
+    printf "%s\n" "$txt"
+    exit 0
+  fi
+  ddjvu -format=tiff -page="$page" "$file" "$tmp/page.tif"
+  tesseract "$tmp/page.tif" stdout -l eng+fra+ita
+  exit 0
+fi
+txt=$(pdftotext -f "$page" -l "$page" -layout "$file" - 2>/dev/null || true)
+if enough "$txt"; then
+  printf "%s\n" "$txt"
+  exit 0
+fi
+pdftoppm -f "$page" -l "$page" -r 200 -png "$file" "$tmp/page"
+tesseract "$tmp/page-1.png" stdout -l eng+fra+ita

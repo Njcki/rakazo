@@ -1,0 +1,170 @@
+From 83985dc99cd4d94e4420c3edf5f45e68f1a0b175 Mon Sep 17 00:00:00 2001
+From: rakazo-fork <noreply@example.com>
+Date: Fri, 16 Oct 2026 01:16:16 +0200
+Subject: [PATCH] Avanzate: icone sui titoli delle card
+
+---
+ apps/web/src/pages/KnowledgeSection.tsx      |  7 ++--
+ apps/web/src/pages/ScratchpadSection.tsx     |  5 +--
+ apps/web/src/pages/shell/bot-credentials.tsx |  4 ++-
+ apps/web/src/pages/shell/bot-panel.tsx       | 37 ++++++++++++++++----
+ 4 files changed, 42 insertions(+), 11 deletions(-)
+
+diff --git a/apps/web/src/pages/KnowledgeSection.tsx b/apps/web/src/pages/KnowledgeSection.tsx
+index e59ebf0..1e99171 100755
+--- a/apps/web/src/pages/KnowledgeSection.tsx
++++ b/apps/web/src/pages/KnowledgeSection.tsx
+@@ -10,6 +10,7 @@ import {
+   TabsTrigger,
+   Textarea,
+ } from "@rakazo/ui-web";
++import { BookOpen, Sparkles } from "lucide-react";
+ import { useEffect, useRef, useState } from "react";
+ import { downloadArtifactBytes } from "../lib/artifact-open";
+ import { rpc } from "../lib/rpc";
+@@ -36,10 +37,12 @@ export function KnowledgeSection({
+     <section className="mt-6" data-testid="bot-knowledge">
+       <Tabs defaultValue="memory">
+         <TabsList aria-label={t`Knowledge`}>
+-          <TabsTrigger value="memory">
++          <TabsTrigger value="memory" className="gap-2">
++            <BookOpen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+             <Trans>Memory</Trans>
+           </TabsTrigger>
+-          <TabsTrigger value="skills">
++          <TabsTrigger value="skills" className="gap-2">
++            <Sparkles size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+             <Trans>Shared skills</Trans>
+           </TabsTrigger>
+         </TabsList>
+diff --git a/apps/web/src/pages/ScratchpadSection.tsx b/apps/web/src/pages/ScratchpadSection.tsx
+index 4be9d13..1d8d05b 100755
+--- a/apps/web/src/pages/ScratchpadSection.tsx
++++ b/apps/web/src/pages/ScratchpadSection.tsx
+@@ -1,7 +1,7 @@
+ import { Trans, useLingui } from "@lingui/react/macro";
+ import type { ScratchpadItem } from "@rakazo/contracts";
+ import { Button, Checkbox, Input } from "@rakazo/ui-web";
+-import { X } from "lucide-react";
++import { NotebookPen, X } from "lucide-react";
+ import { useEffect, useRef, useState } from "react";
+ 
+ import { rpc } from "../lib/rpc";
+@@ -102,7 +102,8 @@ export function ScratchpadSection({ botId }: { botId: string }) {
+ 
+   return (
+     <div className="mt-6" data-testid="bot-scratchpad">
+-      <div className="mb-3 text-[14px] text-muted-foreground">
++      <div className="mb-3 flex items-center gap-2 text-[14px] text-muted-foreground">
++        <NotebookPen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+         <Trans>Open work</Trans>
+       </div>
+       {items.length === 0 ? (
+diff --git a/apps/web/src/pages/shell/bot-credentials.tsx b/apps/web/src/pages/shell/bot-credentials.tsx
+index 0fd0d57..7936114 100755
+--- a/apps/web/src/pages/shell/bot-credentials.tsx
++++ b/apps/web/src/pages/shell/bot-credentials.tsx
+@@ -7,6 +7,7 @@ import {
+   encodeLoginSecret,
+ } from "@rakazo/contracts";
+ import { Button, Input, NativeSelect, NativeSelectOption } from "@rakazo/ui-web";
++import { KeyRound } from "lucide-react";
+ import { useEffect, useId, useState } from "react";
+ import { rpc } from "../../lib/rpc";
+ import { errorText } from "../../lib/user-error";
+@@ -223,7 +224,8 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
+ 
+   return (
+     <section data-testid="bot-credentials" className="mt-5 border-t border-border/20 pt-4">
+-      <div className="text-[13.5px] font-medium text-foreground">
++      <div className="flex items-center gap-2 text-[13.5px] font-medium text-foreground">
++        <KeyRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
+         <Trans>Credentials</Trans>
+       </div>
+       <p className="mt-0.5 text-[12px] text-muted-foreground/70">
+diff --git a/apps/web/src/pages/shell/bot-panel.tsx b/apps/web/src/pages/shell/bot-panel.tsx
+index bbd4df3..d65617b 100755
+--- a/apps/web/src/pages/shell/bot-panel.tsx
++++ b/apps/web/src/pages/shell/bot-panel.tsx
+@@ -30,7 +30,19 @@ import {
+   Textarea,
+   Toggle,
+ } from "@rakazo/ui-web";
+-import { AlignLeft, Bell, SlidersHorizontal, Tag, UserRound, X } from "lucide-react";
++import {
++  AlignLeft,
++  Bell,
++  Brain,
++  Cpu,
++  Monitor,
++  SlidersHorizontal,
++  Tag,
++  UserRound,
++  Volume2,
++  Wrench,
++  X,
++} from "lucide-react";
+ import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+ import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
+ import { botProfilePatch } from "../../lib/bot-profile-patch";
+@@ -67,7 +79,8 @@ function ComputerModePicker({
+ }) {
+   return (
+     <div className="mt-4">
+-      <div className="text-[14px] text-muted-foreground">
++      <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
++        <Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+         <Trans>Computer</Trans>
+       </div>
+       <div className="mt-2 grid grid-cols-2 gap-2">
+@@ -598,7 +611,10 @@ export function BotSettings({
+         ) : null}
+         <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-model">
+         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
+-          <Trans>Model</Trans>
++          <span className="flex items-center gap-2">
++            <Cpu size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
++            <Trans>Model</Trans>
++          </span>
+           <NativeSelect
+             id={`${ids}-model`}
+             className="mt-2 w-full"
+@@ -650,7 +666,10 @@ export function BotSettings({
+         </div>
+         {memoryProviderConfigured ? (
+           <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-memory">
+-            <Trans>Memory scope</Trans>
++            <span className="flex items-center gap-2">
++              <Brain size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
++              <Trans>Memory scope</Trans>
++            </span>
+             <div className="mt-2 flex gap-2">
+               {(
+                 [
+@@ -685,7 +704,10 @@ export function BotSettings({
+             checked={autoSpeak}
+             onCheckedChange={(checked) => setAutoSpeak(checked)}
+           />
+-          <Trans>Read replies aloud</Trans>
++          <span className="flex items-center gap-2">
++            <Volume2 size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
++            <Trans>Read replies aloud</Trans>
++          </span>
+         </label>
+         {voices.length ? (
+           <label htmlFor={`${ids}-voice`} className={fieldLabelClass}>
+@@ -708,7 +730,10 @@ export function BotSettings({
+         </div>
+         <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-tools">
+         <label htmlFor={`${ids}-disabled-tools`} className={fieldLabelClass}>
+-          <Trans>Disabled tools</Trans>
++          <span className="flex items-center gap-2">
++            <Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
++            <Trans>Disabled tools</Trans>
++          </span>
+           <Input
+             id={`${ids}-disabled-tools`}
+             value={toolNameDraft}
+-- 
+2.47.3
+

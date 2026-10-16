@@ -1,0 +1,35 @@
+From ced57e9326bfb01e20764292015486ff7de1308c Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:45:50 +0200
+Subject: [PATCH 05/11] compaction: flat 480s summarize timeout (no-tools hunk
+ dropped: upstream passes tools:[] and no builtin fallback)
+
+---
+ packages/adapters/src/history-compaction.ts | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/packages/adapters/src/history-compaction.ts b/packages/adapters/src/history-compaction.ts
+index c188c741..89bc9ac9 100644
+--- a/packages/adapters/src/history-compaction.ts
++++ b/packages/adapters/src/history-compaction.ts
+@@ -136,6 +136,8 @@ export const MAX_TRANSCRIPT_CHARS = 40_000;
+  * cannot finish in that window, get more time up to a hard cap. The cap is the spend bound for one
+  * attempt; the job's attempt cap bounds how many times a stuck thread pays it.
+  */
++/** Flat budget for one compaction summarizer call. The scalable helper remains for callers. */
++export const SUMMARIZE_TIMEOUT_MS = 480_000;
+ export const SUMMARIZE_TIMEOUT_MIN_MS = 120_000;
+ export const SUMMARIZE_TIMEOUT_MAX_MS = 8 * 60_000;
+ /** Prompts at or below this stay on the short timeout. */
+@@ -392,7 +394,7 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
+       traceId: `compact:${threadId}`,
+       spaceId: thread.spaceId,
+       userId: thread.userId,
+-      signal: AbortSignal.timeout(summarizeTimeoutMs(prompt.length)),
++      signal: AbortSignal.timeout(SUMMARIZE_TIMEOUT_MS),
+     },
+   )) {
+     if (event.type === "usage" && !event.accounted) {
+-- 
+2.47.3
+

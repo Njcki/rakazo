@@ -1,0 +1,30 @@
+From 2fc527eeffd124debd681045cc3bd6d515ef0cac Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:45:50 +0200
+Subject: [PATCH 06/11] computer-support: resolve /home/rakazo absolute paths
+ inside workspace
+
+---
+ packages/adapters/src/computer-support.ts | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/packages/adapters/src/computer-support.ts b/packages/adapters/src/computer-support.ts
+index fdc492c0..a48be8d3 100644
+--- a/packages/adapters/src/computer-support.ts
++++ b/packages/adapters/src/computer-support.ts
+@@ -156,6 +156,12 @@ function isTeamRootPath(value: string): boolean {
+ function stripVirtualWorkspaceRoot(value: string): string | null {
+   const portable = value.replace(/\\/g, "/");
+   if (portable === "/") return "";
++  // Absolute paths under the computer HOME must resolve inside the workspace.
++  // Without this, "/home/rakazo/bots/..." became "home/rakazo/bots/..." and
++  // landed in /home/rakazo/home/rakazo/... while shell/Gradle used the real file.
++  const home = "/home/rakazo";
++  if (portable === home) return "";
++  if (portable.startsWith(home + "/")) return portable.slice(home.length + 1);
+   return portable.startsWith("/") ? portable.slice(1) : null;
+ }
+ 
+-- 
+2.47.3
+

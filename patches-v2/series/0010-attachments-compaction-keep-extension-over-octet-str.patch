@@ -1,0 +1,118 @@
+From 62fbf3a60271c01cf53a194e2b20258b6b12da3c Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:50:15 +0200
+Subject: [PATCH 10/11] attachments/compaction: keep extension over
+ octet-stream; tests for 100 MiB, octet-stream, flat 480s, gsq alias
+
+---
+ .../adapters/src/history-compaction.test.ts   |  5 ++--
+ .../adapters/src/pi-local-provider.test.ts    | 26 +++++++++++++++++++
+ packages/core/src/attachments.test.ts         |  6 +++--
+ packages/core/src/attachments.ts              |  3 +++
+ 4 files changed, 36 insertions(+), 4 deletions(-)
+
+diff --git a/packages/adapters/src/history-compaction.test.ts b/packages/adapters/src/history-compaction.test.ts
+index 9051288b..59c4fffd 100644
+--- a/packages/adapters/src/history-compaction.test.ts
++++ b/packages/adapters/src/history-compaction.test.ts
+@@ -22,6 +22,7 @@ import {
+   SUMMARIZE_TIMEOUT_BASE_CHARS,
+   SUMMARIZE_TIMEOUT_MAX_MS,
+   SUMMARIZE_TIMEOUT_MIN_MS,
++  SUMMARIZE_TIMEOUT_MS,
+   selectCompactedHistory,
+   shouldEnqueueCompaction,
+   summarizeTimeoutMs,
+@@ -1090,7 +1091,7 @@ describe("compactHistory", () => {
+       await compactHistory(harness.deps, "thread-1");
+       const [request, context] = harness.runtime.run.mock.calls[0]!;
+       expect(request.prompt.length).toBeLessThanOrEqual(SUMMARIZE_TIMEOUT_BASE_CHARS);
+-      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MIN_MS);
++      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MS); // RAKAZO: flat 480s
+       expect(context?.signal).toBe(timeout.mock.results[0]?.value);
+     } finally {
+       timeout.mockRestore();
+@@ -1119,7 +1120,7 @@ describe("compactHistory", () => {
+       const expected = summarizeTimeoutMs(prompt.length);
+       expect(expected).toBeGreaterThan(SUMMARIZE_TIMEOUT_MIN_MS);
+       expect(expected).toBeLessThanOrEqual(SUMMARIZE_TIMEOUT_MAX_MS);
+-      expect(timeout).toHaveBeenCalledWith(expected);
++      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MS); // RAKAZO: flat 480s
+     } finally {
+       timeout.mockRestore();
+     }
+diff --git a/packages/adapters/src/pi-local-provider.test.ts b/packages/adapters/src/pi-local-provider.test.ts
+index f74fd672..82f2e837 100644
+--- a/packages/adapters/src/pi-local-provider.test.ts
++++ b/packages/adapters/src/pi-local-provider.test.ts
+@@ -115,3 +115,29 @@ describe("local model provider", () => {
+     expect(withLocal.getModel(LOCAL_PROVIDER_ID, "qwen3:4b")).toBeDefined();
+   });
+ });
++
++describe("local model provider extra aliases (RAKAZO gsq-voice)", () => {
++  afterEach(() => {
++    delete process.env.RAKAZO_LOCAL_EXTRA_MODELS;
++  });
++
++  it("adds a labelled alias with its own limits next to the base model", () => {
++    setModels("qwen3.8-27b");
++    process.env.RAKAZO_LOCAL_EXTRA_MODELS = JSON.stringify([
++      {
++        id: "qwen3.8-27b-gsq",
++        upstreamId: "qwen3.8-27b",
++        name: "Qwen GSQ locale (262K)",
++        contextWindow: 262144,
++        maxTokens: 16384,
++      },
++    ]);
++    const models = localProvider()?.getModels() ?? [];
++    expect(models.map((m) => m.id)).toEqual(["qwen3.8-27b", "qwen3.8-27b-gsq"]);
++    expect(models[1]).toMatchObject({
++      name: "Qwen GSQ locale (262K)",
++      contextWindow: 262144,
++      maxTokens: 16384,
++    });
++  });
++});
+diff --git a/packages/core/src/attachments.test.ts b/packages/core/src/attachments.test.ts
+index 8b95213c..25d078ec 100644
+--- a/packages/core/src/attachments.test.ts
++++ b/packages/core/src/attachments.test.ts
+@@ -14,7 +14,9 @@ import {
+ describe("attachment helpers", () => {
+   it("accepts zip archives and rejects unsupported mime types and empty payloads", () => {
+     expect(() => validateAttachmentMimeType("application/zip")).not.toThrow();
+-    expect(() => validateAttachmentMimeType("application/octet-stream")).toThrow(
++    // RAKAZO PATCH: octet-stream is the allowed any-type fallback.
++    expect(() => validateAttachmentMimeType("application/octet-stream")).not.toThrow();
++    expect(() => validateAttachmentMimeType("application/x-unknown")).toThrow(
+       AttachmentValidationError,
+     );
+     expect(() => decodeAttachmentBase64("")).toThrow(AttachmentValidationError);
+@@ -35,7 +37,7 @@ describe("attachment helpers", () => {
+ 
+     // A base64 string decoding to just over the 10 MiB byte limit must still
+     // be rejected for size — and, same regression, without a stack overflow.
+-    const oversized = "A".repeat(15 * 1024 * 1024);
++    const oversized = "A".repeat(140 * 1024 * 1024); // RAKAZO: limit is 100 MiB
+     expect(() => decodeAttachmentBase64(oversized)).not.toThrow(RangeError);
+     expect(() => decodeAttachmentBase64(oversized)).toThrow(AttachmentValidationError);
+   });
+diff --git a/packages/core/src/attachments.ts b/packages/core/src/attachments.ts
+index 47b813f1..66870162 100644
+--- a/packages/core/src/attachments.ts
++++ b/packages/core/src/attachments.ts
+@@ -173,6 +173,9 @@ export function inferAttachmentMimeType(
+   if (extensionType === "text/markdown" && (!reportedType || reportedType === "text/plain")) {
+     return extensionType;
+   }
++  // RAKAZO PATCH (attachments): octet-stream is allowed as the any-type fallback, so a
++  // known extension must still beat a generic octet-stream report (e.g. .zip).
++  if (reportedType === "application/octet-stream" && extensionType) return extensionType;
+   if (reportedType && isAllowedAttachmentMimeType(reportedType)) return reportedType;
+   return extensionType ?? "application/octet-stream";
+ }
+-- 
+2.47.3
+

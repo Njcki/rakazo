@@ -1,0 +1,121 @@
+From e63d22da46e9358d580a556750548bde54ca7f23 Mon Sep 17 00:00:00 2001
+From: n <n@local>
+Date: Thu, 15 Oct 2026 22:04:12 +0000
+Subject: [PATCH] settings rail sticky save and section dividers
+
+---
+ apps/web/src/pages/PlanSection.tsx     |  4 +-
+ apps/web/src/pages/shell/bot-panel.tsx | 61 ++++++++++++++------------
+ 2 files changed, 35 insertions(+), 30 deletions(-)
+
+diff --git a/apps/web/src/pages/PlanSection.tsx b/apps/web/src/pages/PlanSection.tsx
+index 1b77091..0cbd24e 100644
+--- a/apps/web/src/pages/PlanSection.tsx
++++ b/apps/web/src/pages/PlanSection.tsx
+@@ -112,7 +112,7 @@ export function PlanSection({
+ 
+   if (!plan) {
+     return (
+-      <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan-empty">
++      <div className="mt-6 border-t border-border/70 pt-5" data-testid="bot-plan-empty">
+         <div className="mb-2 flex items-center gap-2 text-[14px] text-muted-foreground">
+           <ListTodo size={15} strokeWidth={1.8} aria-hidden />
+           <Trans>Plan</Trans>
+@@ -128,7 +128,7 @@ export function PlanSection({
+   const { done, total, percent } = plan.progress;
+ 
+   return (
+-    <div className="mt-5 border-t border-border/60 pt-4" data-testid="bot-plan">
++    <div className="mt-6 border-t border-border/70 pt-5" data-testid="bot-plan">
+       <div className="mb-2 flex items-center justify-between gap-2">
+         <div className="flex min-w-0 items-center gap-2 text-[14px] text-muted-foreground">
+           <ListTodo size={15} strokeWidth={1.8} aria-hidden />
+diff --git a/apps/web/src/pages/shell/bot-panel.tsx b/apps/web/src/pages/shell/bot-panel.tsx
+index ae2cde9..dcff24b 100755
+--- a/apps/web/src/pages/shell/bot-panel.tsx
++++ b/apps/web/src/pages/shell/bot-panel.tsx
+@@ -520,7 +520,7 @@ export function BotSettings({
+           className="mt-1.5"
+         />
+       </label>
+-      <div className="mt-6 flex items-center justify-between pt-4 border-t border-border/20">
++      <div className="mt-6 flex items-center justify-between border-t border-border/60 pt-5">
+         <div className="space-y-0.5 pe-4">
+           <div
+             id={`${ids}-notify-finish-label`}
+@@ -550,7 +550,7 @@ export function BotSettings({
+       </ErrorBoundary>
+       <details
+         data-testid="bot-settings-advanced"
+-        className="group mt-5"
++        className="group mt-6 border-t border-border/60 pt-4"
+         onToggle={(event) => {
+           if (event.currentTarget.open) setAdvancedOpened(true);
+         }}
+@@ -729,32 +729,37 @@ export function BotSettings({
+         {advancedOpened ? <BotCredentialsSection botId={bot.id} /> : null}
+       </details>
+       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
+-      <div className="mt-5 flex flex-col items-start gap-3">
+-        <Button
+-          disabled={saving}
+-          onClick={() => {
+-            void enqueueSave({
+-              name,
+-              title,
+-              description,
+-              color,
+-              notifyOnFinish,
+-            });
+-          }}
+-        >
+-          <Trans>Save</Trans>
+-        </Button>
+-        <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
+-          <Trans>Export</Trans>
+-        </Button>
+-        <Button
+-          variant="ghost"
+-          size="sm"
+-          className="-ms-2.5 text-destructive hover:text-destructive"
+-          onClick={onClear}
+-        >
+-          <Trans>Clear conversation</Trans>
+-        </Button>
++      <div
++        data-testid="bot-settings-footer"
++        className="sticky bottom-0 z-10 -mx-5 mt-6 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur"
++      >
++        <div className="flex flex-col items-start gap-2">
++          <Button
++            disabled={saving}
++            onClick={() => {
++              void enqueueSave({
++                name,
++                title,
++                description,
++                color,
++                notifyOnFinish,
++              });
++            }}
++          >
++            <Trans>Save</Trans>
++          </Button>
++          <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
++            <Trans>Export</Trans>
++          </Button>
++          <Button
++            variant="ghost"
++            size="sm"
++            className="-ms-2.5 text-destructive hover:text-destructive"
++            onClick={onClear}
++          >
++            <Trans>Clear conversation</Trans>
++          </Button>
++        </div>
+       </div>
+     </div>
+   );
+-- 
+2.54.0
+

@@ -1,0 +1,121 @@
+From fdff5f4d1c9b768409990761d5efb23c6c899ac8 Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:45:50 +0200
+Subject: [PATCH 03/11] tts-language: pass UI locale to ElevenLabs
+ language_code
+
+---
+ apps/api/src/voice.ts                     |  4 +++-
+ apps/web/src/lib/tts.ts                   |  3 ++-
+ packages/adapter-kit/src/types.ts         |  2 ++
+ packages/adapters/src/elevenlabs-voice.ts | 24 ++++++++++++++++++++++-
+ 4 files changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/apps/api/src/voice.ts b/apps/api/src/voice.ts
+index 867e7661..6f5a0860 100644
+--- a/apps/api/src/voice.ts
++++ b/apps/api/src/voice.ts
+@@ -344,7 +344,7 @@ export async function prepareVoice(
+ export async function synthesizeVoice(
+   deps: VoiceDeps,
+   actor: Actor,
+-  input: { text: string; voiceId?: string; botId?: string; signal?: AbortSignal },
++  input: { text: string; voiceId?: string; botId?: string; language?: string; signal?: AbortSignal },
+ ) {
+   const target = await resolveVoiceTarget(deps, actor, input);
+   const text = input.text.trim();
+@@ -359,6 +359,7 @@ export async function synthesizeVoice(
+       voiceId: target.voiceId,
+       apiKey: target.apiKey,
+       model: target.cred.speechModel || undefined,
++      language: input.language,
+       signal: input.signal,
+     },
+     voiceContext(actor, input.signal),
+@@ -408,6 +409,7 @@ export function mountVoiceHttpRoutes(
+         text: String((body as { text?: unknown }).text ?? ""),
+         voiceId: optionalString((body as { voiceId?: unknown }).voiceId),
+         botId: optionalString((body as { botId?: unknown }).botId),
++        language: optionalString((body as { language?: unknown }).language),
+         signal: AbortSignal.any(
+           [c.req.raw.signal, AbortSignal.timeout(SPEAK_TIMEOUT_MS)].filter(
+             Boolean,
+diff --git a/apps/web/src/lib/tts.ts b/apps/web/src/lib/tts.ts
+index 1631976a..58d44689 100644
+--- a/apps/web/src/lib/tts.ts
++++ b/apps/web/src/lib/tts.ts
+@@ -1,6 +1,7 @@
+ import { readBoundedResponseBytes } from "@rakazo/core";
+ import { rpc, selectedSpaceId, withSpaceHeaders } from "./rpc.js";
+ import { errorText } from "./user-error.js";
++import { getActiveUiLocale } from "./i18n.js";
+ 
+ export type SpeechStatus = "idle" | "preparing" | "speaking";
+ 
+@@ -174,7 +175,7 @@ export class Speaker {
+           method: "POST",
+           headers: withSpaceHeaders({ "content-type": "application/json" }, spaceId),
+           credentials: "include",
+-          body: JSON.stringify({ text, voiceId: opts.voiceId, botId: opts.botId }),
++          body: JSON.stringify({ text, voiceId: opts.voiceId, botId: opts.botId, language: getActiveUiLocale() }),
+           signal: deadline.signal,
+         }),
+       );
+diff --git a/packages/adapter-kit/src/types.ts b/packages/adapter-kit/src/types.ts
+index a8cef9c3..2c80192a 100644
+--- a/packages/adapter-kit/src/types.ts
++++ b/packages/adapter-kit/src/types.ts
+@@ -608,6 +608,8 @@ export interface VoiceSynthesizeRequest {
+   apiKey: string;
+   /** Connection speech model. Fish uses this, then `FISH_TTS_MODEL`, then s2.1-pro. */
+   model?: string;
++  /** UI locale (BCP-47). ElevenLabs maps the primary subtag to language_code. */
++  language?: string;
+   signal?: AbortSignal;
+ }
+ 
+diff --git a/packages/adapters/src/elevenlabs-voice.ts b/packages/adapters/src/elevenlabs-voice.ts
+index 9e7232d1..5bf7abfd 100644
+--- a/packages/adapters/src/elevenlabs-voice.ts
++++ b/packages/adapters/src/elevenlabs-voice.ts
+@@ -74,7 +74,7 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
+           "content-type": "application/json",
+           accept: "audio/mpeg",
+         },
+-        body: JSON.stringify({ text: request.text, model_id: MODEL }),
++        body: JSON.stringify(elevenSpeechBody(request)),
+         signal,
+       },
+     );
+@@ -106,6 +106,28 @@ export class ElevenLabsVoiceProvider implements VoiceProvider {
+   }
+ }
+ 
++
++function elevenSpeechBody(request: VoiceSynthesizeRequest): {
++  text: string;
++  model_id: string;
++  language_code?: string;
++} {
++  const body: { text: string; model_id: string; language_code?: string } = {
++    text: request.text,
++    model_id: MODEL,
++  };
++  const languageCode = toElevenLanguageCode(request.language);
++  if (languageCode) body.language_code = languageCode;
++  return body;
++}
++
++/** ISO 639-1 primary subtag. pt-BR -> pt, zh-CN -> zh, it-IT -> it. */
++function toElevenLanguageCode(language: string | undefined): string | undefined {
++  if (!language) return undefined;
++  const primary = language.trim().toLowerCase().replaceAll("_", "-").split("-")[0] ?? "";
++  return /^[a-z]{2}$/.test(primary) ? primary : undefined;
++}
++
+ function asLabel(labels: unknown, key: string): string {
+   if (!labels || typeof labels !== "object") return "";
+   const value = (labels as Record<string, unknown>)[key];
+-- 
+2.47.3
+

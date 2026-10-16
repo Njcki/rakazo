@@ -1,0 +1,57 @@
+# Rakazo patches v2 (reproducible, pinned)
+
+Base: upstream `elie222/rakazo` commit `0723154` = `ghcr.io/elie222/rakazo/app@sha256:ec48ecd3…`
+(computer `@sha256:75c3cdc5…`). Pins in `PINS`. The image is built by `Dockerfile`:
+`FROM <pinned digest>` → `git apply` every `series/*.patch` (any hunk that no longer fits fails the
+build) → `pnpm --filter @rakazo/web build`. No `docker cp`, nothing lost on recreate.
+
+Source branch: `selfhost-v2` on top of `0723154` (regenerate with `git format-patch 0723154..selfhost-v2`).
+To move to a newer upstream: rebase the branch (or `git am -3 series/*.patch` on the new commit),
+fix conflicts, run `pnpm check` + vitest, regenerate `series/`, update `PINS`, `update-rakazo-v2.sh build`.
+
+## Series
+| # | Patch | What | Notes vs. old patches |
+|---|---|---|---|
+| 0001 | gsq-voice | Extra local model aliases (`/data/local-extra-models.json` or `RAKAZO_LOCAL_EXTRA_MODELS`), own label/context/max tokens; alias id rewritten to `upstreamId` on the wire | same as live 14 Oct patch; `pi-local-provider.ts` unchanged upstream |
+| 0002 | attachments | `application/octet-stream` any-type fallback, 100 MiB limit (contracts, core, thread-artifacts, web Shell text) | merged next to upstream `application/zip` (#1289) |
+| 0010 | attachments fix | known extension beats a generic octet-stream report (keeps upstream `.zip` inference) + tests | new: needed after the zip merge |
+| 0003 | tts-language | web sends UI locale → API → ElevenLabs `language_code` | the API half was NOT live in prod since 5 Oct; now complete |
+| 0004/0008/0009 | i18n-it | `it` registered (lingui config, ui-locale, i18n loaders, test loaders); catalog 1107/1107 (156 new strings translated) | |
+| 0005 | compaction | flat 480 s summarizer timeout | "no tools for compact:" hunk dropped: upstream passes `tools: []` and no longer falls back to builtin tools |
+| 0006 | computer-support | `/home/rakazo/...` absolute paths resolve inside the workspace | was not live since 5 Oct |
+| 0007 | continua | soft «Continua» button: answers a pending AskCard (choice-1/«continua») or resumes when the last bot text looks unfinished | was not live since 5 Oct; rewritten for new Composer API, reads text blocks (old code read a non-existent `.text`) |
+| 0011 | lint | biome formatting | |
+
+`compose/0001-…patch`: supervisor gets `SANDBOX_IDLE_MS` and the 20-min command timeout default.
+
+## Dropped (and why)
+- **timeouts** (undici 30-min body/headers, `MODEL_STREAM_TIMEOUT_MS` 30 min, local `longStreamFetch`):
+  not live since the 5 Oct edge merge and prod has run 9 days without them; upstream now has
+  `MODEL_STREAM_TIMEOUT_MS` (headers) + `MODEL_STREAM_IDLE_TIMEOUT_MS` 180 s idle; reasoning streams keep
+  the idle timer alive. Old files kept in `../patches/timeouts` if long silent prefills ever abort.
+- **run-limits / incomplete-continue `pi-runtime-limits.ts`**: identical to upstream already — nothing to port.
+- **tool cap**: native `MAX_TOOL_CALLS_PER_TURN` env (still in `.env`, 500) — no code patch.
+- **markdown tables (chat-ui)**: upstream ships GFM tables + `repairMarkdownTableDelimiters`; ours (Sept) is superseded.
+- **reply-proxy**: lives on the home PC, not in the image.
+- **mobile i18n**: APK build tree, not the server image (`../patches/i18n-it-mobile`).
+
+- 0012 progress: mid-turn narration (text before a tool call) clamped at 8000 (final-message limit) instead of 500; USER_PROGRESS 500 cap kept for send-progress beats. Deployed 0723154-nk12 on api+worker 2026-10-15.
+
+- 0013 plan: Task Decomposition — `plan_*` tools, DB `agent_plans`/`agent_plan_steps`, right-rail «Piano» panel (computer + settings), Italian i18n, system hint + soft `_planReminder` every 3 non-plan tools. Dockerfile now runs `prisma generate` after patches.
+
+- 0014 plan UI: «Piano» moved out of Advanced / Avanzate to a top-level section in bot settings (computer panel was already top-level); light separator.
+
+- 0015 UI: right-rail section dividers; sticky Save footer in bot settings (`bot-settings-footer`).
+
+## Backup (incrementale)
+
+Per i backup di routine usare `~/rakazo/backup-incremental.sh` (DB con `pg_dump -Fc` solo se
+cambiato, `.env`/compose solo se mtime cambiato, **nessun** `docker commit`; retention `RETAIN=3`).
+Il rollback alle immagini resta sui tag `0723154-nkN` e sugli snapshot di cutover
+(`update-rakazo-v2.sh cutover` / `rollback`). Changelog patch: `CHANGELOG.md`.
+
+- 0016 UI: Advanced accordion groups in light cards; sticky Save footer flush to panel bottom (settings pb-0 + footer -mb).
+
+- 0017 plan: keep completed plans visible in sidebar until plan_create replaces them (getDisplayPlan); no nested sub-steps.
+
+- 0018 UI: Advanced cards darker (bg-muted/60); idle NativeSelect/Input/textarea forced white (dark: background) so they do not look disabled.

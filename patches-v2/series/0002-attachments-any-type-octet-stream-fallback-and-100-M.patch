@@ -1,0 +1,108 @@
+From cc076d745248d4e121906f7eebdd0a63a661d9d5 Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 14 Oct 2026 04:45:50 +0200
+Subject: [PATCH 02/11] attachments: any type (octet-stream fallback) and 100
+ MiB
+
+---
+ apps/web/src/pages/Shell.tsx              | 2 +-
+ packages/adapters/src/thread-artifacts.ts | 4 ++--
+ packages/contracts/src/attachments.ts     | 3 ++-
+ packages/core/src/attachments.ts          | 7 ++++---
+ 4 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/apps/web/src/pages/Shell.tsx b/apps/web/src/pages/Shell.tsx
+index e9abac0e..b9be987c 100644
+--- a/apps/web/src/pages/Shell.tsx
++++ b/apps/web/src/pages/Shell.tsx
+@@ -2053,7 +2053,7 @@ export function ShellPage() {
+           continue;
+         }
+         if (file.size > ATTACHMENT_MAX_BYTES) {
+-          skipped.push(t`${file.name} (over 10 MiB)`);
++          skipped.push(t`${file.name} (over 100 MiB)`);
+           continue;
+         }
+         const mimeType = inferAttachmentMimeType(file.name, file.type);
+diff --git a/packages/adapters/src/thread-artifacts.ts b/packages/adapters/src/thread-artifacts.ts
+index 04ee99b8..b0f40ed3 100644
+--- a/packages/adapters/src/thread-artifacts.ts
++++ b/packages/adapters/src/thread-artifacts.ts
+@@ -55,7 +55,7 @@ export async function attachWorkspaceFileToThread(
+   const name = (input.name?.trim() || fileName).slice(0, ARTIFACT_NAME_MAX_LENGTH);
+   validateAttachmentMimeType(mimeType);
+   if (input.bytes.byteLength > ATTACHMENT_MAX_BYTES) {
+-    throw new Error("file exceeds the 10 MiB attachment limit");
++    throw new Error("file exceeds the 100 MiB attachment limit");
+   }
+ 
+   const context = {
+@@ -150,7 +150,7 @@ export async function materializeCurrentTurnFiles(
+     if (!row) throw new Error(`Attached file is unavailable: ${block.name}`);
+     const bytes = await deps.artifacts.get(row.storageKey, input.context);
+     if (bytes.byteLength > ATTACHMENT_MAX_BYTES) {
+-      throw new Error(`Attached file exceeds the 10 MiB limit: ${row.name}`);
++      throw new Error(`Attached file exceeds the 100 MiB limit: ${row.name}`);
+     }
+     const relativePath = `attachments/${row.id}${attachmentExtensionForMimeType(row.mimeType)}`;
+     input.markWorkspaceDirty?.();
+diff --git a/packages/contracts/src/attachments.ts b/packages/contracts/src/attachments.ts
+index e328011f..706c1f4c 100644
+--- a/packages/contracts/src/attachments.ts
++++ b/packages/contracts/src/attachments.ts
+@@ -1,4 +1,4 @@
+-export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
++export const ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024;
+ export const ATTACHMENT_MAX_COUNT = 4;
+ export const ARTIFACT_NAME_MAX_LENGTH = 255;
+ export const ARTIFACT_DESCRIPTION_MAX_LENGTH = 280;
+@@ -20,6 +20,7 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
+   "text/html",
+   "application/json",
+   "application/zip",
++  "application/octet-stream",
+ ] as const;
+ 
+ export const ATTACHMENT_ALLOWED_MIME_TYPES = [
+diff --git a/packages/core/src/attachments.ts b/packages/core/src/attachments.ts
+index 045d5b25..47b813f1 100644
+--- a/packages/core/src/attachments.ts
++++ b/packages/core/src/attachments.ts
+@@ -36,7 +36,7 @@ export function decodeAttachmentBase64(contentBase64: string): Uint8Array {
+   const normalized = contentBase64.trim();
+   if (!normalized) throw new AttachmentValidationError("Attachment content is empty");
+   if (normalized.length > ATTACHMENT_MAX_BASE64_LENGTH) {
+-    throw new AttachmentValidationError("Attachment exceeds the 10 MiB limit");
++    throw new AttachmentValidationError("Attachment exceeds the 100 MiB limit");
+   }
+   if (normalized.length % 4 !== 0 || !isWellFormedBase64(normalized)) {
+     throw new AttachmentValidationError("Attachment content is not valid base64");
+@@ -49,7 +49,7 @@ export function decodeAttachmentBase64(contentBase64: string): Uint8Array {
+   }
+   if (bytes.byteLength === 0) throw new AttachmentValidationError("Attachment content is empty");
+   if (bytes.byteLength > ATTACHMENT_MAX_BYTES) {
+-    throw new AttachmentValidationError("Attachment exceeds the 10 MiB limit");
++    throw new AttachmentValidationError("Attachment exceeds the 100 MiB limit");
+   }
+   return new Uint8Array(bytes);
+ }
+@@ -153,6 +153,7 @@ const MIME_TYPE_EXTENSIONS: Record<AttachmentMimeType, string> = {
+   "text/html": ".html",
+   "application/json": ".json",
+   "application/zip": ".zip",
++  "application/octet-stream": "",
+ };
+ 
+ export function inferAttachmentMimeType(
+@@ -173,7 +174,7 @@ export function inferAttachmentMimeType(
+     return extensionType;
+   }
+   if (reportedType && isAllowedAttachmentMimeType(reportedType)) return reportedType;
+-  return extensionType ?? null;
++  return extensionType ?? "application/octet-stream";
+ }
+ 
+ export function attachmentExtensionForMimeType(mimeType: string): string {
+-- 
+2.47.3
+

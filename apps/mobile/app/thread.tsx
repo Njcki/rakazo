@@ -81,6 +81,7 @@ import {
   Text,
   TextInput,
   useWindowDimensions,
+  Dimensions,
   View,
 } from "react-native";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
@@ -101,6 +102,7 @@ import type { MarkdownArtifactPreviewTarget } from "../components/markdown-artif
 import { MarkdownArtifactPreview } from "../components/markdown-artifact-preview";
 import { MessageCaption } from "../components/message-caption";
 import { MessageContextMenu } from "../components/message-context-menu";
+import { ChartBlockView } from "../components/chart-block";
 import { NativeActionButton } from "../components/native-action-button";
 import { NativeSymbol } from "../components/native-symbol";
 import { ReplyDismissButton } from "../components/reply-dismiss-button";
@@ -3592,6 +3594,35 @@ const MessageBubble = memo(function MessageBubble({
             block={block}
             accessibilityActions={actionProps.accessibilityActions}
             onAccessibilityAction={actionProps.onAccessibilityAction}
+          />
+        ))}
+      </View>
+    );
+  }
+  const chartBlocks = message.blocks.filter(
+    (block): block is Extract<MobileMessage["blocks"][number], { kind: "chart" }> =>
+      block.kind === "chart",
+  );
+  if (chartBlocks.length > 0) {
+    const otherText = blockText({
+      ...message,
+      blocks: message.blocks.filter((block) => block.kind !== "chart"),
+    });
+    return (
+      <View style={{ maxWidth: "100%", gap: 8 }}>
+        {otherText ? (
+          <MessageTextCard
+            message={{ ...message, blocks: message.blocks.filter((b) => b.kind !== "chart") }}
+            actionProps={actionProps}
+          />
+        ) : null}
+        {chartBlocks.map((block, index) => (
+          <ChartBlockView
+            key={`${block.name}-${index}`}
+            name={block.name}
+            spec={block.spec}
+            data={block.data}
+            maxWidth={Math.min(Dimensions.get("window").width - 48, 560)}
           />
         ))}
       </View>

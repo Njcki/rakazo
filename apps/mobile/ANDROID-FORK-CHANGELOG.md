@@ -1,6 +1,7 @@
 # Personal Android build (com.rakazo.fork) — custom mods
 
 ## Unreleased — 2026-10-16
+- Chat: i blocchi `chart` (tool render_plot, prima mostrati come testo `[chart: nome.png]`) ora vengono disegnati con lo stesso spec Observable Plot del web, in una WebView senza rete né sessione (bundle Plot incluso nell'app, `lib/plot-bundle.generated.ts`, rigenerabile con `scripts/build-plot-bundle.mjs`). Titolo + legenda, tocco = schermo intero; se il rendering fallisce resta il testo. / Chart blocks now render as live charts (same spec as web, offline WebView), tap for full screen, text fallback on error.
 - Parametri bot: niente più `models/list` completo (~1500 voci) all'apertura. Al mount solo `me` + `models/credentials`; il catalogo si carica quando apri Avanzate, filtrato ai soli provider collegati (+ provider del modello attuale e del default), con cache in memoria per la sessione. / Bot settings no longer fetch the full catalog on mount; deferred until Advanced, narrowed to connected providers, session-cached.
 - API: `models/list` accetta l'input opzionale `{ providers?: string[] }` (retrocompatibile; senza input = catalogo completo). / Optional backward-compatible provider filter.
 - Android: liste lunghe nei selettori (>12 voci) aprono un foglio a schermo intero scorrevole che rispetta status bar e barra di navigazione (safe area), con gruppi provider espandibili; le liste corte restano menu nativi. / Long pickers use a safe-area-aware scrollable sheet instead of the native popup that overflowed under the status bar.

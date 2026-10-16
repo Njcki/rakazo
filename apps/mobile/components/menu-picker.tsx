@@ -76,14 +76,18 @@ export function MenuPickerMenu({
   value,
   onChange,
   children,
+  disabled = false,
 }: {
   label: string;
   choices: readonly MenuPickerChoice[];
   value: string;
   onChange: (key: string) => void;
   children: ReactNode;
+  /** When true, render children only — no menu / sheet open. */
+  disabled?: boolean;
 }) {
   const colorScheme = toNativeColorScheme(useResolvedAppearance());
+  if (disabled) return <>{children}</>;
   // Android's native popup cannot be inset: long lists grow under the status bar.
   // Above a small threshold use a safe-area-aware scrollable sheet instead.
   if (Platform.OS === "android" && countLeaves(choices) > ANDROID_MENU_MAX_LEAVES) {
@@ -115,23 +119,37 @@ export function MenuPicker({
   value,
   onChange,
   divider = false,
+  disabled = false,
+  displayValue,
 }: {
   label: string;
   choices: readonly MenuPickerChoice[];
   value: string;
   onChange: (key: string) => void;
   divider?: boolean;
+  /** Blocks opening the menu (e.g. while a catalog is still loading). */
+  disabled?: boolean;
+  /** Override the trailing value text (e.g. "Loading…" / "Caricamento…"). */
+  displayValue?: string;
 }) {
   const styles = useThemedStyles(createStyles);
-  const current = findChoiceLabel(choices, value) ?? firstLeafLabel(choices);
+  const current =
+    displayValue ?? findChoiceLabel(choices, value) ?? firstLeafLabel(choices);
   return (
-    <MenuPickerMenu choices={choices} label={label} onChange={onChange} value={value}>
+    <MenuPickerMenu
+      choices={choices}
+      disabled={disabled}
+      label={label}
+      onChange={onChange}
+      value={value}
+    >
       <View
         accessibilityLabel={label}
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
         accessibilityValue={{ text: current }}
         accessible
-        style={[styles.row, divider && styles.divider]}
+        style={[styles.row, divider && styles.divider, disabled && { opacity: 0.7 }]}
       >
         <Text style={styles.label}>{label}</Text>
         <Text numberOfLines={1} style={styles.value}>

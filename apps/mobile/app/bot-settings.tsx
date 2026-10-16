@@ -577,7 +577,9 @@ export default function BotSettingsScreen() {
             >
               <MenuPicker
                 choices={modelChoices}
-                label={catalogLoading ? `${t("Model")} …` : t("Model")}
+                disabled={catalogLoading}
+                displayValue={catalogLoading ? t("Loading…") : undefined}
+                label={t("Model")}
                 onChange={selectModel}
                 value={selectedModelKey}
               />

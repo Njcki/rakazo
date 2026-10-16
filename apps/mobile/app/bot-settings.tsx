@@ -156,11 +156,30 @@ export default function BotSettingsScreen() {
         label: selectedModel?.modelId ?? selectedModelKey,
       });
     }
+    // Provider submenu → models (avoids one infinite flat list).
+    const byProvider = new Map<string, { name: string; models: MenuPickerChoice[] }>();
     for (const option of connectedOptions) {
-      choices.push({ key: option.key, label: option.label });
+      const entry = catalog.find(
+        (candidate) =>
+          candidate.provider === option.provider &&
+          resolveSelectableModelId(catalog, candidate.provider, candidate.id) === option.modelId,
+      );
+      const providerName = entry?.providerName ?? option.provider;
+      const modelLabel =
+        entry?.label ??
+        (option.label.includes(" · ") ? option.label.split(" · ").slice(1).join(" · ") : option.modelId);
+      let group = byProvider.get(option.provider);
+      if (!group) {
+        group = { name: providerName, models: [] };
+        byProvider.set(option.provider, group);
+      }
+      group.models.push({ key: option.key, label: modelLabel });
+    }
+    for (const [providerId, group] of byProvider) {
+      choices.push({ key: providerId, label: group.name, children: group.models });
     }
     return choices;
-  }, [connectedOptions, selectedModel?.modelId, selectedModelKey, spaceDefaultLabel]);
+  }, [catalog, connectedOptions, selectedModel?.modelId, selectedModelKey, spaceDefaultLabel]);
 
   const thinkingChoices: MenuPickerChoice[] = useMemo(
     () => [

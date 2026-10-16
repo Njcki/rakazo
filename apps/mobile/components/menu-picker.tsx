@@ -1,12 +1,64 @@
 import { MenuView } from "@expo/ui/community/menu";
 import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { toNativeColorScheme } from "../lib/appearance";
 import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
 import { NativeSymbol } from "./native-symbol";
 
-export type MenuPickerChoice = { key: string; label: string };
+export type MenuPickerChoice = {
+  key: string;
+  label: string;
+  /** Nested submenu (e.g. provider → models). Leaf rows carry the selectable key. */
+  children?: readonly MenuPickerChoice[];
+};
 
-/** Native choice menu shared by rows with different layouts. */
+function findChoiceLabel(
+  choices: readonly MenuPickerChoice[],
+  value: string,
+  parentLabel?: string,
+): string | undefined {
+  for (const choice of choices) {
+    if (choice.children?.length) {
+      const nested = findChoiceLabel(choice.children, value, choice.label);
+      if (nested !== undefined) return nested;
+    } else if (choice.key === value) {
+      return parentLabel ? `${parentLabel} · ${choice.label}` : choice.label;
+    }
+  }
+  return undefined;
+}
+
+function firstLeafLabel(choices: readonly MenuPickerChoice[]): string {
+  for (const choice of choices) {
+    if (choice.children?.length) {
+      const nested = firstLeafLabel(choice.children);
+      if (nested) return nested;
+    } else {
+      return choice.label;
+    }
+  }
+  return "";
+}
+
+function toMenuActions(choices: readonly MenuPickerChoice[], value: string) {
+  return choices.map((choice) => {
+    if (choice.children?.length) {
+      return {
+        id: `group:${choice.key}`,
+        title: choice.label,
+        subactions: toMenuActions(choice.children, value),
+      };
+    }
+    return {
+      // MenuView reports an empty id as the title, so prefix keys to keep "" distinct.
+      id: `choice:${choice.key}`,
+      title: choice.label,
+      state: (choice.key === value ? "on" : "off") as "on" | "off",
+    };
+  });
+}
+
+/** Native choice menu shared by rows with different layouts. Supports nested groups via children. */
 export function MenuPickerMenu({
   label,
   choices,
@@ -20,15 +72,10 @@ export function MenuPickerMenu({
   onChange: (key: string) => void;
   children: ReactNode;
 }) {
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   return (
     <MenuView
-      actions={choices.map((choice) => ({
-        // MenuView reports an empty id as the title, so prefix keys to keep "" distinct.
-        id: `choice:${choice.key}`,
-        title: choice.label,
-        state: choice.key === value ? "on" : "off",
-      }))}
+      actions={toMenuActions(choices, value)}
       colorScheme={colorScheme}
       onPressAction={(event) => {
         const id = event.nativeEvent.event;
@@ -56,7 +103,7 @@ export function MenuPicker({
   divider?: boolean;
 }) {
   const styles = useThemedStyles(createStyles);
-  const current = choices.find((choice) => choice.key === value)?.label ?? choices[0]?.label ?? "";
+  const current = findChoiceLabel(choices, value) ?? firstLeafLabel(choices);
   return (
     <MenuPickerMenu choices={choices} label={label} onChange={onChange} value={value}>
       <View

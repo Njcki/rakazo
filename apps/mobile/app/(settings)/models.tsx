@@ -54,7 +54,7 @@ import type {
   MobileModelCredential,
 } from "../../lib/api";
 import { captureApiRequestContext, rpc, selectedSpaceId } from "../../lib/api";
-import { mobileTokens } from "../../lib/appearance";
+import { mobileTokens, toNativeColorScheme } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import { presentMessageActionSheet } from "../../lib/message-action-sheet";
 import {
@@ -105,7 +105,7 @@ type FeedbackAnchor = "probe" | "model" | "connection";
 export default function Models() {
   const styles = useThemedStyles(createModelsStyles);
   const { t } = useI18n();
-  const colorScheme = useResolvedAppearance();
+  const colorScheme = toNativeColorScheme(useResolvedAppearance());
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [me, setMe] = useState<MobileMe | null>(null);
@@ -1390,11 +1390,42 @@ export default function Models() {
       backupModels.length >= MAX_MODEL_BACKUPS
     )
       return;
+    // Provider first, then models — avoids one endless flat sheet.
+    const byProvider = new Map<string, typeof addableBackupOptions>();
+    for (const option of addableBackupOptions) {
+      const list = byProvider.get(option.provider) ?? [];
+      list.push(option);
+      byProvider.set(option.provider, list);
+    }
+    const providerEntries = [...byProvider.entries()];
+    function presentModelsForProvider(
+      providerName: string,
+      options: typeof addableBackupOptions,
+    ) {
+      presentMessageActionSheet({
+        title: providerName,
+        actions: options.map((option) => ({
+          text: option.label,
+          onPress: () => addBackupChoice({ provider: option.provider, modelId: option.modelId }),
+        })),
+        colorScheme,
+        cancel: t("Cancel"),
+        more: t("More"),
+      });
+    }
+
+    if (providerEntries.length === 1) {
+      const [, options] = providerEntries[0]!;
+      presentModelsForProvider(options[0]?.providerName ?? options[0]!.provider, options);
+      return;
+    }
+
     presentMessageActionSheet({
       title: t("Add connected model"),
-      actions: addableBackupOptions.map((option) => ({
-        text: `${option.providerName} · ${option.label}`,
-        onPress: () => addBackupChoice({ provider: option.provider, modelId: option.modelId }),
+      actions: providerEntries.map(([providerId, options]) => ({
+        text: options[0]?.providerName ?? providerId,
+        onPress: () =>
+          presentModelsForProvider(options[0]?.providerName ?? providerId, options),
       })),
       colorScheme,
       cancel: t("Cancel"),

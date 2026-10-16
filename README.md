@@ -17,6 +17,62 @@ OpenClaw, Hermes Agent, and Hark Pro.
 
 Rakazo is in beta. Learn more at [rakazo.com](https://rakazo.com).
 
+## Fork personale / Personal fork
+
+**IT —** Questo repository è un fork di [elie222/rakazo](https://github.com/elie222/rakazo) (Apache-2.0, attribuzione e `LICENSE` originali invariati) con le modifiche che uso sulla mia istanza self-hosted e sulla mia app Android personale. Nessun segreto è incluso: niente `.env`, chiavi, token o keystore — fornisci i tuoi.
+
+**EN —** This repository is a fork of [elie222/rakazo](https://github.com/elie222/rakazo) (Apache-2.0; upstream attribution and `LICENSE` unchanged) carrying the changes I run on my self-hosted instance and my personal Android app. No secrets are included: no `.env`, keys, tokens or keystores — bring your own.
+
+### Branch / Branches
+
+| Branch | Base | IT | EN |
+|---|---|---|---|
+| `main` | upstream `main` | Copia di upstream senza modifiche. | Untouched mirror of upstream. |
+| [`selfhost-v2`](https://github.com/Njcki/rakazo/tree/selfhost-v2) | upstream `0723154` | Patch web/server per il self-host (20 commit, uno per patch) + `patches-v2/` per l'immagine Docker. | Web/server self-host patches (20 commits, one per patch) + `patches-v2/` to build the Docker image. |
+| [`android-app`](https://github.com/Njcki/rakazo/tree/android-app) | upstream `main` | App Android personale in `apps/mobile` (package `com.rakazo.fork`). | Personal Android app in `apps/mobile` (package `com.rakazo.fork`). |
+
+L'app Android vive nello stesso monorepo, non in un repo separato. / *The Android app lives in the same monorepo, not in a separate repo.*
+
+### Modifiche in questo branch (`selfhost-v2`) / Changes in this branch
+
+| # | IT | EN |
+|---|---|---|
+| 0001 | **Alias modelli locali**: alias extra con etichetta, context e max token propri da `/data/local-extra-models.json` o `RAKAZO_LOCAL_EXTRA_MODELS`; l'id viene riscritto a `upstreamId` verso il server. | **Local model aliases**: extra aliases with their own label, context and max tokens from `/data/local-extra-models.json` or `RAKAZO_LOCAL_EXTRA_MODELS`; the id is rewritten to `upstreamId` on the wire. |
+| 0002, 0010 | **Allegati di qualsiasi tipo fino a 100 MiB**, fallback `application/octet-stream`; se il browser manda octet-stream vince l'estensione nota. | **Attachments of any type up to 100 MiB** with an `application/octet-stream` fallback; a known extension wins over octet-stream. |
+| 0003 | **TTS nella lingua della UI**: la lingua dell'interfaccia viene passata a ElevenLabs come `language_code`. | **TTS in the UI language**: the UI locale is passed to ElevenLabs as `language_code`. |
+| 0004, 0008, 0009 | **Interfaccia web in italiano**: locale `it` registrato, catalogo completo (1107/1107), loader nei test. | **Italian web UI**: `it` locale registered, full catalog (1107/1107), test loaders. |
+| 0005 | **Compattazione**: timeout fisso di 480 s per il riassunto. | **Compaction**: fixed 480 s summarizer timeout. |
+| 0006 | **Path del computer**: i path assoluti `/home/rakazo/...` vengono risolti nel workspace. | **Computer paths**: absolute `/home/rakazo/...` paths resolve inside the workspace. |
+| 0007 | **Pulsante «Continua»**: risponde a una domanda in sospeso o riprende un turno lasciato a metà. | **"Continue" button**: answers a pending question or resumes an unfinished turn. |
+| 0011 | Formattazione biome dei file toccati. | Biome formatting of touched files. |
+| 0012 | **Narrazione a metà turno** fino a 8000 caratteri (i messaggi di progresso restano a 500). | **Mid-turn narration** up to 8000 characters (progress beats stay at 500). |
+| 0013, 0014, 0017 | **Piano**: scomposizione dei task con strumenti `plan_*`, tabelle DB, pannello «Piano» di primo livello, piani completati visibili finché non ne nasce uno nuovo. | **Plan**: task decomposition with `plan_*` tools, DB tables, a top-level "Plan" panel, completed plans stay visible until replaced. |
+| 0015, 0016 | **Impostazioni bot**: «Salva» sempre visibile, divisori tra sezioni, card di Avanzate a filo. | **Bot settings**: always-visible Save, section dividers, flush Advanced cards. |
+| 0018 | Card più scure, campi a riposo bianchi, placeholder più chiari. | Darker cards, white idle fields, lighter placeholders. |
+| 0019, 0020 | Icone sui titoli delle sezioni e delle card di Avanzate. | Icons on section and Advanced card titles. |
+
+Commit upstream fissato / pinned upstream commit: `0723154f23d6622ef0f4accafdd170e1cda808dd` (`patches-v2/PINS`). Dettagli: `patches-v2/CHANGELOG.md`.
+
+### Uso / Usage
+
+**Requisiti / Requirements:** Node 22+, pnpm (`corepack enable`), Docker + Docker Compose; un tuo `.env` come da upstream (es. `SANDBOX_SUPERVISOR_TOKEN`). / *your own `.env` as in upstream.*
+
+```bash
+git checkout selfhost-v2
+pnpm install
+pnpm --filter @rakazo/web build          # sviluppo/dev: vedi la guida upstream sotto
+# Immagine Docker sopra l'immagine upstream fissata / Docker image on top of the pinned upstream image:
+cd patches-v2
+docker build --build-arg BASE=ghcr.io/elie222/rakazo/app@$(. ./PINS; echo $APP_DIGEST) -t rakazo-app-nk .
+```
+
+**IT —** `patches-v2/update-rakazo-v2.sh` è lo script che uso sul mio server (adatta i percorsi). Le tabelle del Piano vengono create dalla normale migrazione di Rakazo. `patches-v2/compose/` contiene una patch opzionale (timeout comandi 20 min, `SANDBOX_IDLE_MS`).
+**EN —** `patches-v2/update-rakazo-v2.sh` is the script I use on my server (adjust paths). Plan tables are created by Rakazo's normal migration. `patches-v2/compose/` holds an optional patch (20 min command timeout, `SANDBOX_IDLE_MS`).
+
+Vedi anche / see also [FORK.md](FORK.md).
+
+---
+
 ## How Rakazo compares
 
 Once Rakazo is running, it is just chat, like Grok Bot: you set up a bot and manage it from that

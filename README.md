@@ -43,6 +43,7 @@ L'app Android vive nello stesso monorepo, non in un repo separato. / *The Androi
 | vc10 | **Menu modelli per provider** (sottomenu provider → modelli); **icone del Piano uguali al web**; temi **Sistema / Chiaro / Scuro / Nero** (Nero OLED). | **Provider-grouped model menus**; **Plan icons matching the web**; **System / Light / Dark / Black** themes (Black = OLED). |
 | vc11 | Tema Scuro più leggibile (meno nero); selettore Aspetto 2×2 con anteprime. | More readable, lighter Dark theme; 2×2 Appearance picker with previews. |
 | next | Parametri bot più leggeri: modelli caricati solo all'apertura di Avanzate e solo per i provider collegati; liste lunghe in un foglio che non finisce sotto la status bar. | Lighter bot settings: models loaded only when Advanced opens and only for connected providers; long lists in a sheet that stays below the status bar. |
+| next | **Grafici nella chat**: i messaggi `[chart: …]` (render_plot) ora mostrano il grafico vero, come sul web (Observable Plot in una WebView offline); tocco = schermo intero. | **Charts in chat**: `[chart: …]` messages (render_plot) now draw the real chart like the web (Observable Plot in an offline WebView); tap = full screen. |
 
 Storico completo / full history: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

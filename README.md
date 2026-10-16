@@ -73,6 +73,12 @@ Vedi anche / see also [FORK.md](FORK.md).
 
 ---
 
+### PC dei bot / Bots' computer image (`computer-tools/`)
+
+**IT** — `computer-tools/` contiene Dockerfile e script `page-text` per costruire localmente un'immagine computer estesa (OCR tesseract eng/fra/ita, poppler, djvulibre, git, jq, ripgrep…), partendo dal digest upstream fissato in `patches-v2/PINS`. Non è un'immagine binaria: `docker build --build-arg BASE_IMAGE=ghcr.io/elie222/rakazo/computer@sha256:<COMPUTER_DIGEST> -t rakazo-computer-tools:local computer-tools`, poi nel `.env` `RAKAZO_COMPUTER_IMAGE=rakazo-computer-tools` e `RAKAZO_COMPUTER_IMAGE_TAG=local`.
+
+**EN** — `computer-tools/` holds the Dockerfile and `page-text` script to build an extended bots' computer image locally (OCR, PDF/DjVu tools, dev CLIs) from the upstream digest pinned in `patches-v2/PINS`. Build with the command above and set `RAKAZO_COMPUTER_IMAGE` / `RAKAZO_COMPUTER_IMAGE_TAG` in `.env`. See `computer-tools/README.md`.
+
 ## How Rakazo compares
 
 Once Rakazo is running, it is just chat, like Grok Bot: you set up a bot and manage it from that

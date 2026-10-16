@@ -49,6 +49,8 @@ export const IT_MESSAGES: Record<string, string> = {
   "Saved": "Salvato",
   " (unread)": " (non letto)",
   "Appearance": "Aspetto",
+  "Black": "Nero",
+  "Retry": "Riprova",
   "Dark": "Scuro",
   "Light": "Chiaro",
   "System": "Sistema",

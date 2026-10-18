@@ -1,3 +1,4 @@
+import { mathToPlainText } from "@rakazo/chat-ui/math";
 import { plainTextFromMarkdown } from "@rakazo/core";
 
 /** A line longer than this is shown as written rather than converted. */
@@ -58,7 +59,8 @@ function convert(line: string): string {
  * code is kept verbatim, and nothing is truncated.
  */
 export function selectableTextFromMarkdown(markdown: string): string {
-  const source = markdown.replace(/\r\n/g, "\n").split("\n");
+  // Formulas are copied as readable text ("1018.86 hPa"), not as TeX source.
+  const source = mathToPlainText(markdown.replace(/\r\n/g, "\n")).split("\n");
   const lines: Line[] = [];
   let fence: { char: string; length: number } | null = null;
   let inList = false;

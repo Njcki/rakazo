@@ -164,6 +164,7 @@ import {
   LinkFaviconsContext,
   LinkifiedText,
   MarkdownLinkPromptProvider,
+  MathBlockContext,
   RemoteImagesContext,
   RemoteMarkdownImage,
 } from "./markdown.native";
@@ -1177,5 +1178,43 @@ it("shows a full long native URL and opens it only on confirmation", async () =>
   expect(linking.openURL).toHaveBeenCalledWith(url);
   await act(async () => {
     root.unmount();
+  });
+});
+
+describe("native math", () => {
+  it("reads inline TeX as text and keeps prices", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"Pressione $1018.86\\text{hPa}$, costa $5 o $10"}</ChatMarkdown>,
+    );
+    expect(html).toContain("1018.86\u202FhPa");
+    expect(html).not.toContain("\\text");
+    expect(html).toContain("costa $5 o $10");
+  });
+
+  it("hands display math to the app renderer", () => {
+    const seen: string[] = [];
+    const Renderer = ({ tex }: { tex: string }) => {
+      seen.push(tex);
+      return <span data-math={tex} />;
+    };
+    const html = renderToStaticMarkup(
+      <MathBlockContext.Provider value={Renderer}>
+        <ChatMarkdown>
+          {"Energia:\n\n$$E=mc^2$$\n\ne \\[\\frac{a}{b}\\] fine\n\n\\[\n\\frac{1}{2}\n\\]"}
+        </ChatMarkdown>
+      </MathBlockContext.Provider>,
+    );
+    expect(seen).toEqual(["E=mc^2", "\\frac{1}{2}"]);
+    expect(html).toContain("a/b");
+  });
+
+  it("falls back to readable text without a renderer", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown>{"$$x^2 + y^2$$"}</ChatMarkdown>);
+    expect(html).toContain("x² + y²");
+  });
+
+  it("leaves dollars in code alone", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown>{"`echo $HOME $x$`"}</ChatMarkdown>);
+    expect(html).toContain("echo $HOME $x$");
   });
 });

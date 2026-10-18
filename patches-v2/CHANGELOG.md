@@ -27,6 +27,7 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
 | 0018 | 2026-10-15 | UI: card più scure + campi bianchi | Card più scure, campi/selettori a riposo bianchi, placeholder più chiari. |
 | 0019 | 2026-10-16 | UI: icone titoli barra destra | Icone Lucide a sinistra di Nome, Titolo, Descrizione, Notifiche, Avanzate (stile «Piano»). |
 | 0020 | 2026-10-16 | UI: icone card Avanzate | Icone Lucide sui titoli delle card in «Avanzate» (Computer, Lavori aperti, Memoria/Skill, Modello, Ambito memoria, Voce, Strumenti, Credenziali). |
+| 0021 | 2026-10-18 | chat: formule TeX (KaTeX) | `$…$`, `$$…$$`, `\(…\)`, `\[…\]` composte con remark-math + rehype-katex; prezzi tipo «$5 o $10» restano testo (regole Pandoc); nuove dipendenze katex/remark-math/rehype-katex (lockfile nel patch, `pnpm install` nel Dockerfile). |
 
 ## Compose (fuori da series/)
 
@@ -48,4 +49,4 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
 - nk14 (0014): 2026-10-15 — Piano fuori da Avanzate
 - nk15 (0015): 2026-10-15 — sticky Salva (build; cutover light se applicato)
 
-Ultimo aggiornamento CHANGELOG: 2026-10-16 (Europe/Rome).
+Ultimo aggiornamento CHANGELOG: 2026-10-18 (Europe/Rome).

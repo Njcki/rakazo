@@ -1,0 +1,1501 @@
+From c585eb2efef23aad03796d598ae3134b5240c5a2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 19:59:40 +0200
+Subject: [PATCH] feat(chat): formule TeX con KaTeX / render TeX math with
+ KaTeX
+
+IT: le risposte con LaTeX ($1018.86\text{hPa}$, $$E=mc^2$$, \(..\), \[..\])
+ora vengono composte con remark-math + rehype-katex (CSS KaTeX incluso).
+Un nuovo modulo condiviso (packages/chat-ui/src/math.ts) normalizza i
+delimitatori prima del parser: \(..\) -> $..$, \[..\] -> $$..$$, formule
+display da sole sulla riga diventano blocchi, e ogni $ che non apre una
+formula secondo le regole Pandoc viene escapato, cosi' i prezzi
+("costa $5 o $10") restano testo. Codice inline e fence non toccati.
+
+EN: bot replies containing LaTeX are now typeset with remark-math +
+rehype-katex. A shared math module normalizes delimiters first
+(\(..\) / \[..\] supported, Pandoc dollar rules so prices stay text,
+code untouched). Tests for the normalizer, the TeX-to-Unicode reader and
+the web renderer.
+---
+ packages/chat-ui/package.json              |   6 +-
+ packages/chat-ui/src/markdown.web.css      |  15 +
+ packages/chat-ui/src/markdown.web.test.tsx |  21 +
+ packages/chat-ui/src/markdown.web.tsx      |  26 +-
+ packages/chat-ui/src/math.test.ts          |  78 ++
+ packages/chat-ui/src/math.ts               | 840 +++++++++++++++++++++
+ pnpm-lock.yaml                             | 178 +++++
+ 7 files changed, 1159 insertions(+), 5 deletions(-)
+ create mode 100644 packages/chat-ui/src/math.test.ts
+ create mode 100644 packages/chat-ui/src/math.ts
+
+diff --git a/packages/chat-ui/package.json b/packages/chat-ui/package.json
+index b1601e3f..f17e1578 100644
+--- a/packages/chat-ui/package.json
++++ b/packages/chat-ui/package.json
+@@ -4,6 +4,7 @@
+   "license": "Apache-2.0",
+   "type": "module",
+   "exports": {
++    "./math": "./src/math.ts",
+     "./native": "./src/markdown.native.tsx",
+     "./web": "./src/markdown.web.tsx"
+   },
+@@ -16,9 +17,12 @@
+     "@rakazo/ui-tokens": "workspace:*",
+     "@rakazo/ui-web": "workspace:*",
+     "@ronradtke/react-native-markdown-display": "9.0.3",
++    "katex": "0.16.47",
+     "linkify-it": "5.0.2",
+     "react-markdown": "10.1.0",
+-    "remark-gfm": "4.0.1"
++    "rehype-katex": "7.0.1",
++    "remark-gfm": "4.0.1",
++    "remark-math": "6.0.0"
+   },
+   "peerDependencies": {
+     "react": "19.2.3",
+diff --git a/packages/chat-ui/src/markdown.web.css b/packages/chat-ui/src/markdown.web.css
+index b8738521..eb0e002c 100644
+--- a/packages/chat-ui/src/markdown.web.css
++++ b/packages/chat-ui/src/markdown.web.css
+@@ -318,3 +318,18 @@ a.rk-chat-link .rk-chat-link-tile > svg {
+ a.rk-chat-link:hover .rk-chat-link-label {
+   text-decoration-color: currentColor;
+ }
++
++/* TeX math (KaTeX). A display formula wider than the bubble scrolls instead of overflowing. */
++.rk-chat-markdown .katex {
++  font-size: 1.1em;
++}
++.rk-chat-markdown .katex-display {
++  margin: 0.25em 0;
++  overflow-x: auto;
++  overflow-y: hidden;
++  padding: 0.15em 0;
++}
++.rk-chat-markdown .katex-error {
++  color: inherit;
++  font-family: var(--font-mono, ui-monospace, monospace);
++}
+diff --git a/packages/chat-ui/src/markdown.web.test.tsx b/packages/chat-ui/src/markdown.web.test.tsx
+index 73c00c5c..107a65bb 100644
+--- a/packages/chat-ui/src/markdown.web.test.tsx
++++ b/packages/chat-ui/src/markdown.web.test.tsx
+@@ -560,3 +560,24 @@ describe("web external link confirmation", () => {
+     await view.cleanup();
+   });
+ });
++
++describe("web math", () => {
++  it("typesets inline and display TeX with KaTeX and keeps prices as text", () => {
++    const html = renderToStaticMarkup(
++      <ChatMarkdown>
++        {"Pressione $1018.86\\text{hPa}$.\n\n$$E=mc^2$$\n\nArea \\(\\pi r^2\\), costa $5 o $10."}
++      </ChatMarkdown>,
++    );
++    expect(html).toContain('class="katex"');
++    expect(html).toContain('class="katex-display"');
++    expect(html).toContain("hPa");
++    expect(html).not.toContain("$1018.86");
++    expect(html).toContain("costa $5 o $10.");
++  });
++
++  it("leaves dollars in code untouched", () => {
++    const html = renderToStaticMarkup(<ChatMarkdown>{"`echo $HOME $x$`"}</ChatMarkdown>);
++    expect(html).toContain("echo $HOME $x$");
++    expect(html).not.toContain("katex");
++  });
++});
+diff --git a/packages/chat-ui/src/markdown.web.tsx b/packages/chat-ui/src/markdown.web.tsx
+index 5564d3ee..dba3f611 100644
+--- a/packages/chat-ui/src/markdown.web.tsx
++++ b/packages/chat-ui/src/markdown.web.tsx
+@@ -1,7 +1,10 @@
+ import type { MouseEvent, ReactNode } from "react";
+-import { createContext, memo, useCallback, useContext, useRef, useState } from "react";
++import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
+ import ReactMarkdown, { type Components } from "react-markdown";
++import rehypeKatex from "rehype-katex";
+ import remarkGfm from "remark-gfm";
++import remarkMath from "remark-math";
++import "katex/dist/katex.min.css";
+ import type { HastNode } from "./table-utils";
+ import "./markdown.web.css";
+ import "./markdown-table.css";
+@@ -36,6 +39,17 @@ import {
+ } from "./markdown";
+ import { useMarkdownLinkCopy } from "./markdown-link-prompt";
+ import { MarkdownTable, MarkdownTableSourceContext } from "./markdown-table";
++import { normalizeMathMarkdown } from "./math";
++
++// TeX math: `normalizeMathMarkdown` already decided which `$` open math (prices stay text), so
++// remark-math only sees real formulas. KaTeX errors render the source in red instead of throwing.
++const remarkPlugins = [remarkGfm, remarkMath];
++const katexOptions = {
++  throwOnError: false,
++  strict: "ignore",
++  trust: false,
++  output: "htmlAndMathml",
++} as const;
+ 
+ function preserveSkippedTableText() {
+   return (tree: HastNode) => {
+@@ -445,7 +459,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
+   streaming = false,
+ }: ChatMarkdownProps) {
+   const { request, dialog } = useExternalLinkConfirm();
+-  const source = streaming ? closeUnterminatedFence(children) : children;
++  const source = useMemo(
++    () => normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
++    [children, streaming],
++  );
+ 
+   return (
+     <ConfirmLinkContext.Provider value={request}>
+@@ -456,8 +473,8 @@ export const ChatMarkdown = memo(function ChatMarkdown({
+           <MarkdownTableSourceContext.Provider value={source}>
+             <ReactMarkdown
+               components={components}
+-              remarkPlugins={[remarkGfm]}
+-              rehypePlugins={[preserveSkippedTableText]}
++              remarkPlugins={remarkPlugins}
++              rehypePlugins={[preserveSkippedTableText, [rehypeKatex, katexOptions]]}
+               skipHtml
+               // MarkdownImage decides what an image source may do, so it receives the source as written.
+               urlTransform={(url, key) =>
+@@ -479,3 +496,4 @@ export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
+ export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
+ 
+ export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";
++export { mathToPlainText, normalizeMathMarkdown, texToUnicode } from "./math";
+diff --git a/packages/chat-ui/src/math.test.ts b/packages/chat-ui/src/math.test.ts
+new file mode 100644
+index 00000000..5fb55bff
+--- /dev/null
++++ b/packages/chat-ui/src/math.test.ts
+@@ -0,0 +1,78 @@
++import { describe, expect, it } from "vitest";
++import { mathToPlainText, normalizeMathMarkdown, texToUnicode } from "./math";
++
++describe("normalizeMathMarkdown", () => {
++  it("keeps inline math that follows the Pandoc rules", () => {
++    expect(normalizeMathMarkdown("Pressione $1018.86\\text{hPa}$ oggi")).toBe(
++      "Pressione $1018.86\\text{hPa}$ oggi",
++    );
++  });
++
++  it("escapes dollars that are prices, not math", () => {
++    expect(normalizeMathMarkdown("costa $5 o $10")).toBe("costa \\$5 o \\$10");
++    expect(normalizeMathMarkdown("da $5-$10 al mese")).toBe("da \\$5-\\$10 al mese");
++    expect(normalizeMathMarkdown("$ 5 e 6 $")).toBe("\\$ 5 e 6 \\$");
++  });
++
++  it("turns display math alone on a line into a block", () => {
++    expect(normalizeMathMarkdown("Energia:\n$$E=mc^2$$\nfine")).toBe(
++      "Energia:\n$$\nE=mc^2\n$$\nfine",
++    );
++  });
++
++  it("keeps display math inside a sentence inline", () => {
++    expect(normalizeMathMarkdown("dove $$x$$ è")).toBe("dove $$x$$ è");
++  });
++
++  it("rewrites \\( \\) and \\[ \\]", () => {
++    expect(normalizeMathMarkdown("area \\(\\pi r^2\\)")).toBe("area $\\pi r^2$");
++    expect(normalizeMathMarkdown("\\[\n\\frac{a}{b}\n\\]")).toBe("$$\n\\frac{a}{b}\n$$");
++  });
++
++  it("leaves code alone", () => {
++    const source = "`$HOME` e `echo $5`\n```sh\necho $PATH $1\n```\n$x$";
++    expect(normalizeMathMarkdown(source)).toBe(source);
++  });
++
++  it("does not pair dollars across a blank line", () => {
++    expect(normalizeMathMarkdown("prezzo $5\n\nnuovo$")).toBe("prezzo \\$5\n\nnuovo\\$");
++  });
++
++  it("keeps escaped dollars", () => {
++    expect(normalizeMathMarkdown("costa \\$5 e \\$6")).toBe("costa \\$5 e \\$6");
++  });
++
++  it("returns text without math unchanged", () => {
++    const source = "Niente formule qui.";
++    expect(normalizeMathMarkdown(source)).toBe(source);
++  });
++});
++
++describe("texToUnicode", () => {
++  it.each([
++    ["1018.86\\text{hPa}", "1018.86\u202FhPa"],
++    ["1018.86\\,\\text{hPa}", "1018.86\u2009hPa"],
++    ["E=mc^2", "E=mc²"],
++    ["\\frac{a+b}{2}", "(a+b)/2"],
++    ["\\frac{1}{2}", "1/2"],
++    ["x_{i}^{2} + y_1", "xᵢ² + y₁"],
++    ["25^\\circ\\text{C}", "25°C"],
++    ["\\alpha \\leq \\beta", "α ≤ β"],
++    ["\\sqrt{x+1}", "√(x+1)"],
++    ["\\mathbb{R}^n", "ℝⁿ"],
++    ["\\sin x", "sin x"],
++    ["10^{-3}", "10⁻³"],
++    ["\\vec{v}", "v\u20D7"],
++    ["\\left( a \\right)", "(a)"],
++  ])("%s", (tex, text) => {
++    expect(texToUnicode(tex)).toBe(text);
++  });
++});
++
++describe("mathToPlainText", () => {
++  it("replaces formulas and keeps prices", () => {
++    expect(mathToPlainText("P = $1018.86\\text{hPa}$, costa $5 o $10")).toBe(
++      "P = 1018.86\u202FhPa, costa $5 o $10",
++    );
++  });
++});
+diff --git a/packages/chat-ui/src/math.ts b/packages/chat-ui/src/math.ts
+new file mode 100644
+index 00000000..b0d91ee0
+--- /dev/null
++++ b/packages/chat-ui/src/math.ts
+@@ -0,0 +1,840 @@
++/**
++ * TeX math in chat Markdown: `$…$`, `$$…$$`, `\(…\)` and `\[…\]`.
++ *
++ * Models often answer with LaTeX ("$1018.86\text{hPa}$"). Both renderers first rewrite a
++ * message into one canonical form, so the web (remark-math) and the native parser agree on
++ * what counts as math:
++ *
++ * - `\(…\)` becomes `$…$` and `\[…\]` becomes `$$…$$`.
++ * - A `$…$` span follows the Pandoc rules, so prices stay text: the opening `$` is not
++ *   followed by whitespace, the closing `$` is not preceded by whitespace nor followed by a
++ *   digit, and a span never crosses a blank line. "costa $5 o $10" has no math.
++ * - Any other `$` is escaped (`\$`), so remark-math cannot pair it up.
++ * - Display math alone on its line becomes a `$$` block on lines of its own.
++ * - Fenced code and inline code spans are left untouched.
++ */
++
++export type MathSpan = {
++  tex: string;
++  /** `$$…$$` or `\[…\]`. */
++  display: boolean;
++  /** Display math that stands alone on its line(s): drawn as a block. */
++  block: boolean;
++};
++
++const OPEN_FENCE = /^ {0,3}(`{3,}|~{3,})/;
++const MAY_HAVE_MATH = /\$|\\[([]/;
++const WHITESPACE = /\s/;
++const DIGIT = /[0-9]/;
++
++function hasBlankLine(text: string) {
++  return /\n[ \t]*\n/.test(text);
++}
++
++/** The index of the next `marker` at or after `from` that is not backslash-escaped. */
++function nextUnescaped(text: string, marker: string, from: number) {
++  let at = text.indexOf(marker, from);
++  while (at > 0 && text[at - 1] === "\\") at = text.indexOf(marker, at + 1);
++  return at;
++}
++
++function transformText(
++  text: string,
++  render: (span: MathSpan) => string,
++  loneDollar: string,
++): string {
++  let out = "";
++  let i = 0;
++  const n = text.length;
++  const emit = (tex: string, display: boolean, start: number, end: number) => {
++    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
++    const lineEnd = text.indexOf("\n", end);
++    const before = text.slice(lineStart, start);
++    const after = text.slice(end, lineEnd < 0 ? n : lineEnd);
++    const block = display && /^ {0,3}$/.test(before) && after.trim() === "";
++    return render({ tex, display, block });
++  };
++  while (i < n) {
++    const char = text[i];
++    if (char === "`") {
++      let run = 1;
++      while (text[i + run] === "`") run++;
++      const fence = "`".repeat(run);
++      let close = text.indexOf(fence, i + run);
++      while (close >= 0 && text[close + run] === "`") {
++        let skip = close;
++        while (text[skip] === "`") skip++;
++        close = text.indexOf(fence, skip);
++      }
++      if (close < 0) {
++        out += fence;
++        i += run;
++      } else {
++        out += text.slice(i, close + run);
++        i = close + run;
++      }
++      continue;
++    }
++    if (char === "\\") {
++      const next = text[i + 1];
++      if (next === "(" || next === "[") {
++        const close = text.indexOf(next === "(" ? "\\)" : "\\]", i + 2);
++        const inner = close < 0 ? "" : text.slice(i + 2, close);
++        if (close >= 0 && inner.trim() && !hasBlankLine(inner)) {
++          out += emit(inner.trim(), next === "[", i, close + 2);
++          i = close + 2;
++          continue;
++        }
++      }
++      out += text.slice(i, i + 2);
++      i += 2;
++      continue;
++    }
++    if (char === "$") {
++      if (text[i + 1] === "$") {
++        const close = nextUnescaped(text, "$$", i + 2);
++        const inner = close < 0 ? "" : text.slice(i + 2, close);
++        if (close >= 0 && inner.trim() && !hasBlankLine(inner)) {
++          out += emit(inner.trim(), true, i, close + 2);
++          i = close + 2;
++          continue;
++        }
++        out += loneDollar + loneDollar;
++        i += 2;
++        continue;
++      }
++      const first = text[i + 1];
++      if (first !== undefined && !WHITESPACE.test(first)) {
++        const blank = /\n[ \t]*\n/g;
++        blank.lastIndex = i;
++        const paragraphEnd = blank.exec(text)?.index ?? n;
++        let close = text.indexOf("$", i + 1);
++        while (close >= 0 && close < paragraphEnd) {
++          const left = text[close - 1] ?? "";
++          const right = text[close + 1] ?? "";
++          if (left !== "\\" && !WHITESPACE.test(left) && !DIGIT.test(right) && right !== "$") break;
++          close = text.indexOf("$", close + 1);
++        }
++        if (close >= 0 && close < paragraphEnd) {
++          out += emit(text.slice(i + 1, close), false, i, close + 1);
++          i = close + 1;
++          continue;
++        }
++      }
++      out += loneDollar;
++      i += 1;
++      continue;
++    }
++    out += char;
++    i += 1;
++  }
++  return out;
++}
++
++/** Rewrites every math span outside code with `render`; a `$` that opens no math becomes `loneDollar`. */
++export function transformMath(
++  markdown: string,
++  render: (span: MathSpan) => string,
++  loneDollar = "\\$",
++): string {
++  if (!MAY_HAVE_MATH.test(markdown)) return markdown;
++  const lines = markdown.split("\n");
++  const out: string[] = [];
++  let chunk: string[] = [];
++  let fence: { char: string; length: number } | null = null;
++  const flush = () => {
++    if (chunk.length === 0) return;
++    out.push(transformText(chunk.join("\n"), render, loneDollar));
++    chunk = [];
++  };
++  for (const line of lines) {
++    if (fence) {
++      out.push(line);
++      const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line)?.[1];
++      if (close?.[0] === fence.char && close.length >= fence.length) fence = null;
++      continue;
++    }
++    const open = OPEN_FENCE.exec(line)?.[1];
++    if (open) {
++      flush();
++      fence = { char: open[0] ?? "`", length: open.length };
++      out.push(line);
++      continue;
++    }
++    chunk.push(line);
++  }
++  flush();
++  return out.join("\n");
++}
++
++/** The canonical Markdown both renderers parse (see the module comment). */
++export function normalizeMathMarkdown(markdown: string): string {
++  return transformMath(markdown, ({ tex, display, block }) => {
++    if (block) return `$$\n${tex}\n$$`;
++    return display ? `$$${tex}$$` : `$${tex}$`;
++  });
++}
++
++/** Markdown with every formula replaced by readable text, for copy and plain-text views. */
++export function mathToPlainText(markdown: string): string {
++  return transformMath(markdown, ({ tex }) => texToUnicode(tex), "$");
++}
++
++// ---------------------------------------------------------------------------------------------
++// TeX to readable Unicode text. Not a typesetter: it keeps numbers, units, Greek letters,
++// operators, simple super- and subscripts and fractions legible inside a line of text.
++
++const SYMBOLS: Record<string, string> = {
++  alpha: "α",
++  beta: "β",
++  gamma: "γ",
++  delta: "δ",
++  epsilon: "ϵ",
++  varepsilon: "ε",
++  zeta: "ζ",
++  eta: "η",
++  theta: "θ",
++  vartheta: "ϑ",
++  iota: "ι",
++  kappa: "κ",
++  lambda: "λ",
++  mu: "μ",
++  nu: "ν",
++  xi: "ξ",
++  omicron: "ο",
++  pi: "π",
++  varpi: "ϖ",
++  rho: "ρ",
++  varrho: "ϱ",
++  sigma: "σ",
++  varsigma: "ς",
++  tau: "τ",
++  upsilon: "υ",
++  phi: "ϕ",
++  varphi: "φ",
++  chi: "χ",
++  psi: "ψ",
++  omega: "ω",
++  Gamma: "Γ",
++  Delta: "Δ",
++  Theta: "Θ",
++  Lambda: "Λ",
++  Xi: "Ξ",
++  Pi: "Π",
++  Sigma: "Σ",
++  Upsilon: "Υ",
++  Phi: "Φ",
++  Psi: "Ψ",
++  Omega: "Ω",
++  times: "×",
++  cdot: "·",
++  div: "÷",
++  pm: "±",
++  mp: "∓",
++  ast: "∗",
++  star: "⋆",
++  bullet: "•",
++  circ: "∘",
++  le: "≤",
++  leq: "≤",
++  ge: "≥",
++  geq: "≥",
++  ne: "≠",
++  neq: "≠",
++  approx: "≈",
++  sim: "∼",
++  simeq: "≃",
++  cong: "≅",
++  equiv: "≡",
++  propto: "∝",
++  ll: "≪",
++  gg: "≫",
++  lt: "<",
++  gt: ">",
++  leqslant: "⩽",
++  geqslant: "⩾",
++  infty: "∞",
++  partial: "∂",
++  nabla: "∇",
++  forall: "∀",
++  exists: "∃",
++  nexists: "∄",
++  in: "∈",
++  notin: "∉",
++  ni: "∋",
++  subset: "⊂",
++  subseteq: "⊆",
++  supset: "⊃",
++  supseteq: "⊇",
++  cup: "∪",
++  cap: "∩",
++  setminus: "∖",
++  emptyset: "∅",
++  varnothing: "∅",
++  land: "∧",
++  lor: "∨",
++  wedge: "∧",
++  vee: "∨",
++  neg: "¬",
++  lnot: "¬",
++  oplus: "⊕",
++  otimes: "⊗",
++  to: "→",
++  rightarrow: "→",
++  leftarrow: "←",
++  gets: "←",
++  leftrightarrow: "↔",
++  Rightarrow: "⇒",
++  Leftarrow: "⇐",
++  Leftrightarrow: "⇔",
++  implies: "⇒",
++  iff: "⇔",
++  mapsto: "↦",
++  longrightarrow: "⟶",
++  longleftarrow: "⟵",
++  uparrow: "↑",
++  downarrow: "↓",
++  sum: "∑",
++  prod: "∏",
++  coprod: "∐",
++  int: "∫",
++  iint: "∬",
++  iiint: "∭",
++  oint: "∮",
++  ldots: "…",
++  cdots: "⋯",
++  dots: "…",
++  vdots: "⋮",
++  ddots: "⋱",
++  prime: "′",
++  degree: "°",
++  angle: "∠",
++  perp: "⊥",
++  parallel: "∥",
++  mid: "∣",
++  langle: "⟨",
++  rangle: "⟩",
++  lfloor: "⌊",
++  rfloor: "⌋",
++  lceil: "⌈",
++  rceil: "⌉",
++  lvert: "|",
++  rvert: "|",
++  vert: "|",
++  lVert: "‖",
++  rVert: "‖",
++  Vert: "‖",
++  hbar: "ℏ",
++  ell: "ℓ",
++  Re: "ℜ",
++  Im: "ℑ",
++  aleph: "ℵ",
++  wp: "℘",
++  therefore: "∴",
++  because: "∵",
++  triangle: "△",
++  square: "□",
++  checkmark: "✓",
++  dagger: "†",
++  ddagger: "‡",
++  S: "§",
++  P: "¶",
++  copyright: "©",
++  quad: "\u2003",
++  qquad: "\u2003\u2003",
++  enspace: "\u2002",
++  thinspace: "\u2009",
++  ",": "\u2009",
++  ":": "\u205F",
++  ">": "\u205F",
++  ";": "\u2004",
++  " ": " ",
++  "!": "",
++  "\\": " ",
++  "%": "%",
++  $: "$",
++  "&": "&",
++  "#": "#",
++  _: "_",
++  "{": "{",
++  "}": "}",
++  "|": "‖",
++};
++
++// Relations and binary operators read better with a space on each side.
++const SPACED = new Set([
++  "times",
++  "cdot",
++  "div",
++  "pm",
++  "mp",
++  "le",
++  "leq",
++  "ge",
++  "geq",
++  "ne",
++  "neq",
++  "approx",
++  "sim",
++  "simeq",
++  "cong",
++  "equiv",
++  "propto",
++  "ll",
++  "gg",
++  "leqslant",
++  "geqslant",
++  "in",
++  "notin",
++  "ni",
++  "subset",
++  "subseteq",
++  "supset",
++  "supseteq",
++  "cup",
++  "cap",
++  "setminus",
++  "land",
++  "lor",
++  "wedge",
++  "vee",
++  "oplus",
++  "otimes",
++  "to",
++  "rightarrow",
++  "leftarrow",
++  "gets",
++  "leftrightarrow",
++  "Rightarrow",
++  "Leftarrow",
++  "Leftrightarrow",
++  "implies",
++  "iff",
++  "mapsto",
++  "longrightarrow",
++  "longleftarrow",
++  "mid",
++  "perp",
++  "parallel",
++]);
++
++const FUNCTIONS = new Set([
++  "sin",
++  "cos",
++  "tan",
++  "cot",
++  "sec",
++  "csc",
++  "arcsin",
++  "arccos",
++  "arctan",
++  "sinh",
++  "cosh",
++  "tanh",
++  "coth",
++  "log",
++  "ln",
++  "lg",
++  "exp",
++  "lim",
++  "limsup",
++  "liminf",
++  "max",
++  "min",
++  "sup",
++  "inf",
++  "det",
++  "gcd",
++  "deg",
++  "dim",
++  "ker",
++  "arg",
++  "Pr",
++  "mod",
++  "bmod",
++  "hom",
++]);
++
++const CONTENT_COMMANDS = new Set([
++  "text",
++  "textrm",
++  "textnormal",
++  "textup",
++  "textit",
++  "textbf",
++  "textsf",
++  "texttt",
++  "emph",
++  "mbox",
++  "hbox",
++  "mathrm",
++  "mathit",
++  "mathbf",
++  "mathsf",
++  "mathtt",
++  "mathnormal",
++  "mathup",
++  "boldsymbol",
++  "bm",
++  "operatorname",
++  "mathcal",
++  "mathscr",
++  "mathfrak",
++  "mathop",
++  "mathbin",
++  "mathrel",
++  "mathord",
++  "ensuremath",
++  "displaystyle",
++  "underbrace",
++  "overbrace",
++  "boxed",
++  "fbox",
++  "cancel",
++  "bcancel",
++  "xcancel",
++  "smash",
++]);
++
++const TEXT_COMMANDS = new Set([
++  "text",
++  "textrm",
++  "textnormal",
++  "textup",
++  "textit",
++  "textbf",
++  "textsf",
++  "texttt",
++  "mbox",
++  "hbox",
++  "mathrm",
++  "operatorname",
++]);
++
++const IGNORED = new Set([
++  "left",
++  "right",
++  "big",
++  "Big",
++  "bigg",
++  "Bigg",
++  "bigl",
++  "bigr",
++  "Bigl",
++  "Bigr",
++  "biggl",
++  "biggr",
++  "Biggl",
++  "Biggr",
++  "middle",
++  "displaystyle",
++  "textstyle",
++  "scriptstyle",
++  "scriptscriptstyle",
++  "limits",
++  "nolimits",
++  "nonumber",
++  "notag",
++  "centering",
++  "hline",
++]);
++
++const ACCENTS: Record<string, string> = {
++  vec: "\u20D7",
++  overrightarrow: "\u20D7",
++  hat: "\u0302",
++  widehat: "\u0302",
++  bar: "\u0304",
++  overline: "\u0305",
++  tilde: "\u0303",
++  widetilde: "\u0303",
++  dot: "\u0307",
++  ddot: "\u0308",
++  underline: "\u0332",
++  acute: "\u0301",
++  grave: "\u0300",
++  breve: "\u0306",
++  check: "\u030C",
++};
++
++const DOUBLE_STRUCK: Record<string, string> = {
++  R: "ℝ",
++  N: "ℕ",
++  Z: "ℤ",
++  Q: "ℚ",
++  C: "ℂ",
++  P: "ℙ",
++  H: "ℍ",
++  E: "𝔼",
++  "1": "𝟙",
++};
++
++const SUPERSCRIPT: Record<string, string> = {
++  "0": "⁰",
++  "1": "¹",
++  "2": "²",
++  "3": "³",
++  "4": "⁴",
++  "5": "⁵",
++  "6": "⁶",
++  "7": "⁷",
++  "8": "⁸",
++  "9": "⁹",
++  "+": "⁺",
++  "-": "⁻",
++  "−": "⁻",
++  "=": "⁼",
++  "(": "⁽",
++  ")": "⁾",
++  n: "ⁿ",
++  i: "ⁱ",
++  a: "ᵃ",
++  b: "ᵇ",
++  c: "ᶜ",
++  d: "ᵈ",
++  e: "ᵉ",
++  f: "ᶠ",
++  g: "ᵍ",
++  h: "ʰ",
++  j: "ʲ",
++  k: "ᵏ",
++  l: "ˡ",
++  m: "ᵐ",
++  o: "ᵒ",
++  p: "ᵖ",
++  r: "ʳ",
++  s: "ˢ",
++  t: "ᵗ",
++  u: "ᵘ",
++  v: "ᵛ",
++  w: "ʷ",
++  x: "ˣ",
++  y: "ʸ",
++  z: "ᶻ",
++  T: "ᵀ",
++  "*": "*",
++  "′": "′",
++  " ": "",
++};
++
++const SUBSCRIPT: Record<string, string> = {
++  "0": "₀",
++  "1": "₁",
++  "2": "₂",
++  "3": "₃",
++  "4": "₄",
++  "5": "₅",
++  "6": "₆",
++  "7": "₇",
++  "8": "₈",
++  "9": "₉",
++  "+": "₊",
++  "-": "₋",
++  "−": "₋",
++  "=": "₌",
++  "(": "₍",
++  ")": "₎",
++  a: "ₐ",
++  e: "ₑ",
++  h: "ₕ",
++  i: "ᵢ",
++  j: "ⱼ",
++  k: "ₖ",
++  l: "ₗ",
++  m: "ₘ",
++  n: "ₙ",
++  o: "ₒ",
++  p: "ₚ",
++  r: "ᵣ",
++  s: "ₛ",
++  t: "ₜ",
++  u: "ᵤ",
++  v: "ᵥ",
++  x: "ₓ",
++  " ": "",
++};
++
++function script(value: string, table: Record<string, string>, marker: string) {
++  if (marker === "^") {
++    if (value === "∘" || value === "°") return "°";
++    if (/^′+$/.test(value)) return value;
++  }
++  const chars = Array.from(value);
++  if (chars.length > 0 && chars.every((char) => table[char] !== undefined)) {
++    return chars.map((char) => table[char]).join("");
++  }
++  return chars.length === 1 ? `${marker}${value}` : `${marker}(${value})`;
++}
++
++/** A fraction part keeps parentheses unless it is one number, word or symbol. */
++function fractionPart(value: string) {
++  const trimmed = value.trim();
++  return /^[\p{L}\p{N}.,′°]+$/u.test(trimmed) || Array.from(trimmed).length <= 1
++    ? trimmed
++    : `(${trimmed})`;
++}
++
++class TexReader {
++  private at = 0;
++  constructor(private readonly source: string) {}
++
++  read(): string {
++    return this.sequence(false);
++  }
++
++  private sequence(inGroup: boolean): string {
++    let out = "";
++    while (this.at < this.source.length) {
++      const char = this.source[this.at] ?? "";
++      if (char === "}") {
++        if (inGroup) {
++          this.at++;
++          return out;
++        }
++        this.at++;
++        continue;
++      }
++      if (char === "^" || char === "_") {
++        this.at++;
++        const value = this.argument().trim();
++        out += script(value, char === "^" ? SUPERSCRIPT : SUBSCRIPT, char);
++        continue;
++      }
++      out = this.append(out, this.atom());
++    }
++    return out;
++  }
++
++  private append(out: string, piece: { text: string; textCommand?: boolean }) {
++    // "1018.86\text{hPa}" reads as a number and its unit: keep a narrow gap between them.
++    if (piece.textCommand && /[0-9]$/.test(out) && /^\p{L}/u.test(piece.text)) {
++      return `${out}\u202F${piece.text}`;
++    }
++    return out + piece.text;
++  }
++
++  private skipSpaces() {
++    while (WHITESPACE.test(this.source[this.at] ?? "")) this.at++;
++  }
++
++  private argument(): string {
++    this.skipSpaces();
++    const char = this.source[this.at];
++    if (char === undefined) return "";
++    if (char === "{") {
++      this.at++;
++      return this.sequence(true);
++    }
++    return this.atom().text;
++  }
++
++  private optional(): string | undefined {
++    this.skipSpaces();
++    if (this.source[this.at] !== "[") return undefined;
++    const close = this.source.indexOf("]", this.at);
++    if (close < 0) return undefined;
++    const value = new TexReader(this.source.slice(this.at + 1, close)).read();
++    this.at = close + 1;
++    return value;
++  }
++
++  private atom(): { text: string; textCommand?: boolean } {
++    const char = this.source[this.at] ?? "";
++    if (char === "{") {
++      this.at++;
++      return { text: this.sequence(true) };
++    }
++    if (char === "\\") return this.command();
++    this.at++;
++    if (WHITESPACE.test(char)) {
++      this.skipSpaces();
++      return { text: " " };
++    }
++    if (char === "~") return { text: "\u00A0" };
++    if (char === "&") return { text: " " };
++    if (char === "'") return { text: "′" };
++    if (char === "-") return { text: "−" };
++    return { text: char };
++  }
++
++  private command(): { text: string; textCommand?: boolean } {
++    this.at++;
++    const letters = /^[A-Za-z]+/.exec(this.source.slice(this.at))?.[0];
++    const name = letters ?? this.source[this.at] ?? "";
++    this.at += name.length;
++    if (letters) {
++      // A control word swallows the spaces after it.
++      while (this.source[this.at] === " ") this.at++;
++    }
++    if (TEXT_COMMANDS.has(name)) return { text: this.argument(), textCommand: true };
++    if (CONTENT_COMMANDS.has(name)) return { text: this.argument() };
++    if (IGNORED.has(name)) return { text: "" };
++    if (name === "frac" || name === "dfrac" || name === "tfrac" || name === "cfrac") {
++      const top = this.argument();
++      const bottom = this.argument();
++      return { text: `${fractionPart(top)}/${fractionPart(bottom)}` };
++    }
++    if (name === "binom" || name === "dbinom" || name === "tbinom") {
++      const top = this.argument();
++      const bottom = this.argument();
++      return { text: `C(${top.trim()}, ${bottom.trim()})` };
++    }
++    if (name === "sqrt") {
++      const index = this.optional();
++      const value = this.argument().trim();
++      const root = index ? `${script(index.trim(), SUPERSCRIPT, "^")}√` : "√";
++      return { text: root + (Array.from(value).length > 1 ? `(${value})` : value) };
++    }
++    if (name === "mathbb" || name === "mathbbm") {
++      const value = this.argument();
++      return {
++        text: Array.from(value)
++          .map((c) => DOUBLE_STRUCK[c] ?? c)
++          .join(""),
++      };
++    }
++    const accent = ACCENTS[name];
++    if (accent) return { text: this.argument() + accent };
++    if (name === "overset" || name === "underset" || name === "stackrel") {
++      this.argument();
++      return { text: this.argument() };
++    }
++    if (name === "textcolor" || name === "colorbox") {
++      this.argument();
++      return { text: this.argument() };
++    }
++    if (name === "color" || name === "label" || name === "tag" || name === "phantom") {
++      this.argument();
++      return { text: "" };
++    }
++    if (name === "begin" || name === "end") {
++      this.argument();
++      if (name === "begin") this.optional();
++      return { text: " " };
++    }
++    if (name === "not") {
++      const next = this.atom().text;
++      if (next === "=") return { text: "≠" };
++      if (next === "∈") return { text: "∉" };
++      return { text: `${next}\u0338` };
++    }
++    if (FUNCTIONS.has(name)) return { text: name === "bmod" ? " mod " : `${name} ` };
++    const symbol = SYMBOLS[name];
++    if (symbol !== undefined) return { text: SPACED.has(name) ? ` ${symbol} ` : symbol };
++    return { text: name };
++  }
++}
++
++/** Readable text for a TeX formula: "1018.86\text{hPa}" → "1018.86 hPa", "x^2" → "x²". */
++export function texToUnicode(tex: string): string {
++  try {
++    return new TexReader(tex)
++      .read()
++      .replace(/[ \t\n]+/g, " ")
++      .replace(/ ([,.;)\]])/g, "$1")
++      .replace(/([([]) /g, "$1")
++      .trim();
++  } catch {
++    return tex;
++  }
++}
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index 449b9cc3..ae8adf54 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -702,15 +702,24 @@ importers:
+       '@ronradtke/react-native-markdown-display':
+         specifier: 9.0.3
+         version: 9.0.3(@expo/config-plugins@57.0.10(typescript@7.0.2))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
++      katex:
++        specifier: 0.16.47
++        version: 0.16.47
+       linkify-it:
+         specifier: 5.0.2
+         version: 5.0.2
+       react-markdown:
+         specifier: 10.1.0
+         version: 10.1.0(@types/react@19.2.18)(react@19.2.3)
++      rehype-katex:
++        specifier: 7.0.1
++        version: 7.0.1
+       remark-gfm:
+         specifier: 4.0.1
+         version: 4.0.1
++      remark-math:
++        specifier: 6.0.0
++        version: 6.0.0
+     devDependencies:
+       '@types/react':
+         specifier: 19.2.18
+@@ -4117,6 +4126,9 @@ packages:
+   '@types/json-schema@7.0.15':
+     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
+ 
++  '@types/katex@0.16.8':
++    resolution: {integrity: sha512-trgaNyfU+Xh2Tc+ABIb44a5AYUpicB3uwirOioeOkNPPbmgRNtcWyDeeFRzjPZENO9Vq8gvVqfhaaXWLlevVwg==}
++
+   '@types/keyv@3.1.4':
+     resolution: {integrity: sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==}
+ 
+@@ -5242,6 +5254,10 @@ packages:
+     resolution: {integrity: sha512-QrWXB+ZQSVPmIWIhtEO9H+gwHaMGYiF5ChvoJ+K9ZGHG/sVsa6yiesAD1GC/x46sET00Xlwo1u49RVVVzvcSkw==}
+     engines: {node: '>= 10'}
+ 
++  commander@8.3.0:
++    resolution: {integrity: sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww==}
++    engines: {node: '>= 12'}
++
+   commander@9.5.0:
+     resolution: {integrity: sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==}
+     engines: {node: ^12.20.0 || >=14}
+@@ -5816,6 +5832,10 @@ packages:
+     resolution: {integrity: sha512-V0hjH4dGPh9Ao5p0MoRY6BVqtwCjhz6vI5LT8AJ55H+4g9/4vbHx1I54fS0XuclLhDHArPQCiMjDxjaL8fPxhw==}
+     engines: {node: '>=0.12'}
+ 
++  entities@6.0.1:
++    resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
++    engines: {node: '>=0.12'}
++
+   entities@8.0.0:
+     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
+     engines: {node: '>=20.19.0'}
+@@ -6557,9 +6577,24 @@ packages:
+     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
+     engines: {node: '>= 0.4'}
+ 
++  hast-util-from-dom@5.0.1:
++    resolution: {integrity: sha512-N+LqofjR2zuzTjCPzyDUdSshy4Ma6li7p/c3pA78uTwzFgENbgbUrm2ugwsOdcjI1muO+o6Dgzp9p8WHtn/39Q==}
++
++  hast-util-from-html-isomorphic@2.0.0:
++    resolution: {integrity: sha512-zJfpXq44yff2hmE0XmwEOzdWin5xwH+QIhMLOScpX91e/NSGPsAzNCvLQDIEPyO2TXi+lBmU6hjLIhV8MwP2kw==}
++
++  hast-util-from-html@2.0.3:
++    resolution: {integrity: sha512-CUSRHXyKjzHov8yKsQjGOElXy/3EKpyX56ELnkHH34vDVw1N1XSQ1ZcAvTyAPtGqLTuKP/uxM+aLkSPqF/EtMw==}
++
++  hast-util-from-parse5@8.0.3:
++    resolution: {integrity: sha512-3kxEVkEKt0zvcZ3hCRYI8rqrgwtlIOFMWkbclACvjlDw8Li9S2hk/d51OI0nr/gIpdMHNepwgOKqZ/sy0Clpyg==}
++
+   hast-util-is-element@3.0.0:
+     resolution: {integrity: sha512-Val9mnv2IWpLbNPqc/pUem+a7Ipj2aHacCwgNfTiK0vJKl0LF+4Ba4+v1oPHFpf3bLYmreq0/l3Gud9S5OH42g==}
+ 
++  hast-util-parse-selector@4.0.0:
++    resolution: {integrity: sha512-wkQCkSYoOGCRKERFWcxMVMOcYE2K1AaNLU8DXS9arxnLOUEWbOXKXiJUNzEpqZ3JOKpnha3jkFrumEjVliDe7A==}
++
+   hast-util-to-html@9.0.5:
+     resolution: {integrity: sha512-OguPdidb+fbHQSU4Q4ZiLKnzWo8Wwsf5bZfbvu7//a9oTYoqD/fWpe96NuHkoS9h0ccGOTe0C4NGXdtS0iObOw==}
+ 
+@@ -6572,6 +6607,9 @@ packages:
+   hast-util-whitespace@3.0.0:
+     resolution: {integrity: sha512-88JUN06ipLwsnv+dVn+OIYOvAuvBMy/Qoi6O7mQHxdPXpjy+Cd6xRkWwux7DKO+4sYILtLBRIKgsdpS2gQc7qw==}
+ 
++  hastscript@9.0.1:
++    resolution: {integrity: sha512-g7df9rMFX/SPi34tyGCyUBREQoKkapwdY/T04Qn9TDWfHhAYt4/I0gMVirzK5wEzeUqIjEB+LXC/ypb7Aqno5w==}
++
+   hermes-compiler@250829098.0.17:
+     resolution: {integrity: sha512-qG1PXzTEtriF6oQLZF3vyHhSMxOdW5h2TqqLri0rdpstPustd2fSvRZQMVAPdlhgFwBfYnj3OUZtiO6LjYsEFw==}
+ 
+@@ -6950,6 +6988,10 @@ packages:
+   jws@4.0.1:
+     resolution: {integrity: sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA==}
+ 
++  katex@0.16.47:
++    resolution: {integrity: sha512-Eeo8Ys1doU1z+x8AZsPpQu+p/QcZBI5PeOo7QGQdy2x2m0MU/hYagBbGOmXwr5KVbEfVuWv9LpnQWeehogurjg==}
++    hasBin: true
++
+   keyv@4.5.4:
+     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
+ 
+@@ -7270,6 +7312,9 @@ packages:
+   mdast-util-gfm@3.1.0:
+     resolution: {integrity: sha512-0ulfdQOM3ysHhCJ1p06l0b0VKlhU0wuQs3thxZQagjcjPrlFRqY215uZGHHJan9GEAXd9MbfPjFJz+qMkVR6zQ==}
+ 
++  mdast-util-math@3.0.0:
++    resolution: {integrity: sha512-Tl9GBNeG/AhJnQM221bJR2HPvLOSnLE/T9cJI9tlc6zwQk2nPk/4f0cHkOdEixQPC/j8UtKDdITswvLAy1OZ1w==}
++
+   mdast-util-mdx-expression@2.0.1:
+     resolution: {integrity: sha512-J6f+9hUp+ldTZqKRSg7Vw5V6MqjATc+3E4gf3CFNcuZNWD8XdyI6zQ8GqH7f8169MM6P7hMBRDVGnn7oHB9kXQ==}
+ 
+@@ -7406,6 +7451,9 @@ packages:
+   micromark-extension-gfm@3.0.0:
+     resolution: {integrity: sha512-vsKArQsicm7t0z2GugkCKtZehqUm31oeGBV/KVSorWSy8ZlNAv7ytjFhvaryUiCUJYqs+NoE6AFhpQvBTM6Q4w==}
+ 
++  micromark-extension-math@3.1.0:
++    resolution: {integrity: sha512-lvEqd+fHjATVs+2v/8kg9i5Q0AP2k85H0WUOwpIVvUML8BapsMvh1XAogmQjOCsLpoKRCVQqEkQBB3NhVBcsOg==}
++
+   micromark-factory-destination@2.0.1:
+     resolution: {integrity: sha512-Xe6rDdJlkmbFRExpTOmRj9N3MaWmbAgdpSrBQvCFqhezUn4AHqJHbaEnfbVYYiexVSs//tqOdY/DxhjdCiJnIA==}
+ 
+@@ -7883,6 +7931,9 @@ packages:
+     resolution: {integrity: sha512-Nt/a5SfCLiTnQAjx3fHlqp8hRgTL3z7kTQZzvIMS9uCAepnCyjpdEc6M/sz69WqMBdaDBw9sF1F1UaHROYzGkQ==}
+     engines: {node: '>=10'}
+ 
++  parse5@7.3.0:
++    resolution: {integrity: sha512-IInvU7fabl34qmi9gY8XOVxhYyMyuH2xUNpb2q8/Y+7552KlejkRvqvD19nMoUW/uQGGbqNpA6Tufu5FL5BZgw==}
++
+   parse5@8.0.1:
+     resolution: {integrity: sha512-z1e/HMG90obSGeidlli3hj7cbocou0/wa5HacvI3ASx34PecNjNQeaHNo5WIZpWofN9kgkqV1q5YvXe3F0FoPw==}
+ 
+@@ -8498,9 +8549,15 @@ packages:
+     resolution: {integrity: sha512-NgRBy2Nx/bE+9F27nVHnqcN5HjyLmecqsqx2PJHu3/IEtADD4WuxuXIVExD5PoSDFVrl78dOonfcOe5O+5nbzQ==}
+     hasBin: true
+ 
++  rehype-katex@7.0.1:
++    resolution: {integrity: sha512-OiM2wrZ/wuhKkigASodFoo8wimG3H12LWQaH8qSPVJn9apWKFSH3YOCtbKpBorTVw/eI7cuT21XBbvwEswbIOA==}
++
+   remark-gfm@4.0.1:
+     resolution: {integrity: sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==}
+ 
++  remark-math@6.0.0:
++    resolution: {integrity: sha512-MMqgnP74Igy+S3WwnhQ7kqGlEerTETXMvJhrUzDikVZ2/uogJCb+WHUg97hK9/jcfc0dkD73s3LN8zU49cTEtA==}
++
+   remark-parse@11.0.0:
+     resolution: {integrity: sha512-FCxlKLNGknS5ba/1lmpYijMUzX2esxW5xQqjWxw2eHFfS2MSdaHVINFmhjo+qN1WhZhNimq0dZATN9pH0IDrpA==}
+ 
+@@ -9288,6 +9345,9 @@ packages:
+   unist-util-position@5.0.0:
+     resolution: {integrity: sha512-fucsC7HjXvkB5R3kTCO7kUjRdrS0BJt3M/FPxmHMBOm8JQi2BsHAHFsy27E0EolP8rp0NzXsJ+jNPyDWvOJZPA==}
+ 
++  unist-util-remove-position@5.0.0:
++    resolution: {integrity: sha512-Hp5Kh3wLxv0PHj9m2yZhhLt58KzPtEYKQQ4yxfYFEO7EvHwzyDYnduhHnY1mDxoqr7VUwVuHXk9RXKIiYS1N8Q==}
++
+   unist-util-stringify-position@4.0.0:
+     resolution: {integrity: sha512-0ASV06AAoKCDkS2+xw5RXJywruurpbC4JZSm7nr7MOt1ojAzvyyaO+UxZf18j8FCF6kmzCZKcAgN/yu2gm2XgQ==}
+ 
+@@ -9447,6 +9507,9 @@ packages:
+       react: 19.2.3
+       react-dom: 19.2.3
+ 
++  vfile-location@5.0.3:
++    resolution: {integrity: sha512-5yXvWDEgqeiYiBe1lbxYF7UMAIm/IcopxMHrMQDq3nvKcjPKIhZklUKL+AE7J7uApI4kwe2snsK+eI6UTj9EHg==}
++
+   vfile-message@4.0.3:
+     resolution: {integrity: sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw==}
+ 
+@@ -9663,6 +9726,9 @@ packages:
+   wcwidth@1.0.1:
+     resolution: {integrity: sha512-XHPEwS0q6TaxcvG85+8EYkbiCux2XtWG2mkc47Ng2A77BQu9+DqIOJldST4HgPkuea7dvKSj5VgX3P1d4rW8Tg==}
+ 
++  web-namespaces@2.0.1:
++    resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
++
+   web-streams-polyfill@3.3.3:
+     resolution: {integrity: sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw==}
+     engines: {node: '>= 8'}
+@@ -13779,6 +13845,8 @@ snapshots:
+ 
+   '@types/json-schema@7.0.15': {}
+ 
++  '@types/katex@0.16.8': {}
++
+   '@types/keyv@3.1.4':
+     dependencies:
+       '@types/node': 24.13.3
+@@ -15111,6 +15179,8 @@ snapshots:
+ 
+   commander@7.2.0: {}
+ 
++  commander@8.3.0: {}
++
+   commander@9.5.0:
+     optional: true
+ 
+@@ -15766,6 +15836,8 @@ snapshots:
+ 
+   entities@4.5.0: {}
+ 
++  entities@6.0.1: {}
++
+   entities@8.0.0: {}
+ 
+   env-paths@2.2.1: {}
+@@ -16670,10 +16742,47 @@ snapshots:
+     dependencies:
+       function-bind: 1.1.2
+ 
++  hast-util-from-dom@5.0.1:
++    dependencies:
++      '@types/hast': 3.0.5
++      hastscript: 9.0.1
++      web-namespaces: 2.0.1
++
++  hast-util-from-html-isomorphic@2.0.0:
++    dependencies:
++      '@types/hast': 3.0.5
++      hast-util-from-dom: 5.0.1
++      hast-util-from-html: 2.0.3
++      unist-util-remove-position: 5.0.0
++
++  hast-util-from-html@2.0.3:
++    dependencies:
++      '@types/hast': 3.0.5
++      devlop: 1.1.0
++      hast-util-from-parse5: 8.0.3
++      parse5: 7.3.0
++      vfile: 6.0.3
++      vfile-message: 4.0.3
++
++  hast-util-from-parse5@8.0.3:
++    dependencies:
++      '@types/hast': 3.0.5
++      '@types/unist': 3.0.3
++      devlop: 1.1.0
++      hastscript: 9.0.1
++      property-information: 7.2.0
++      vfile: 6.0.3
++      vfile-location: 5.0.3
++      web-namespaces: 2.0.1
++
+   hast-util-is-element@3.0.0:
+     dependencies:
+       '@types/hast': 3.0.5
+ 
++  hast-util-parse-selector@4.0.0:
++    dependencies:
++      '@types/hast': 3.0.5
++
+   hast-util-to-html@9.0.5:
+     dependencies:
+       '@types/hast': 3.0.5
+@@ -16719,6 +16828,14 @@ snapshots:
+     dependencies:
+       '@types/hast': 3.0.5
+ 
++  hastscript@9.0.1:
++    dependencies:
++      '@types/hast': 3.0.5
++      comma-separated-tokens: 2.0.3
++      hast-util-parse-selector: 4.0.0
++      property-information: 7.2.0
++      space-separated-tokens: 2.0.2
++
+   hermes-compiler@250829098.0.17: {}
+ 
+   hermes-estree@0.35.0: {}
+@@ -17088,6 +17205,10 @@ snapshots:
+       jwa: 2.0.1
+       safe-buffer: 5.2.1
+ 
++  katex@0.16.47:
++    dependencies:
++      commander: 8.3.0
++
+   keyv@4.5.4:
+     dependencies:
+       json-buffer: 3.0.1
+@@ -17422,6 +17543,18 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
++  mdast-util-math@3.0.0:
++    dependencies:
++      '@types/hast': 3.0.5
++      '@types/mdast': 4.0.4
++      devlop: 1.1.0
++      longest-streak: 3.1.0
++      mdast-util-from-markdown: 2.0.3
++      mdast-util-to-markdown: 2.1.2
++      unist-util-remove-position: 5.0.0
++    transitivePeerDependencies:
++      - supports-color
++
+   mdast-util-mdx-expression@2.0.1:
+     dependencies:
+       '@types/estree-jsx': 1.0.5
+@@ -17764,6 +17897,16 @@ snapshots:
+       micromark-util-combine-extensions: 2.0.1
+       micromark-util-types: 2.0.2
+ 
++  micromark-extension-math@3.1.0:
++    dependencies:
++      '@types/katex': 0.16.8
++      devlop: 1.1.0
++      katex: 0.16.47
++      micromark-factory-space: 2.0.1
++      micromark-util-character: 2.1.1
++      micromark-util-symbol: 2.0.1
++      micromark-util-types: 2.0.2
++
+   micromark-factory-destination@2.0.1:
+     dependencies:
+       micromark-util-character: 2.1.1
+@@ -18236,6 +18379,10 @@ snapshots:
+     dependencies:
+       pngjs: 3.4.0
+ 
++  parse5@7.3.0:
++    dependencies:
++      entities: 6.0.1
++
+   parse5@8.0.1:
+     dependencies:
+       entities: 8.0.0
+@@ -18925,6 +19072,16 @@ snapshots:
+     dependencies:
+       jsesc: 3.1.0
+ 
++  rehype-katex@7.0.1:
++    dependencies:
++      '@types/hast': 3.0.5
++      '@types/katex': 0.16.8
++      hast-util-from-html-isomorphic: 2.0.0
++      hast-util-to-text: 4.0.2
++      katex: 0.16.47
++      unist-util-visit-parents: 6.0.2
++      vfile: 6.0.3
++
+   remark-gfm@4.0.1:
+     dependencies:
+       '@types/mdast': 4.0.4
+@@ -18936,6 +19093,15 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
++  remark-math@6.0.0:
++    dependencies:
++      '@types/mdast': 4.0.4
++      mdast-util-math: 3.0.0
++      micromark-extension-math: 3.1.0
++      unified: 11.0.5
++    transitivePeerDependencies:
++      - supports-color
++
+   remark-parse@11.0.0:
+     dependencies:
+       '@types/mdast': 4.0.4
+@@ -19852,6 +20018,11 @@ snapshots:
+     dependencies:
+       '@types/unist': 3.0.3
+ 
++  unist-util-remove-position@5.0.0:
++    dependencies:
++      '@types/unist': 3.0.3
++      unist-util-visit: 5.1.0
++
+   unist-util-stringify-position@4.0.0:
+     dependencies:
+       '@types/unist': 3.0.3
+@@ -19948,6 +20119,11 @@ snapshots:
+       - '@types/react'
+       - '@types/react-dom'
+ 
++  vfile-location@5.0.3:
++    dependencies:
++      '@types/unist': 3.0.3
++      vfile: 6.0.3
++
+   vfile-message@4.0.3:
+     dependencies:
+       '@types/unist': 3.0.3
+@@ -20174,6 +20350,8 @@ snapshots:
+     dependencies:
+       defaults: 1.0.4
+ 
++  web-namespaces@2.0.1: {}
++
+   web-streams-polyfill@3.3.3: {}
+ 
+   web-vitals@6.2.1: {}
+-- 
+2.47.3
+

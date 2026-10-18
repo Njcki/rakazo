@@ -51,6 +51,7 @@ import {
 } from "./markdown";
 
 import { useMarkdownLinkAppOrigin, useMarkdownLinkCopy } from "./markdown-link-prompt";
+import { normalizeMathMarkdown, texToUnicode } from "./math";
 
 function keepMarkdownLinkToken(_url: string) {
   return true;
@@ -70,6 +71,129 @@ const POP_ISOLATE = "\u2069";
 const markdownParser = createMarkdownIt();
 markdownParser.validateLink = keepMarkdownLinkToken;
 linkifyExplicitUrls(markdownParser);
+mathSyntax(markdownParser as unknown as MarkdownIt);
+
+type MathToken = {
+  content: string;
+  markup: string;
+  block: boolean;
+  map: [number, number] | null;
+};
+type InlineState = {
+  src: string;
+  pos: number;
+  push: (type: string, tag: string, nesting: number) => MathToken;
+};
+type BlockState = {
+  src: string;
+  line: number;
+  blkIndent: number;
+  bMarks: number[];
+  eMarks: number[];
+  tShift: number[];
+  sCount: number[];
+  push: (type: string, tag: string, nesting: number) => MathToken;
+};
+type MathRuler<State> = {
+  before: (name: string, rule: string, fn: State, options?: { alt: string[] }) => void;
+};
+type MarkdownIt = {
+  inline: { ruler: MathRuler<(state: InlineState, silent: boolean) => boolean> };
+  block: {
+    ruler: MathRuler<
+      (state: BlockState, startLine: number, endLine: number, silent: boolean) => boolean
+    >;
+  };
+};
+
+/**
+ * `math_inline` and `math_block` tokens for the canonical math Markdown that
+ * `normalizeMathMarkdown` writes: every unescaped `$` there opens real math.
+ */
+function mathSyntax(md: MarkdownIt) {
+  md.inline.ruler.before("escape", "math_inline", (state: InlineState, silent: boolean) => {
+    const start = state.pos;
+    const src = state.src;
+    if (src.charCodeAt(start) !== 0x24) return false;
+    const marker = src.charCodeAt(start + 1) === 0x24 ? "$$" : "$";
+    let close = src.indexOf(marker, start + marker.length);
+    while (close > 0 && src[close - 1] === "\\") close = src.indexOf(marker, close + 1);
+    if (close < 0) return false;
+    const tex = src.slice(start + marker.length, close);
+    if (!tex.trim()) return false;
+    if (!silent) {
+      const token = state.push("math_inline", "math", 0);
+      token.content = tex;
+      token.markup = marker;
+    }
+    state.pos = close + marker.length;
+    return true;
+  });
+  md.block.ruler.before(
+    "fence",
+    "math_block",
+    (state: BlockState, startLine: number, endLine: number, silent: boolean) => {
+      if ((state.sCount[startLine] ?? 0) - state.blkIndent >= 4) return false;
+      const lineText = (line: number) =>
+        state.src.slice(
+          (state.bMarks[line] ?? 0) + (state.tShift[line] ?? 0),
+          state.eMarks[line] ?? 0,
+        );
+      const first = lineText(startLine).trimEnd();
+      if (!first.startsWith("$$")) return false;
+      let tex: string;
+      let last = startLine;
+      const rest = first.slice(2);
+      if (rest.trim() !== "") {
+        // `$$x$$` on one line.
+        if (!rest.endsWith("$$") || rest.slice(0, -2).includes("$$")) return false;
+        tex = rest.slice(0, -2);
+      } else {
+        const lines: string[] = [];
+        let closed = false;
+        for (let line = startLine + 1; line < endLine; line++) {
+          const text = lineText(line).trimEnd();
+          if (text.endsWith("$$")) {
+            lines.push(text.slice(0, -2));
+            last = line;
+            closed = true;
+            break;
+          }
+          lines.push(text);
+        }
+        if (!closed) return false;
+        tex = lines.join("\n");
+      }
+      if (!tex.trim()) return false;
+      if (silent) return true;
+      state.line = last + 1;
+      const token = state.push("math_block", "math", 0);
+      token.block = true;
+      token.content = tex.trim();
+      token.markup = "$$";
+      token.map = [startLine, state.line];
+      return true;
+    },
+    { alt: ["paragraph", "reference", "blockquote", "list"] },
+  );
+}
+
+/** Draws a display formula. The app supplies one (KaTeX in a WebView); without it the formula reads as text. */
+export type MathBlockRenderer = (props: { tex: string; palette: ColorTokens }) => ReactNode;
+
+export const MathBlockContext = createContext<MathBlockRenderer | null>(null);
+const MathPaletteContext = createContext<ColorTokens>(darkTokens);
+
+function MathBlock({ tex, style }: { tex: string; style: StyleProp<TextStyle> }) {
+  const Renderer = useContext(MathBlockContext);
+  const palette = useContext(MathPaletteContext);
+  if (Renderer) return <Renderer tex={tex} palette={palette} />;
+  return (
+    <Text style={[style, layout.mathFallback]} selectable>
+      {texToUnicode(tex)}
+    </Text>
+  );
+}
 
 // Hebrew, Arabic and the other right-to-left scripts, with their presentation forms.
 const RTL_LETTER =
@@ -720,6 +844,15 @@ const renderRules: RenderRules = {
       {node.content}
     </Text>
   ),
+  // Inline formulas flow with the text as readable Unicode ("1018.86 hPa", "x²").
+  math_inline: (node, _children, parents, styleMap, inherited) => (
+    <Text key={node.key} style={textStyleForParents(inherited, parents, styleMap)}>
+      {texToUnicode(node.content)}
+    </Text>
+  ),
+  math_block: (node, _children, _parent, styleMap) => (
+    <MathBlock key={node.key} tex={node.content} style={styleMap.plain_text} />
+  ),
   table: (node, children, _parent, styleMap) => (
     <TableScrollView key={node.key} table={node} style={styleMap._VIEW_SAFE_table}>
       {children}
@@ -1030,7 +1163,11 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   const openLink = useNativeLinkConfirm();
   const styles = useMemo(() => markdownStyles(palette), [palette]);
   // react-native-markdown-display only knows light/dark; black uses dark chrome + black palette.
-  const markdownScheme = colorScheme === "light" ? "light" : "dark";
+  const markdownScheme: "light" | "dark" = colorScheme === "light" ? "light" : "dark";
+  const source = useMemo(
+    () => normalizeMathMarkdown(repairMarkdownTableDelimiters(children)),
+    [children],
+  );
   const sharedProps = {
     colorScheme: markdownScheme,
     markdownit: markdownParser,
@@ -1044,17 +1181,19 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 
   return (
     <OpenLinkContext.Provider value={openLink}>
-      <View style={layout.wrap}>
-        <LinkFaviconsPausedContext.Provider value={streaming}>
-          {streaming ? (
-            <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-              {repairMarkdownTableDelimiters(children)}
-            </MarkdownStream>
-          ) : (
-            <Markdown {...sharedProps}>{repairMarkdownTableDelimiters(children)}</Markdown>
-          )}
-        </LinkFaviconsPausedContext.Provider>
-      </View>
+      <MathPaletteContext.Provider value={palette}>
+        <View style={layout.wrap}>
+          <LinkFaviconsPausedContext.Provider value={streaming}>
+            {streaming ? (
+              <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+                {source}
+              </MarkdownStream>
+            ) : (
+              <Markdown {...sharedProps}>{source}</Markdown>
+            )}
+          </LinkFaviconsPausedContext.Provider>
+        </View>
+      </MathPaletteContext.Provider>
     </OpenLinkContext.Provider>
   );
 });
@@ -1103,9 +1242,15 @@ const layout = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  mathFallback: {
+    width: "100%",
+    textAlign: "center",
+    fontSize: BODY_FONT_SIZE + 1,
+  },
 });
 
 export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
 export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";
+export { mathToPlainText, normalizeMathMarkdown, texToUnicode } from "./math";

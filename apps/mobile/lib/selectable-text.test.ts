@@ -90,3 +90,11 @@ describe("selectableTextFromMarkdown", () => {
     expect(selectableTextFromMarkdown("a\n\n\n\nb")).toBe("a\n\nb");
   });
 });
+
+describe("selectable text math", () => {
+  it("copies formulas as readable text", () => {
+    expect(selectableTextFromMarkdown("Pressione $1018.86\\text{hPa}$, costa $5 o $10")).toBe(
+      "Pressione 1018.86 hPa, costa $5 o $10",
+    );
+  });
+});

@@ -77,6 +77,8 @@ Funzioni aggiunte rispetto a upstream:
 - Selettori del modello raggruppati per provider.
 - Temi **Sistema / Chiaro / Scuro / Nero**, tema scuro più leggibile, selettore aspetto 2×2.
 - Caricamento modelli selettivo/differito nei parametri bot (filtro `providers` su `models/list`) e selettori lunghi Android nella safe area.
+- Grafici `render_plot` nella chat (interattivi) e formule TeX (KaTeX per i blocchi, testo Unicode in linea).
+- Allegati `.apk` aperti nell'installer di Android (MIME corretto + `REQUEST_INSTALL_PACKAGES`).
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

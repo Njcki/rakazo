@@ -1,13 +1,12 @@
 import type { Me } from "@rakazo/contracts";
 import { Directory, File, Paths } from "expo-file-system";
+import { getContentUriAsync } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import type { ApiRequestContext } from "./api";
 import { captureApiRequestContext, currentApiBase, rpc, selectedSpaceId } from "./api";
 import { artifactCacheSession } from "./artifact-cache-session";
 import { artifactCacheFileName, artifactShareFileName } from "./artifact-file";
-import { getContentUriAsync } from "expo-file-system/legacy";
-import { Platform } from "react-native";
 import { t } from "./i18n";
 import type { ImageSize } from "./inline-image";
 import { createKeyedPromiseCache } from "./inline-image";
@@ -159,9 +158,16 @@ export async function readMobileArtifactText(
 /** FLAG_GRANT_READ_URI_PERMISSION: lets the viewer app read our FileProvider content:// URI. */
 const FLAG_GRANT_READ_URI_PERMISSION = 1;
 
+export const APK_MIME_TYPE = "application/vnd.android.package-archive";
 
-function intentMimeType(mimeType: string): string {
+/**
+ * The type the viewer intent carries. Attachments often arrive as a generic
+ * `application/octet-stream`; an `.apk` must still go out as a package archive, or the
+ * system package installer is offered for `*\/*` and then refuses the file without a word.
+ */
+export function intentMimeType(mimeType: string, fileName = ""): string {
   const normalized = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (fileName.toLowerCase().endsWith(".apk")) return APK_MIME_TYPE;
   if (!normalized || normalized === "application/octet-stream") return "*/*";
   return normalized;
 }
@@ -182,7 +188,9 @@ async function launchAndroidViewer(file: File, mimeType: string): Promise<boolea
   }
   const launch = IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
     data: contentUri,
-    type: intentMimeType(mimeType),
+    // Installing an .apk also needs REQUEST_INSTALL_PACKAGES in the manifest (app.json); with it
+    // Android asks once to allow installs from this app, without it the installer quits silently.
+    type: intentMimeType(mimeType, file.name),
     flags: FLAG_GRANT_READ_URI_PERMISSION,
   }).then(
     () => true,

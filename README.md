@@ -28,7 +28,7 @@ Rakazo is in beta. Learn more at [rakazo.com](https://rakazo.com).
 | Branch | Base | IT | EN |
 |---|---|---|---|
 | `main` | upstream `main` | Copia di upstream senza modifiche. | Untouched mirror of upstream. |
-| [`selfhost-v2`](https://github.com/Njcki/rakazo/tree/selfhost-v2) | upstream `0723154` | Patch web/server per il self-host (20 commit, uno per patch) + `patches-v2/` per l'immagine Docker. | Web/server self-host patches (20 commits, one per patch) + `patches-v2/` to build the Docker image. |
+| [`selfhost-v2`](https://github.com/Njcki/rakazo/tree/selfhost-v2) | upstream `0723154` | Patch web/server per il self-host (21 commit, uno per patch) + `patches-v2/` per l'immagine Docker. | Web/server self-host patches (21 commits, one per patch) + `patches-v2/` to build the Docker image. |
 | [`android-app`](https://github.com/Njcki/rakazo/tree/android-app) | upstream `main` | App Android personale in `apps/mobile` (package `com.rakazo.fork`). | Personal Android app in `apps/mobile` (package `com.rakazo.fork`). |
 
 L'app Android vive nello stesso monorepo, non in un repo separato. / *The Android app lives in the same monorepo, not in a separate repo.*
@@ -50,6 +50,7 @@ L'app Android vive nello stesso monorepo, non in un repo separato. / *The Androi
 | 0015, 0016 | **Impostazioni bot**: «Salva» sempre visibile, divisori tra sezioni, card di Avanzate a filo. | **Bot settings**: always-visible Save, section dividers, flush Advanced cards. |
 | 0018 | Card più scure, campi a riposo bianchi, placeholder più chiari. | Darker cards, white idle fields, lighter placeholders. |
 | 0019, 0020 | Icone sui titoli delle sezioni e delle card di Avanzate. | Icons on section and Advanced card titles. |
+| 0021 | **Formule matematiche**: `$…$`, `$$…$$`, `\(…\)`, `\[…\]` composte con KaTeX (remark-math + rehype-katex); i prezzi tipo «$5 o $10» restano testo. | **Math formulas**: `$…$`, `$$…$$`, `\(…\)`, `\[…\]` typeset with KaTeX (remark-math + rehype-katex); prices like "$5 or $10" stay text. |
 
 Commit upstream fissato / pinned upstream commit: `0723154f23d6622ef0f4accafdd170e1cda808dd` (`patches-v2/PINS`). Dettagli: `patches-v2/CHANGELOG.md`.
 

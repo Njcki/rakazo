@@ -55,3 +55,5 @@ Il rollback alle immagini resta sui tag `0723154-nkN` e sugli snapshot di cutove
 - 0017 plan: keep completed plans visible in sidebar until plan_create replaces them (getDisplayPlan); no nested sub-steps.
 
 - 0018 UI: Advanced cards darker (bg-muted/60); idle NativeSelect/Input/textarea forced white (dark: background) so they do not look disabled.
+
+- 0021 chat: TeX math rendered with remark-math + rehype-katex (shared `packages/chat-ui/src/math.ts` normalizer, Pandoc dollar rules so prices stay text). First patch that adds npm packages: it carries the `pnpm-lock.yaml` hunk and the Dockerfile now runs `pnpm install --frozen-lockfile --store-dir /pnpm/store` after `git apply`.

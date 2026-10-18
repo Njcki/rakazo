@@ -560,3 +560,24 @@ describe("web external link confirmation", () => {
     await view.cleanup();
   });
 });
+
+describe("web math", () => {
+  it("typesets inline and display TeX with KaTeX and keeps prices as text", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>
+        {"Pressione $1018.86\\text{hPa}$.\n\n$$E=mc^2$$\n\nArea \\(\\pi r^2\\), costa $5 o $10."}
+      </ChatMarkdown>,
+    );
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="katex-display"');
+    expect(html).toContain("hPa");
+    expect(html).not.toContain("$1018.86");
+    expect(html).toContain("costa $5 o $10.");
+  });
+
+  it("leaves dollars in code untouched", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown>{"`echo $HOME $x$`"}</ChatMarkdown>);
+    expect(html).toContain("echo $HOME $x$");
+    expect(html).not.toContain("katex");
+  });
+});

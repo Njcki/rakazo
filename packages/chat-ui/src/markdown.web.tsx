@@ -1,7 +1,10 @@
 import type { MouseEvent, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 import type { HastNode } from "./table-utils";
 import "./markdown.web.css";
 import "./markdown-table.css";
@@ -36,6 +39,17 @@ import {
 } from "./markdown";
 import { useMarkdownLinkCopy } from "./markdown-link-prompt";
 import { MarkdownTable, MarkdownTableSourceContext } from "./markdown-table";
+import { normalizeMathMarkdown } from "./math";
+
+// TeX math: `normalizeMathMarkdown` already decided which `$` open math (prices stay text), so
+// remark-math only sees real formulas. KaTeX errors render the source in red instead of throwing.
+const remarkPlugins = [remarkGfm, remarkMath];
+const katexOptions = {
+  throwOnError: false,
+  strict: "ignore",
+  trust: false,
+  output: "htmlAndMathml",
+} as const;
 
 function preserveSkippedTableText() {
   return (tree: HastNode) => {
@@ -445,7 +459,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   streaming = false,
 }: ChatMarkdownProps) {
   const { request, dialog } = useExternalLinkConfirm();
-  const source = streaming ? closeUnterminatedFence(children) : children;
+  const source = useMemo(
+    () => normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
+    [children, streaming],
+  );
 
   return (
     <ConfirmLinkContext.Provider value={request}>
@@ -456,8 +473,8 @@ export const ChatMarkdown = memo(function ChatMarkdown({
           <MarkdownTableSourceContext.Provider value={source}>
             <ReactMarkdown
               components={components}
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[preserveSkippedTableText]}
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={[preserveSkippedTableText, [rehypeKatex, katexOptions]]}
               skipHtml
               // MarkdownImage decides what an image source may do, so it receives the source as written.
               urlTransform={(url, key) =>
@@ -479,3 +496,4 @@ export type { ChatMarkdownProps, LinkFavicons } from "./markdown";
 export { LinkFaviconsContext, RemoteImagesContext } from "./markdown";
 
 export { MarkdownLinkPromptProvider } from "./markdown-link-prompt";
+export { mathToPlainText, normalizeMathMarkdown, texToUnicode } from "./math";

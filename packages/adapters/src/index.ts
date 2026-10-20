@@ -116,6 +116,7 @@ export * from "./plan-context.js";
 export * from "./scripted-auto-review.js";
 export * from "./scripted-runtime.js";
 export * from "./scripted-voice.js";
+export * from "./searxng-web.js";
 export * from "./secret-migration.js";
 export * from "./secret-persistence.js";
 export * from "./secret-store-factory.js";

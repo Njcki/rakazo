@@ -1,0 +1,814 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 01:26:04 +0200
+Subject: [PATCH] =?UTF-8?q?feat(web):=20Exa=20e=20Serper=20come=203=C2=B0?=
+ =?UTF-8?q?=20e=204=C2=B0=20livello=20di=20web=5Fsearch=20/=20Exa=20and=20?=
+ =?UTF-8?q?Serper=20as=20web=5Fsearch=20tiers=203=20and=204?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: la catena di web_search diventa SearXNG → Tavily → Exa → Serper → DuckDuckGo;
+ogni livello a pagamento si attiva solo se la sua chiave è impostata e viene
+chiamato solo se tutti i livelli precedenti sono andati in errore, in timeout o
+senza risultati. Nuova base comune ApiSearchTier (api-search-tier.ts): POST JSON,
+timeout, mappatura http(s)/deduplica/limite, log «web_search <Nome> call» per ogni
+chiamata (esito, risultati, durata, costo se l'API lo riporta) e passaggio al
+livello successivo; un annullamento dell'utente non fa ripiego.
+- ExaWebProvider (exa-web.ts): POST https://api.exa.ai/search con x-api-key,
+  type auto (EXA_SEARCH_TYPE, es. lite più economico), numResults = limite,
+  highlights brevi (300 caratteri) come snippet, inclusi nel prezzo base fino a
+  10 risultati; costDollars.total finisce nel log. Timeout EXA_TIMEOUT_MS.
+- SerperWebProvider (serper-web.ts): POST https://google.serper.dev/search con
+  X-API-KEY, {q, num, gl, hl} (SERPER_GL / SERPER_HL opzionali), organic[]
+  title/link/snippet → {title, url, snippet}. Timeout SERPER_TIMEOUT_MS.
+WEB_PROVIDER=tavily|exa|serper fa partire la catena da quel livello. Nome
+strumento e web_fetch invariati. Test in exa-serper-web.test.ts (catena completa
+inclusa).
+
+EN: the web_search chain becomes SearXNG → Tavily → Exa → Serper → DuckDuckGo;
+each paid tier is enabled only when its key is set and is called only when every
+earlier tier errored, timed out or found nothing. New shared ApiSearchTier base
+(api-search-tier.ts): JSON POST, timeout, http(s)/dedupe/cap mapping, a "web_search
+<Name> call" log line per call (outcome, results, duration, cost when the API
+reports it) and hand-off to the next tier; a user abort does not fall back.
+- ExaWebProvider (exa-web.ts): POST https://api.exa.ai/search with x-api-key,
+  type auto (EXA_SEARCH_TYPE, e.g. the cheaper lite), numResults = cap, short
+  highlights (300 chars) as snippets, included in the base price up to 10
+  results; costDollars.total goes to the log. Timeout EXA_TIMEOUT_MS.
+- SerperWebProvider (serper-web.ts): POST https://google.serper.dev/search with
+  X-API-KEY, {q, num, gl, hl} (optional SERPER_GL / SERPER_HL), organic[]
+  title/link/snippet → {title, url, snippet}. Timeout SERPER_TIMEOUT_MS.
+WEB_PROVIDER=tavily|exa|serper starts the chain at that tier. Tool name and
+web_fetch unchanged. Tests in exa-serper-web.test.ts (including the whole chain).
+---
+ packages/adapters/src/api-search-tier.ts      | 215 +++++++++++++++
+ packages/adapters/src/exa-serper-web.test.ts  | 246 ++++++++++++++++++
+ packages/adapters/src/exa-web.ts              |  65 +++++
+ packages/adapters/src/index.ts                |   3 +
+ packages/adapters/src/serper-web.ts           |  59 +++++
+ packages/adapters/src/web-provider-factory.ts |  74 ++++--
+ 6 files changed, 641 insertions(+), 21 deletions(-)
+ create mode 100644 packages/adapters/src/api-search-tier.ts
+ create mode 100644 packages/adapters/src/exa-serper-web.test.ts
+ create mode 100644 packages/adapters/src/exa-web.ts
+ create mode 100644 packages/adapters/src/serper-web.ts
+
+diff --git a/packages/adapters/src/api-search-tier.ts b/packages/adapters/src/api-search-tier.ts
+new file mode 100644
+index 00000000..d1605b2d
+--- /dev/null
++++ b/packages/adapters/src/api-search-tier.ts
+@@ -0,0 +1,215 @@
++import type {
++  AdapterContext,
++  WebFetchRequest,
++  WebFetchResult,
++  WebProvider,
++  WebSearchHit,
++  WebSearchRequest,
++} from "@rakazo/adapter-kit";
++import { getLogger } from "@rakazo/logging";
++import { KeylessHttpWebProvider } from "./keyless-http-web.js";
++import { clampMaxResults } from "./web-limits.js";
++
++const DEFAULT_API_TIER_TIMEOUT_MS = 10_000;
++const MAX_API_TIER_RESPONSE_BYTES = 2 * 1024 * 1024;
++
++export type ApiSearchUsage = {
++  outcome: "results" | "empty" | "error";
++  results: number;
++  durationMs: number;
++  error?: string;
++  /** Provider-reported cost of the call when the API returns one (Exa: USD). */
++  costUsd?: number;
++};
++
++export type ApiSearchTierOptions = {
++  apiKey: string;
++  fetch?: typeof globalThis.fetch;
++  /** Per-request timeout; on expiry the search falls back. Default 10 s. */
++  timeoutMs?: number;
++  /** Override for tests or a proxy. */
++  endpoint?: string;
++  /** Next tier for search, and the provider used for every `fetch`. Default: keyless HTTP. */
++  fallback?: WebProvider;
++  /** Called after every paid call. Default: an `info` log line `web_search <Label> call`. */
++  onUsage?: (usage: ApiSearchUsage) => void;
++  /** Called when a search falls back. Default: a `warn` log line. */
++  onFallback?: (reason: string) => void;
++};
++
++export type ApiSearchRequestInit = { headers: Record<string, string>; body: unknown };
++
++/**
++ * Shared shape of a keyed JSON search API used as a fallback tier: POST one JSON request,
++ * map the response to hits, log every call (each one spends credits), and hand the search to
++ * the next tier when the API errors, times out or returns nothing. A caller abort is final.
++ */
++export abstract class ApiSearchTier implements WebProvider {
++  protected abstract readonly id: string;
++  protected abstract readonly label: string;
++  protected abstract readonly defaultEndpoint: string;
++  protected readonly apiKey: string;
++  private readonly fetchImpl: typeof globalThis.fetch;
++  private readonly timeoutMs: number;
++  private readonly endpointOverride?: string;
++  private readonly fallback: WebProvider;
++  private readonly onUsageOption?: (usage: ApiSearchUsage) => void;
++  private readonly onFallbackOption?: (reason: string) => void;
++
++  constructor(options: ApiSearchTierOptions, keyName: string) {
++    const apiKey = options.apiKey.trim();
++    if (!apiKey) throw new Error(`${keyName} is empty`);
++    this.apiKey = apiKey;
++    this.fetchImpl = options.fetch ?? globalThis.fetch;
++    this.timeoutMs =
++      options.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_API_TIER_TIMEOUT_MS;
++    this.endpointOverride = options.endpoint;
++    this.fallback = options.fallback ?? new KeylessHttpWebProvider();
++    this.onUsageOption = options.onUsage;
++    this.onFallbackOption = options.onFallback;
++  }
++
++  protected abstract buildRequest(query: string, maxResults: number): ApiSearchRequestInit;
++  protected abstract parse(payload: unknown, maxResults: number): WebSearchHit[];
++  protected costOf(_payload: unknown): number | undefined {
++    return undefined;
++  }
++
++  describe() {
++    return {
++      id: this.id,
++      contractVersion: "1",
++      adapterVersion: "0.1.0",
++      capabilities: {
++        search: true,
++        fetch: true,
++        keyless: false,
++        native: false,
++        readability: true,
++      },
++    };
++  }
++
++  async search(request: WebSearchRequest, context: AdapterContext): Promise<WebSearchHit[]> {
++    const query = request.query.trim();
++    if (!query) throw new Error("query is required");
++    const maxResults = clampMaxResults(request.maxResults);
++    const signal = request.signal ?? context.signal;
++    const started = Date.now();
++    let reason: string;
++    try {
++      const { hits, costUsd } = await this.call(query, maxResults, signal);
++      this.reportUsage({
++        outcome: hits.length > 0 ? "results" : "empty",
++        results: hits.length,
++        durationMs: Date.now() - started,
++        ...(costUsd === undefined ? {} : { costUsd }),
++      });
++      if (hits.length > 0) return hits;
++      reason = "no results";
++    } catch (error) {
++      reason = error instanceof Error ? error.message : String(error);
++      this.reportUsage({
++        outcome: "error",
++        results: 0,
++        durationMs: Date.now() - started,
++        error: reason,
++      });
++      if (signal?.aborted) throw error;
++    }
++    if (this.onFallbackOption) this.onFallbackOption(reason);
++    else getLogger().warn(`web_search ${this.label} fallback`, { reason });
++    try {
++      return await this.fallback.search({ ...request, query, maxResults }, context);
++    } catch (error) {
++      const message = error instanceof Error ? error.message : String(error);
++      throw new Error(`${this.label}: ${reason}; fallback: ${message}`);
++    }
++  }
++
++  fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
++    return this.fallback.fetch(request, context);
++  }
++
++  private reportUsage(usage: ApiSearchUsage) {
++    if (this.onUsageOption) this.onUsageOption(usage);
++    else getLogger().info(`web_search ${this.label} call`, { ...usage, provider: this.id });
++  }
++
++  private async call(
++    query: string,
++    maxResults: number,
++    signal: AbortSignal | undefined,
++  ): Promise<{ hits: WebSearchHit[]; costUsd?: number }> {
++    const init = this.buildRequest(query, maxResults);
++    const timeout = AbortSignal.timeout(this.timeoutMs);
++    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
++    let response: Response;
++    try {
++      response = await this.fetchImpl(this.endpointOverride ?? this.defaultEndpoint, {
++        method: "POST",
++        headers: {
++          accept: "application/json",
++          "content-type": "application/json",
++          ...init.headers,
++        },
++        body: JSON.stringify(init.body),
++        redirect: "error",
++        signal: combined,
++      });
++    } catch (error) {
++      if (timeout.aborted && !signal?.aborted) {
++        throw new Error(`timed out after ${this.timeoutMs} ms`);
++      }
++      throw error;
++    }
++    if (!response.ok) {
++      await response.body?.cancel().catch(() => {});
++      throw new Error(`HTTP ${response.status}`);
++    }
++    const text = await response.text();
++    if (text.length > MAX_API_TIER_RESPONSE_BYTES) throw new Error("response too large");
++    let payload: unknown;
++    try {
++      payload = JSON.parse(text);
++    } catch {
++      throw new Error("response is not JSON");
++    }
++    return { hits: this.parse(payload, maxResults), costUsd: this.costOf(payload) };
++  }
++}
++
++/** Map `items[]` to hits with the given field names: http(s) only, deduped, capped, whitespace-normalized. */
++export function mapSearchItems(
++  items: unknown,
++  maxResults: number,
++  pick: (record: Record<string, unknown>) => { title: unknown; url: unknown; snippet: unknown },
++): WebSearchHit[] {
++  if (!Array.isArray(items)) throw new Error("response has no results array");
++  const hits: WebSearchHit[] = [];
++  const seen = new Set<string>();
++  for (const item of items) {
++    if (!item || typeof item !== "object") continue;
++    const fields = pick(item as Record<string, unknown>);
++    if (typeof fields.url !== "string") continue;
++    let url: string;
++    try {
++      const parsed = new URL(fields.url);
++      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
++      url = parsed.href;
++    } catch {
++      continue;
++    }
++    if (seen.has(url)) continue;
++    seen.add(url);
++    const title = normalize(typeof fields.title === "string" ? fields.title : "") || url;
++    const snippet = normalize(typeof fields.snippet === "string" ? fields.snippet : "");
++    hits.push({ title, url, snippet });
++    if (hits.length >= maxResults) break;
++  }
++  return hits;
++}
++
++function normalize(text: string): string {
++  return text.replace(/\s+/g, " ").trim();
++}
+diff --git a/packages/adapters/src/exa-serper-web.test.ts b/packages/adapters/src/exa-serper-web.test.ts
+new file mode 100644
+index 00000000..64831732
+--- /dev/null
++++ b/packages/adapters/src/exa-serper-web.test.ts
+@@ -0,0 +1,246 @@
++import type { AdapterContext } from "@rakazo/adapter-kit";
++import { describe, expect, it } from "vitest";
++import type { ApiSearchUsage } from "./api-search-tier.js";
++import { EXA_SEARCH_ENDPOINT, ExaWebProvider, parseExaResults } from "./exa-web.js";
++import { FakeWebProvider } from "./fake-web.js";
++import { SearxngWebProvider } from "./searxng-web.js";
++import { parseSerperResults, SERPER_SEARCH_ENDPOINT, SerperWebProvider } from "./serper-web.js";
++import { TavilyWebProvider } from "./tavily-web.js";
++import { createWebProvider, resolveWebProviderKind } from "./web-provider-factory.js";
++
++const ctx: AdapterContext = {
++  operationId: "1",
++  traceId: "1",
++  spaceId: "w",
++  userId: "u",
++  signal: new AbortController().signal,
++};
++
++function jsonResponse(body: unknown, status = 200): Response {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { "content-type": "application/json" },
++  });
++}
++
++type Seen = { url: string; headers: Record<string, string>; body: Record<string, unknown> };
++
++function capture(response: () => Response) {
++  const seen: Seen[] = [];
++  const fetchImpl: typeof fetch = async (input, init) => {
++    seen.push({
++      url: String(input),
++      headers: init?.headers as Record<string, string>,
++      body: JSON.parse(String(init?.body)),
++    });
++    return response();
++  };
++  return { seen, fetchImpl };
++}
++
++function fallbackFake() {
++  const fallback = new FakeWebProvider();
++  fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/", snippet: "" }];
++  return fallback;
++}
++
++describe("Exa tier", () => {
++  it("parses results with highlights (or text) as snippet", () => {
++    expect(
++      parseExaResults(
++        {
++          results: [
++            { title: "A", url: "https://a.test/", highlights: ["one", "two"] },
++            { title: "B", url: "https://b.test/", text: "x".repeat(400) },
++            { title: "bad", url: "mailto:x@y.z" },
++          ],
++        },
++        5,
++      ),
++    ).toEqual([
++      { title: "A", url: "https://a.test/", snippet: "one … two" },
++      { title: "B", url: "https://b.test/", snippet: "x".repeat(300) },
++    ]);
++  });
++
++  it("POSTs type auto, numResults = cap and short highlights with x-api-key; logs cost", async () => {
++    const { seen, fetchImpl } = capture(() =>
++      jsonResponse({
++        results: [{ title: "E", url: "https://e.test/", highlights: ["h"] }],
++        costDollars: { total: 0.007 },
++      }),
++    );
++    const usage: ApiSearchUsage[] = [];
++    const exa = new ExaWebProvider({
++      apiKey: "exa-k",
++      fetch: fetchImpl,
++      onUsage: (u) => usage.push(u),
++    });
++    await expect(exa.search({ query: " q ", maxResults: 6 }, ctx)).resolves.toEqual([
++      { title: "E", url: "https://e.test/", snippet: "h" },
++    ]);
++    expect(seen[0]?.url).toBe(EXA_SEARCH_ENDPOINT);
++    expect(seen[0]?.headers["x-api-key"]).toBe("exa-k");
++    expect(seen[0]?.body).toEqual({
++      query: "q",
++      type: "auto",
++      numResults: 6,
++      contents: { highlights: { maxCharacters: 300 } },
++    });
++    expect(usage).toEqual([
++      expect.objectContaining({ outcome: "results", results: 1, costUsd: 0.007 }),
++    ]);
++  });
++
++  it("falls back on errors and empty results", async () => {
++    for (const [response, reason] of [
++      [() => new Response("", { status: 402 }), "HTTP 402"],
++      [() => jsonResponse({ results: [] }), "no results"],
++    ] as const) {
++      const reasons: string[] = [];
++      const fallback = fallbackFake();
++      const exa = new ExaWebProvider({
++        apiKey: "k",
++        fetch: capture(response).fetchImpl,
++        fallback,
++        onUsage: () => {},
++        onFallback: (r) => reasons.push(r),
++      });
++      expect((await exa.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
++      expect(reasons).toEqual([reason]);
++    }
++  });
++
++  it("times out into the fallback", async () => {
++    const hanging: typeof fetch = (_input, init) =>
++      new Promise((_resolve, reject) => {
++        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
++      });
++    const reasons: string[] = [];
++    const exa = new ExaWebProvider({
++      apiKey: "k",
++      fetch: hanging,
++      timeoutMs: 20,
++      fallback: fallbackFake(),
++      onUsage: () => {},
++      onFallback: (r) => reasons.push(r),
++    });
++    expect((await exa.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
++    expect(reasons).toEqual(["timed out after 20 ms"]);
++  });
++});
++
++describe("Serper tier", () => {
++  it("maps organic[] link/snippet and treats a missing organic as empty", () => {
++    expect(
++      parseSerperResults(
++        { organic: [{ title: "G", link: "https://g.test/", snippet: "s", position: 1 }] },
++        5,
++      ),
++    ).toEqual([{ title: "G", url: "https://g.test/", snippet: "s" }]);
++    expect(parseSerperResults({ searchParameters: {} }, 5)).toEqual([]);
++  });
++
++  it("POSTs {q, num, gl, hl} with X-API-KEY", async () => {
++    const { seen, fetchImpl } = capture(() =>
++      jsonResponse({ organic: [{ title: "G", link: "https://g.test/", snippet: "s" }] }),
++    );
++    const usage: ApiSearchUsage[] = [];
++    const serper = new SerperWebProvider({
++      apiKey: "sp-k",
++      fetch: fetchImpl,
++      country: "it",
++      language: "it",
++      onUsage: (u) => usage.push(u),
++    });
++    await expect(serper.search({ query: "q", maxResults: 4 }, ctx)).resolves.toHaveLength(1);
++    expect(seen[0]?.url).toBe(SERPER_SEARCH_ENDPOINT);
++    expect(seen[0]?.headers["x-api-key"]).toBe("sp-k");
++    expect(seen[0]?.body).toEqual({ q: "q", num: 4, gl: "it", hl: "it" });
++    expect(usage[0]).toMatchObject({ outcome: "results", results: 1 });
++  });
++
++  it("omits gl/hl when not configured", async () => {
++    const { seen, fetchImpl } = capture(() => jsonResponse({ organic: [] }));
++    const serper = new SerperWebProvider({
++      apiKey: "k",
++      fetch: fetchImpl,
++      fallback: fallbackFake(),
++      onUsage: () => {},
++      onFallback: () => {},
++    });
++    await serper.search({ query: "q" }, ctx);
++    expect(seen[0]?.body).toEqual({ q: "q", num: 5 });
++  });
++
++  it("rejects an empty key", () => {
++    expect(() => new SerperWebProvider({ apiKey: "" })).toThrow(/SERPER_API_KEY/);
++    expect(() => new ExaWebProvider({ apiKey: " " })).toThrow(/EXA_API_KEY/);
++  });
++});
++
++describe("full chain SearXNG → Tavily → Exa → Serper → DuckDuckGo", () => {
++  it("calls each tier only after every earlier tier failed", async () => {
++    const calls: string[] = [];
++    const ok = new Set<string>();
++    const fetchImpl: typeof fetch = async (input) => {
++      const host = new URL(String(input)).host;
++      calls.push(host);
++      if (!ok.has(host)) return new Response("", { status: 503 });
++      if (host === "google.serper.dev") {
++        return jsonResponse({ organic: [{ title: host, link: "https://r.test/", snippet: "" }] });
++      }
++      return jsonResponse({ results: [{ title: host, url: "https://r.test/", content: "" }] });
++    };
++    const quiet = { onUsage: () => {}, onFallback: () => {} };
++    const ddg = fallbackFake();
++    const serper = new SerperWebProvider({
++      apiKey: "s",
++      fetch: fetchImpl,
++      fallback: ddg,
++      ...quiet,
++    });
++    const exa = new ExaWebProvider({ apiKey: "e", fetch: fetchImpl, fallback: serper, ...quiet });
++    const tavily = new TavilyWebProvider({
++      apiKey: "t",
++      fetch: fetchImpl,
++      fallback: exa,
++      ...quiet,
++    });
++    const chain = new SearxngWebProvider({
++      baseUrl: "http://sx.test",
++      fetch: fetchImpl,
++      fallback: tavily,
++      onFallback: () => {},
++    });
++
++    ok.add("google.serper.dev");
++    expect((await chain.search({ query: "q" }, ctx))[0]?.title).toBe("google.serper.dev");
++    expect(calls).toEqual(["sx.test", "api.tavily.com", "api.exa.ai", "google.serper.dev"]);
++
++    calls.length = 0;
++    ok.add("api.exa.ai");
++    expect((await chain.search({ query: "q" }, ctx))[0]?.title).toBe("api.exa.ai");
++    expect(calls).toEqual(["sx.test", "api.tavily.com", "api.exa.ai"]);
++
++    calls.length = 0;
++    ok.clear();
++    expect((await chain.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
++    expect(calls).toHaveLength(4);
++  });
++
++  it("factory includes only the tiers whose key is set", () => {
++    const env = {
++      SEARXNG_URL: "http://sx.test:8080",
++      EXA_API_KEY: "e",
++      SERPER_API_KEY: "s",
++    };
++    expect(createWebProvider(resolveWebProviderKind(env), undefined, env).describe().id).toBe(
++      "searxng",
++    );
++    expect(resolveWebProviderKind({ WEB_PROVIDER: "Exa" })).toBe("exa");
++    expect(createWebProvider("exa", undefined, env).describe().id).toBe("exa");
++    expect(createWebProvider("serper", undefined, env).describe().id).toBe("serper");
++    expect(() => createWebProvider("serper", undefined, {})).toThrow(/SERPER_API_KEY/);
++  });
++});
+diff --git a/packages/adapters/src/exa-web.ts b/packages/adapters/src/exa-web.ts
+new file mode 100644
+index 00000000..29f289bc
+--- /dev/null
++++ b/packages/adapters/src/exa-web.ts
+@@ -0,0 +1,65 @@
++import type { WebSearchHit } from "@rakazo/adapter-kit";
++import {
++  type ApiSearchRequestInit,
++  ApiSearchTier,
++  type ApiSearchTierOptions,
++  mapSearchItems,
++} from "./api-search-tier.js";
++
++export const EXA_SEARCH_ENDPOINT = "https://api.exa.ai/search";
++const EXA_HIGHLIGHT_CHARS = 300;
++
++export type ExaWebOptions = ApiSearchTierOptions & {
++  /** Exa search type. Default `auto` ($7 / 1k requests); `lite` is $4 / 1k. */
++  searchType?: string;
++};
++
++/**
++ * Exa Search API tier. One request returns up to 10 results with short highlights (contents are
++ * included in the base price up to 10 results), used as snippets.
++ */
++export class ExaWebProvider extends ApiSearchTier {
++  protected readonly id = "exa";
++  protected readonly label = "Exa";
++  protected readonly defaultEndpoint = EXA_SEARCH_ENDPOINT;
++  private readonly searchType: string;
++
++  constructor(options: ExaWebOptions) {
++    super(options, "EXA_API_KEY");
++    this.searchType = options.searchType?.trim() || "auto";
++  }
++
++  protected buildRequest(query: string, maxResults: number): ApiSearchRequestInit {
++    return {
++      headers: { "x-api-key": this.apiKey },
++      body: {
++        query,
++        type: this.searchType,
++        numResults: maxResults,
++        contents: { highlights: { maxCharacters: EXA_HIGHLIGHT_CHARS } },
++      },
++    };
++  }
++
++  protected parse(payload: unknown, maxResults: number): WebSearchHit[] {
++    return parseExaResults(payload, maxResults);
++  }
++
++  protected override costOf(payload: unknown): number | undefined {
++    const total = (payload as { costDollars?: { total?: unknown } } | null)?.costDollars?.total;
++    return typeof total === "number" ? total : undefined;
++  }
++}
++
++/** Exa `results[]`: title, url, highlights[] (or text) → web_search hits. */
++export function parseExaResults(payload: unknown, maxResults: number): WebSearchHit[] {
++  const results =
++    payload && typeof payload === "object" ? (payload as { results?: unknown }).results : undefined;
++  return mapSearchItems(results, maxResults, (record) => {
++    const highlights = Array.isArray(record.highlights)
++      ? record.highlights.filter((h): h is string => typeof h === "string").join(" … ")
++      : "";
++    const text = typeof record.text === "string" ? record.text.slice(0, EXA_HIGHLIGHT_CHARS) : "";
++    return { title: record.title, url: record.url, snippet: highlights || text };
++  });
++}
+diff --git a/packages/adapters/src/index.ts b/packages/adapters/src/index.ts
+index a76dbdb5..2045b607 100644
+--- a/packages/adapters/src/index.ts
++++ b/packages/adapters/src/index.ts
+@@ -1,6 +1,7 @@
+ export * from "./agent-connections.js";
+ export * from "./agent-environment.js";
+ export * from "./ai-consent.js";
++export * from "./api-search-tier.js";
+ export * from "./artifacts.js";
+ export * from "./auto-review.js";
+ export * from "./auto-review-factory.js";
+@@ -57,6 +58,7 @@ export * from "./e2b-emulator.js";
+ export * from "./e2b-sandbox.js";
+ export * from "./elevenlabs-voice.js";
+ export * from "./email-emulator.js";
++export * from "./exa-web.js";
+ export * from "./executor.js";
+ export * from "./expo-push.js";
+ export * from "./fake-browser.js";
+@@ -123,6 +125,7 @@ export * from "./secret-store-factory.js";
+ export * from "./secrets.js";
+ export * from "./sendblue-emulator.js";
+ export { SerenityMemoryProvider } from "./serenity-memory-provider.js";
++export * from "./serper-web.js";
+ export * from "./skill-tools.js";
+ export * from "./smtp-email.js";
+ export * from "./stripe-billing.js";
+diff --git a/packages/adapters/src/serper-web.ts b/packages/adapters/src/serper-web.ts
+new file mode 100644
+index 00000000..400a002a
+--- /dev/null
++++ b/packages/adapters/src/serper-web.ts
+@@ -0,0 +1,59 @@
++import type { WebSearchHit } from "@rakazo/adapter-kit";
++import {
++  type ApiSearchRequestInit,
++  ApiSearchTier,
++  type ApiSearchTierOptions,
++  mapSearchItems,
++} from "./api-search-tier.js";
++
++export const SERPER_SEARCH_ENDPOINT = "https://google.serper.dev/search";
++
++export type SerperWebOptions = ApiSearchTierOptions & {
++  /** Google country code, e.g. `it` (Serper `gl`). */
++  country?: string;
++  /** Google interface language, e.g. `it` (Serper `hl`). */
++  language?: string;
++};
++
++/** Serper (Google results) tier: 1 credit per query up to 10 results. Maps `organic[]`. */
++export class SerperWebProvider extends ApiSearchTier {
++  protected readonly id = "serper";
++  protected readonly label = "Serper";
++  protected readonly defaultEndpoint = SERPER_SEARCH_ENDPOINT;
++  private readonly country?: string;
++  private readonly language?: string;
++
++  constructor(options: SerperWebOptions) {
++    super(options, "SERPER_API_KEY");
++    this.country = options.country?.trim() || undefined;
++    this.language = options.language?.trim() || undefined;
++  }
++
++  protected buildRequest(query: string, maxResults: number): ApiSearchRequestInit {
++    return {
++      headers: { "x-api-key": this.apiKey },
++      body: {
++        q: query,
++        num: maxResults,
++        ...(this.country ? { gl: this.country } : {}),
++        ...(this.language ? { hl: this.language } : {}),
++      },
++    };
++  }
++
++  protected parse(payload: unknown, maxResults: number): WebSearchHit[] {
++    return parseSerperResults(payload, maxResults);
++  }
++}
++
++/** Serper `organic[]`: title, link, snippet → web_search hits. */
++export function parseSerperResults(payload: unknown, maxResults: number): WebSearchHit[] {
++  if (!payload || typeof payload !== "object") throw new Error("response is not an object");
++  // Serper omits `organic` when Google has no web results.
++  const organic = (payload as { organic?: unknown }).organic ?? [];
++  return mapSearchItems(organic, maxResults, (record) => ({
++    title: record.title,
++    url: record.link,
++    snippet: record.snippet,
++  }));
++}
+diff --git a/packages/adapters/src/web-provider-factory.ts b/packages/adapters/src/web-provider-factory.ts
+index 5cef4b24..ffef741b 100644
+--- a/packages/adapters/src/web-provider-factory.ts
++++ b/packages/adapters/src/web-provider-factory.ts
+@@ -1,7 +1,9 @@
+ import type { WebProvider } from "@rakazo/adapter-kit";
++import { ExaWebProvider } from "./exa-web.js";
+ import { FakeWebProvider } from "./fake-web.js";
+ import { KeylessHttpWebProvider } from "./keyless-http-web.js";
+ import { SearxngWebProvider } from "./searxng-web.js";
++import { SerperWebProvider } from "./serper-web.js";
+ import { TavilyWebProvider } from "./tavily-web.js";
+ 
+ /**
+@@ -16,17 +18,19 @@ import { TavilyWebProvider } from "./tavily-web.js";
+  * `WEB_PROVIDER=searxng` requires `SEARXNG_URL`. Optional `SEARXNG_TIMEOUT_MS`,
+  * `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`. Falls back to keyless HTTP search.
+  *
+- * Tavily: with `TAVILY_API_KEY` set it becomes the second tier behind SearXNG
+- * (SearXNG → Tavily → DuckDuckGo); Tavily is only called when SearXNG errors,
+- * times out or finds nothing. `WEB_PROVIDER=tavily` uses Tavily first.
+- * Optional `TAVILY_TIMEOUT_MS`.
++ * Paid fallback tiers, each enabled by its key and each called only when every
++ * earlier tier errored, timed out or found nothing:
++ * SearXNG → Tavily (`TAVILY_API_KEY`) → Exa (`EXA_API_KEY`) → Serper
++ * (`SERPER_API_KEY`) → DuckDuckGo. Optional `TAVILY_TIMEOUT_MS`, `EXA_TIMEOUT_MS`,
++ * `EXA_SEARCH_TYPE` (default auto), `SERPER_TIMEOUT_MS`, `SERPER_GL`, `SERPER_HL`.
++ * `WEB_PROVIDER=tavily|exa|serper` starts the chain at that tier.
+  */
+ export function resolveWebProviderKind(source: NodeJS.ProcessEnv = process.env): string {
+   const raw = source.WEB_PROVIDER?.trim().toLowerCase();
+   if (!raw && source.SEARXNG_URL?.trim()) return "searxng";
+   if (!raw || raw === "keyless" || raw === "keyless-http") return "keyless-http";
+   if (raw === "fake") return "fake";
+-  if (raw === "tavily") return "tavily";
++  if (raw === "tavily" || raw === "exa" || raw === "serper") return raw;
+   return raw;
+ }
+ 
+@@ -45,34 +49,62 @@ export function createWebProvider(
+     case "searxng": {
+       const baseUrl = source.SEARXNG_URL?.trim();
+       if (!baseUrl) throw new Error("WEB_PROVIDER=searxng requires SEARXNG_URL");
+-      const keyless = new KeylessHttpWebProvider(options);
+-      const apiKey = source.TAVILY_API_KEY?.trim();
+       return new SearxngWebProvider({
+         baseUrl,
+         timeoutMs: positiveNumber(source.SEARXNG_TIMEOUT_MS),
+         categories: source.SEARXNG_CATEGORIES,
+         language: source.SEARXNG_LANGUAGE,
+-        fallback: apiKey
+-          ? new TavilyWebProvider({
+-              apiKey,
+-              timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
+-              fallback: keyless,
+-            })
+-          : keyless,
++        fallback: fallbackChain(source, options, "tavily"),
+       });
+     }
+-    case "tavily": {
+-      const apiKey = source.TAVILY_API_KEY?.trim();
+-      if (!apiKey) throw new Error("WEB_PROVIDER=tavily requires TAVILY_API_KEY");
+-      return new TavilyWebProvider({
++    case "tavily":
++    case "exa":
++    case "serper": {
++      const keyName = `${kind.toUpperCase()}_API_KEY`;
++      if (!source[keyName]?.trim()) throw new Error(`WEB_PROVIDER=${kind} requires ${keyName}`);
++      return fallbackChain(source, options, kind);
++    }
++    default:
++      throw new Error(`Unknown web provider "${kind}"`);
++  }
++}
++
++const PAID_TIERS = ["tavily", "exa", "serper"] as const;
++
++/** Paid tiers from `from` onward whose key is set, ending in keyless DuckDuckGo. */
++function fallbackChain(
++  source: NodeJS.ProcessEnv,
++  options: ConstructorParameters<typeof KeylessHttpWebProvider>[0],
++  from: (typeof PAID_TIERS)[number],
++): WebProvider {
++  let next: WebProvider = new KeylessHttpWebProvider(options);
++  for (const tier of PAID_TIERS.slice(PAID_TIERS.indexOf(from)).reverse()) {
++    const apiKey = source[`${tier.toUpperCase()}_API_KEY`]?.trim();
++    if (!apiKey) continue;
++    if (tier === "serper") {
++      next = new SerperWebProvider({
++        apiKey,
++        timeoutMs: positiveNumber(source.SERPER_TIMEOUT_MS),
++        country: source.SERPER_GL,
++        language: source.SERPER_HL,
++        fallback: next,
++      });
++    } else if (tier === "exa") {
++      next = new ExaWebProvider({
++        apiKey,
++        timeoutMs: positiveNumber(source.EXA_TIMEOUT_MS),
++        searchType: source.EXA_SEARCH_TYPE,
++        fallback: next,
++      });
++    } else {
++      next = new TavilyWebProvider({
+         apiKey,
+         timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
+-        fallback: new KeylessHttpWebProvider(options),
++        fallback: next,
+       });
+     }
+-    default:
+-      throw new Error(`Unknown web provider "${kind}"`);
+   }
++  return next;
+ }
+ 
+ function positiveNumber(value: string | undefined): number | undefined {
+-- 
+2.47.3
+

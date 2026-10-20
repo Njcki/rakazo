@@ -1,7 +1,9 @@
 import type { WebProvider } from "@rakazo/adapter-kit";
+import { ExaWebProvider } from "./exa-web.js";
 import { FakeWebProvider } from "./fake-web.js";
 import { KeylessHttpWebProvider } from "./keyless-http-web.js";
 import { SearxngWebProvider } from "./searxng-web.js";
+import { SerperWebProvider } from "./serper-web.js";
 import { TavilyWebProvider } from "./tavily-web.js";
 
 /**
@@ -16,17 +18,19 @@ import { TavilyWebProvider } from "./tavily-web.js";
  * `WEB_PROVIDER=searxng` requires `SEARXNG_URL`. Optional `SEARXNG_TIMEOUT_MS`,
  * `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`. Falls back to keyless HTTP search.
  *
- * Tavily: with `TAVILY_API_KEY` set it becomes the second tier behind SearXNG
- * (SearXNG → Tavily → DuckDuckGo); Tavily is only called when SearXNG errors,
- * times out or finds nothing. `WEB_PROVIDER=tavily` uses Tavily first.
- * Optional `TAVILY_TIMEOUT_MS`.
+ * Paid fallback tiers, each enabled by its key and each called only when every
+ * earlier tier errored, timed out or found nothing:
+ * SearXNG → Tavily (`TAVILY_API_KEY`) → Exa (`EXA_API_KEY`) → Serper
+ * (`SERPER_API_KEY`) → DuckDuckGo. Optional `TAVILY_TIMEOUT_MS`, `EXA_TIMEOUT_MS`,
+ * `EXA_SEARCH_TYPE` (default auto), `SERPER_TIMEOUT_MS`, `SERPER_GL`, `SERPER_HL`.
+ * `WEB_PROVIDER=tavily|exa|serper` starts the chain at that tier.
  */
 export function resolveWebProviderKind(source: NodeJS.ProcessEnv = process.env): string {
   const raw = source.WEB_PROVIDER?.trim().toLowerCase();
   if (!raw && source.SEARXNG_URL?.trim()) return "searxng";
   if (!raw || raw === "keyless" || raw === "keyless-http") return "keyless-http";
   if (raw === "fake") return "fake";
-  if (raw === "tavily") return "tavily";
+  if (raw === "tavily" || raw === "exa" || raw === "serper") return raw;
   return raw;
 }
 
@@ -45,34 +49,62 @@ export function createWebProvider(
     case "searxng": {
       const baseUrl = source.SEARXNG_URL?.trim();
       if (!baseUrl) throw new Error("WEB_PROVIDER=searxng requires SEARXNG_URL");
-      const keyless = new KeylessHttpWebProvider(options);
-      const apiKey = source.TAVILY_API_KEY?.trim();
       return new SearxngWebProvider({
         baseUrl,
         timeoutMs: positiveNumber(source.SEARXNG_TIMEOUT_MS),
         categories: source.SEARXNG_CATEGORIES,
         language: source.SEARXNG_LANGUAGE,
-        fallback: apiKey
-          ? new TavilyWebProvider({
-              apiKey,
-              timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
-              fallback: keyless,
-            })
-          : keyless,
+        fallback: fallbackChain(source, options, "tavily"),
       });
     }
-    case "tavily": {
-      const apiKey = source.TAVILY_API_KEY?.trim();
-      if (!apiKey) throw new Error("WEB_PROVIDER=tavily requires TAVILY_API_KEY");
-      return new TavilyWebProvider({
-        apiKey,
-        timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
-        fallback: new KeylessHttpWebProvider(options),
-      });
+    case "tavily":
+    case "exa":
+    case "serper": {
+      const keyName = `${kind.toUpperCase()}_API_KEY`;
+      if (!source[keyName]?.trim()) throw new Error(`WEB_PROVIDER=${kind} requires ${keyName}`);
+      return fallbackChain(source, options, kind);
     }
     default:
       throw new Error(`Unknown web provider "${kind}"`);
   }
+}
+
+const PAID_TIERS = ["tavily", "exa", "serper"] as const;
+
+/** Paid tiers from `from` onward whose key is set, ending in keyless DuckDuckGo. */
+function fallbackChain(
+  source: NodeJS.ProcessEnv,
+  options: ConstructorParameters<typeof KeylessHttpWebProvider>[0],
+  from: (typeof PAID_TIERS)[number],
+): WebProvider {
+  let next: WebProvider = new KeylessHttpWebProvider(options);
+  for (const tier of PAID_TIERS.slice(PAID_TIERS.indexOf(from)).reverse()) {
+    const apiKey = source[`${tier.toUpperCase()}_API_KEY`]?.trim();
+    if (!apiKey) continue;
+    if (tier === "serper") {
+      next = new SerperWebProvider({
+        apiKey,
+        timeoutMs: positiveNumber(source.SERPER_TIMEOUT_MS),
+        country: source.SERPER_GL,
+        language: source.SERPER_HL,
+        fallback: next,
+      });
+    } else if (tier === "exa") {
+      next = new ExaWebProvider({
+        apiKey,
+        timeoutMs: positiveNumber(source.EXA_TIMEOUT_MS),
+        searchType: source.EXA_SEARCH_TYPE,
+        fallback: next,
+      });
+    } else {
+      next = new TavilyWebProvider({
+        apiKey,
+        timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
+        fallback: next,
+      });
+    }
+  }
+  return next;
 }
 
 function positiveNumber(value: string | undefined): number | undefined {

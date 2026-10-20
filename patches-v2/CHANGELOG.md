@@ -50,5 +50,6 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
 - nk14 (0014): 2026-10-15 — Piano fuori da Avanzate
 - nk15 (0015): 2026-10-15 — sticky Salva (build; cutover light se applicato)
 - nk21 (0021): 2026-10-18 — formule TeX (KaTeX); Dockerfile: `pnpm install --frozen-lockfile --prod=false` dopo i patch (senza `--prod=false` NODE_ENV=production potava le devDependencies, prisma incluso). Cutover con snapshot `20261018T182438`, ~1 min di 502.
+- nk22 (0022): 2026-10-21 — web_search via SearXNG (`SEARXNG_URL` in `.env`, letto da api/worker con `env_file`), fallback DuckDuckGo. Build senza errori; cutover completo con snapshot `20261020T222036` (DB incluso), ~25 s di 502.
 
 Ultimo aggiornamento CHANGELOG: 2026-10-21 (Europe/Rome).

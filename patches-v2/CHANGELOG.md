@@ -28,6 +28,7 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
 | 0019 | 2026-10-16 | UI: icone titoli barra destra | Icone Lucide a sinistra di Nome, Titolo, Descrizione, Notifiche, Avanzate (stile «Piano»). |
 | 0020 | 2026-10-16 | UI: icone card Avanzate | Icone Lucide sui titoli delle card in «Avanzate» (Computer, Lavori aperti, Memoria/Skill, Modello, Ambito memoria, Voce, Strumenti, Credenziali). |
 | 0021 | 2026-10-18 | chat: formule TeX (KaTeX) | `$…$`, `$$…$$`, `\(…\)`, `\[…\]` composte con remark-math + rehype-katex; prezzi tipo «$5 o $10» restano testo (regole Pandoc); nuove dipendenze katex/remark-math/rehype-katex (lockfile nel patch, `pnpm install` nel Dockerfile). |
+| 0022 | 2026-10-21 | web_search: backend SearXNG / SearXNG backend | `SearxngWebProvider` (`packages/adapters/src/searxng-web.ts`): si attiva con `SEARXNG_URL` (o `WEB_PROVIDER=searxng`); opzionali `SEARXNG_TIMEOUT_MS` (10 s), `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`. `results[]` title/url/content → `{title,url,snippet}`; su errore/timeout/0 risultati ripiega su DuckDuckGo HTML. Nome strumento `web_search` e `web_fetch` invariati. Solo api+worker; serve `SEARXNG_URL` in `.env`. Uses a self-hosted SearXNG JSON API for web_search, DuckDuckGo fallback. |
 
 ## Compose (fuori da series/)
 
@@ -50,4 +51,4 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
 - nk15 (0015): 2026-10-15 — sticky Salva (build; cutover light se applicato)
 - nk21 (0021): 2026-10-18 — formule TeX (KaTeX); Dockerfile: `pnpm install --frozen-lockfile --prod=false` dopo i patch (senza `--prod=false` NODE_ENV=production potava le devDependencies, prisma incluso). Cutover con snapshot `20261018T182438`, ~1 min di 502.
 
-Ultimo aggiornamento CHANGELOG: 2026-10-18 (Europe/Rome).
+Ultimo aggiornamento CHANGELOG: 2026-10-21 (Europe/Rome).

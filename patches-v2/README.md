@@ -57,3 +57,5 @@ Il rollback alle immagini resta sui tag `0723154-nkN` e sugli snapshot di cutove
 - 0018 UI: Advanced cards darker (bg-muted/60); idle NativeSelect/Input/textarea forced white (dark: background) so they do not look disabled.
 
 - 0021 chat: TeX math rendered with remark-math + rehype-katex (shared `packages/chat-ui/src/math.ts` normalizer, Pandoc dollar rules so prices stay text). First patch that adds npm packages: it carries the `pnpm-lock.yaml` hunk and the Dockerfile now runs `pnpm install --frozen-lockfile --store-dir /pnpm/store` after `git apply`.
+
+- 0022 web: `web_search` via a self-hosted SearXNG JSON API (`SearxngWebProvider`, `packages/adapters/src/searxng-web.ts`) when `SEARXNG_URL` is set (or `WEB_PROVIDER=searxng`); optional `SEARXNG_TIMEOUT_MS` (default 10 s), `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`. Falls back to DuckDuckGo HTML on error, timeout or zero results; tool names and `web_fetch` unchanged. Runtime-only (api + worker, no web rebuild needed); set e.g. `SEARXNG_URL=http://searxng:8080` in `.env` (api/worker read it via `env_file`).

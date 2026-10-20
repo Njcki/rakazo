@@ -1,0 +1,504 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 00:02:13 +0200
+Subject: [PATCH] feat(web): web_search via SearXNG con fallback DuckDuckGo /
+ web_search via SearXNG with DuckDuckGo fallback
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: nuovo backend SearxngWebProvider (packages/adapters/src/searxng-web.ts) per lo
+strumento web_search (nome invariato). Si attiva con SEARXNG_URL (oppure
+WEB_PROVIDER=searxng, che richiede SEARXNG_URL); opzionali SEARXNG_TIMEOUT_MS
+(default 10 s), SEARXNG_CATEGORIES (es. news) e SEARXNG_LANGUAGE (es. it).
+Interroga <SEARXNG_URL>/search?format=json e mappa results[] title/url/content
+nel formato esistente {title, url, snippet} (solo http/https, deduplicati, max
+risultati come prima). Se SearXNG va in errore, scade, non risponde JSON o
+restituisce zero risultati, la ricerca ripiega sul backend keyless DuckDuckGo
+HTML; se l'utente annulla, nessun ripiego. web_fetch resta quello keyless
+(Readability con guardia SSRF). L'URL di SearXNG è configurazione dell'operatore
+ed è quasi sempre privato, quindi viene chiamato direttamente senza la guardia
+SSRF degli URL pubblici. Test unitari in searxng-web.test.ts.
+
+EN: new SearxngWebProvider backend (packages/adapters/src/searxng-web.ts) for the
+web_search tool (name unchanged). Enabled by SEARXNG_URL (or WEB_PROVIDER=searxng,
+which requires SEARXNG_URL); optional SEARXNG_TIMEOUT_MS (default 10 s),
+SEARXNG_CATEGORIES (e.g. news) and SEARXNG_LANGUAGE (e.g. it). It queries
+<SEARXNG_URL>/search?format=json and maps results[] title/url/content to the
+existing {title, url, snippet} shape (http/https only, deduplicated, same result
+cap). When SearXNG errors, times out, returns non-JSON or zero results, search
+falls back to the keyless DuckDuckGo HTML backend; a user abort does not fall
+back. web_fetch stays the keyless one (Readability behind the SSRF guard). The
+SearXNG URL is operator configuration and usually private, so it is called
+directly rather than through the public-URL SSRF guard. Unit tests in
+searxng-web.test.ts.
+---
+ packages/adapters/src/index.ts                |   1 +
+ packages/adapters/src/searxng-web.test.ts     | 183 ++++++++++++++++
+ packages/adapters/src/searxng-web.ts          | 197 ++++++++++++++++++
+ packages/adapters/src/web-provider-factory.ts |  19 ++
+ 4 files changed, 400 insertions(+)
+ create mode 100644 packages/adapters/src/searxng-web.test.ts
+ create mode 100644 packages/adapters/src/searxng-web.ts
+
+diff --git a/packages/adapters/src/index.ts b/packages/adapters/src/index.ts
+index 5f66ac0e..f763516b 100644
+--- a/packages/adapters/src/index.ts
++++ b/packages/adapters/src/index.ts
+@@ -116,6 +116,7 @@ export * from "./plan-context.js";
+ export * from "./scripted-auto-review.js";
+ export * from "./scripted-runtime.js";
+ export * from "./scripted-voice.js";
++export * from "./searxng-web.js";
+ export * from "./secret-migration.js";
+ export * from "./secret-persistence.js";
+ export * from "./secret-store-factory.js";
+diff --git a/packages/adapters/src/searxng-web.test.ts b/packages/adapters/src/searxng-web.test.ts
+new file mode 100644
+index 00000000..daadf317
+--- /dev/null
++++ b/packages/adapters/src/searxng-web.test.ts
+@@ -0,0 +1,183 @@
++import type { AdapterContext } from "@rakazo/adapter-kit";
++import { describe, expect, it } from "vitest";
++import { FakeWebProvider } from "./fake-web.js";
++import { parseSearxngResults, SearxngWebProvider, searxngSearchEndpoint } from "./searxng-web.js";
++import { createWebProvider, resolveWebProviderKind } from "./web-provider-factory.js";
++
++const ctx: AdapterContext = {
++  operationId: "1",
++  traceId: "1",
++  spaceId: "w",
++  userId: "u",
++  signal: new AbortController().signal,
++};
++
++const BASE = "http://searxng.test:8080";
++
++function jsonResponse(body: unknown, status = 200): Response {
++  return new Response(JSON.stringify(body), {
++    status,
++    headers: { "content-type": "application/json" },
++  });
++}
++
++function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number } = {}) {
++  const fallback = new FakeWebProvider();
++  fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
++  const reasons: string[] = [];
++  const provider = new SearxngWebProvider({
++    baseUrl: BASE,
++    fetch: fetchImpl,
++    fallback,
++    onFallback: (reason) => reasons.push(reason),
++    categories: "news",
++    language: "it",
++    ...extra,
++  });
++  return { provider, fallback, reasons };
++}
++
++describe("SearXNG endpoint and parsing", () => {
++  it("builds the /search endpoint from a base URL", () => {
++    expect(searxngSearchEndpoint("http://h:8080").href).toBe("http://h:8080/search");
++    expect(searxngSearchEndpoint("http://h:8080/sx/").href).toBe("http://h:8080/sx/search");
++    expect(searxngSearchEndpoint("http://h:8080/search?x=1").href).toBe("http://h:8080/search");
++    expect(() => searxngSearchEndpoint("ftp://h")).toThrow(/http/);
++    expect(() => searxngSearchEndpoint("not a url")).toThrow(/SEARXNG_URL/);
++  });
++
++  it("maps title/url/content, keeps http(s) only, dedupes and caps", () => {
++    const hits = parseSearxngResults(
++      {
++        results: [
++          { title: "  Alpha\n news ", url: "https://a.test/1", content: "Snippet\t A" },
++          { title: "Dup", url: "https://a.test/1", content: "again" },
++          { title: "Bad", url: "javascript:alert(1)" },
++          { title: "No url" },
++          { url: "https://b.test/", content: 3 },
++          { title: "C", url: "https://c.test/", content: "c" },
++        ],
++      },
++      2,
++    );
++    expect(hits).toEqual([
++      { title: "Alpha news", url: "https://a.test/1", snippet: "Snippet A" },
++      { title: "https://b.test/", url: "https://b.test/", snippet: "" },
++    ]);
++  });
++
++  it("rejects a payload without results[]", () => {
++    expect(() => parseSearxngResults({ error: "x" }, 5)).toThrow(/results/);
++  });
++});
++
++describe("SearXNG web provider", () => {
++  it("queries the JSON API with categories/language and returns mapped hits", async () => {
++    let requested = "";
++    const { provider, reasons } = setup(async (input) => {
++      requested = String(input);
++      return jsonResponse({
++        results: [
++          { title: "One", url: "https://one.test/", content: "first" },
++          { title: "Two", url: "https://two.test/", content: "second" },
++        ],
++      });
++    });
++    const hits = await provider.search({ query: " meteo roma ", maxResults: 5 }, ctx);
++    expect(hits.map((h) => h.title)).toEqual(["One", "Two"]);
++    const url = new URL(requested);
++    expect(url.origin + url.pathname).toBe(`${BASE}/search`);
++    expect(Object.fromEntries(url.searchParams)).toEqual({
++      q: "meteo roma",
++      format: "json",
++      categories: "news",
++      language: "it",
++    });
++    expect(reasons).toEqual([]);
++  });
++
++  it("falls back to the keyless backend on HTTP errors", async () => {
++    const { provider, fallback, reasons } = setup(async () => new Response("no", { status: 429 }));
++    const hits = await provider.search({ query: "q", maxResults: 3 }, ctx);
++    expect(hits[0]?.title).toBe("DDG");
++    expect(fallback.lastSearch).toMatchObject({ query: "q", maxResults: 3 });
++    expect(reasons).toEqual(["HTTP 429"]);
++  });
++
++  it("falls back on network errors, non-JSON bodies and empty results", async () => {
++    for (const [impl, reason] of [
++      [
++        async () => {
++          throw new TypeError("fetch failed");
++        },
++        "fetch failed",
++      ],
++      [async () => new Response("<html>captcha</html>", { status: 200 }), "response is not JSON"],
++      [async () => jsonResponse({ results: [] }), "no results"],
++    ] as const) {
++      const { provider, reasons } = setup(impl as typeof fetch);
++      await expect(provider.search({ query: "q" }, ctx)).resolves.toHaveLength(1);
++      expect(reasons[0]).toContain(reason);
++    }
++  });
++
++  it("falls back when SearXNG does not answer before the timeout", async () => {
++    const hanging: typeof fetch = (_input, init) =>
++      new Promise((_resolve, reject) => {
++        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
++      });
++    const { provider, reasons } = setup(hanging, { timeoutMs: 30 });
++    const started = Date.now();
++    const hits = await provider.search({ query: "q" }, ctx);
++    expect(hits[0]?.title).toBe("DDG");
++    expect(Date.now() - started).toBeLessThan(2_000);
++    expect(reasons).toEqual(["timed out after 30 ms"]);
++  });
++
++  it("does not fall back when the caller aborted", async () => {
++    const controller = new AbortController();
++    const hanging: typeof fetch = (_input, init) =>
++      new Promise((_resolve, reject) => {
++        init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
++      });
++    const { provider, fallback } = setup(hanging);
++    const pending = provider.search({ query: "q", signal: controller.signal }, ctx);
++    controller.abort();
++    await expect(pending).rejects.toThrow("aborted");
++    expect(fallback.lastSearch).toBeUndefined();
++  });
++
++  it("reports both failures when the fallback also fails", async () => {
++    const { provider, fallback } = setup(async () => new Response("", { status: 502 }));
++    fallback.searchError = new Error("captcha");
++    await expect(provider.search({ query: "q" }, ctx)).rejects.toThrow(
++      "SearXNG: HTTP 502; fallback: captcha",
++    );
++  });
++
++  it("delegates web_fetch to the fallback provider unchanged", async () => {
++    const { provider, fallback } = setup(async () => jsonResponse({ results: [] }));
++    fallback.fetchResult = { url: "https://p.test/", title: "P", text: "body", truncated: false };
++    await expect(provider.fetch({ url: "https://p.test/" }, ctx)).resolves.toEqual(
++      fallback.fetchResult,
++    );
++  });
++});
++
++describe("web provider factory with SearXNG", () => {
++  it("selects searxng from SEARXNG_URL or WEB_PROVIDER=searxng", () => {
++    expect(resolveWebProviderKind({ SEARXNG_URL: BASE })).toBe("searxng");
++    expect(resolveWebProviderKind({ WEB_PROVIDER: "SearXNG", SEARXNG_URL: BASE })).toBe("searxng");
++    expect(resolveWebProviderKind({ WEB_PROVIDER: "keyless", SEARXNG_URL: BASE })).toBe(
++      "keyless-http",
++    );
++    expect(resolveWebProviderKind({ SEARXNG_URL: "  " })).toBe("keyless-http");
++    expect(createWebProvider("searxng", undefined, { SEARXNG_URL: BASE }).describe().id).toBe(
++      "searxng",
++    );
++  });
++
++  it("requires SEARXNG_URL for WEB_PROVIDER=searxng", () => {
++    expect(() => createWebProvider("searxng", undefined, {})).toThrow(/SEARXNG_URL/);
++  });
++});
+diff --git a/packages/adapters/src/searxng-web.ts b/packages/adapters/src/searxng-web.ts
+new file mode 100644
+index 00000000..432ab6cd
+--- /dev/null
++++ b/packages/adapters/src/searxng-web.ts
+@@ -0,0 +1,197 @@
++import type {
++  AdapterContext,
++  WebFetchRequest,
++  WebFetchResult,
++  WebProvider,
++  WebSearchHit,
++  WebSearchRequest,
++} from "@rakazo/adapter-kit";
++import { getLogger } from "@rakazo/logging";
++import { KeylessHttpWebProvider } from "./keyless-http-web.js";
++import { clampMaxResults } from "./web-limits.js";
++
++const DEFAULT_SEARXNG_TIMEOUT_MS = 10_000;
++const MAX_SEARXNG_RESPONSE_BYTES = 2 * 1024 * 1024;
++
++export type SearxngWebOptions = {
++  /** SearXNG base URL, e.g. `http://searxng:8080` (the instance must enable `format=json`). */
++  baseUrl: string;
++  fetch?: typeof globalThis.fetch;
++  /** Per-request timeout for SearXNG; on expiry the search falls back. Default 10 s. */
++  timeoutMs?: number;
++  /** Optional SearXNG `categories` (e.g. `general`, `news`). */
++  categories?: string;
++  /** Optional SearXNG `language` (e.g. `it`, `en-US`, `all`). */
++  language?: string;
++  /**
++   * Used for every `fetch` (web_fetch stays the keyless Readability fetch) and as the search
++   * fallback when SearXNG errors, times out or returns no results. Default: keyless HTTP
++   * (DuckDuckGo HTML).
++   */
++  fallback?: WebProvider;
++  /** Called when a search falls back. Default: a `warn` log line. */
++  onFallback?: (reason: string) => void;
++};
++
++/**
++ * Web provider backed by a self-hosted SearXNG JSON API, with keyless fallback.
++ *
++ * The base URL comes from operator configuration (`SEARXNG_URL`), so it is fetched directly
++ * (it is usually a private address that the public-URL SSRF guard would refuse); result URLs
++ * are only returned to the model, never fetched here, and must be http(s).
++ */
++export class SearxngWebProvider implements WebProvider {
++  private readonly endpoint: URL;
++  private readonly fetchImpl: typeof globalThis.fetch;
++  private readonly timeoutMs: number;
++  private readonly categories?: string;
++  private readonly language?: string;
++  private readonly fallback: WebProvider;
++  private readonly onFallback: (reason: string) => void;
++
++  constructor(options: SearxngWebOptions) {
++    this.endpoint = searxngSearchEndpoint(options.baseUrl);
++    this.fetchImpl = options.fetch ?? globalThis.fetch;
++    this.timeoutMs =
++      options.timeoutMs && options.timeoutMs > 0 ? options.timeoutMs : DEFAULT_SEARXNG_TIMEOUT_MS;
++    this.categories = options.categories?.trim() || undefined;
++    this.language = options.language?.trim() || undefined;
++    this.fallback = options.fallback ?? new KeylessHttpWebProvider();
++    this.onFallback =
++      options.onFallback ??
++      ((reason) => getLogger().warn("web_search SearXNG fallback", { reason }));
++  }
++
++  describe() {
++    return {
++      id: "searxng",
++      contractVersion: "1",
++      adapterVersion: "0.1.0",
++      capabilities: {
++        search: true,
++        fetch: true,
++        keyless: true,
++        native: false,
++        readability: true,
++      },
++    };
++  }
++
++  async search(request: WebSearchRequest, context: AdapterContext): Promise<WebSearchHit[]> {
++    const query = request.query.trim();
++    if (!query) throw new Error("query is required");
++    const maxResults = clampMaxResults(request.maxResults);
++    const signal = request.signal ?? context.signal;
++    let reason: string;
++    try {
++      const hits = await this.searchSearxng(query, maxResults, signal);
++      if (hits.length > 0) return hits;
++      reason = "no results";
++    } catch (error) {
++      if (signal?.aborted) throw error;
++      reason = error instanceof Error ? error.message : String(error);
++    }
++    this.onFallback(reason);
++    try {
++      return await this.fallback.search({ ...request, query, maxResults }, context);
++    } catch (error) {
++      const message = error instanceof Error ? error.message : String(error);
++      throw new Error(`SearXNG: ${reason}; fallback: ${message}`);
++    }
++  }
++
++  fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
++    return this.fallback.fetch(request, context);
++  }
++
++  private async searchSearxng(
++    query: string,
++    maxResults: number,
++    signal: AbortSignal | undefined,
++  ): Promise<WebSearchHit[]> {
++    const url = new URL(this.endpoint);
++    url.searchParams.set("q", query);
++    url.searchParams.set("format", "json");
++    if (this.categories) url.searchParams.set("categories", this.categories);
++    if (this.language) url.searchParams.set("language", this.language);
++    const timeout = AbortSignal.timeout(this.timeoutMs);
++    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
++    let response: Response;
++    try {
++      response = await this.fetchImpl(url.href, {
++        headers: { accept: "application/json" },
++        redirect: "error",
++        signal: combined,
++      });
++    } catch (error) {
++      if (timeout.aborted && !signal?.aborted) {
++        throw new Error(`timed out after ${this.timeoutMs} ms`);
++      }
++      throw error;
++    }
++    if (!response.ok) {
++      await response.body?.cancel().catch(() => {});
++      throw new Error(`HTTP ${response.status}`);
++    }
++    const text = await response.text();
++    if (text.length > MAX_SEARXNG_RESPONSE_BYTES) throw new Error("response too large");
++    let payload: unknown;
++    try {
++      payload = JSON.parse(text);
++    } catch {
++      throw new Error("response is not JSON (is format=json enabled in settings.yml?)");
++    }
++    return parseSearxngResults(payload, maxResults);
++  }
++}
++
++/** `http://host:8080` or `http://host:8080/prefix/` → `…/search`; a URL already ending in `/search` is kept. */
++export function searxngSearchEndpoint(baseUrl: string): URL {
++  let url: URL;
++  try {
++    url = new URL(baseUrl.trim());
++  } catch {
++    throw new Error(`SEARXNG_URL is not a valid URL: ${baseUrl}`);
++  }
++  if (url.protocol !== "http:" && url.protocol !== "https:") {
++    throw new Error("SEARXNG_URL must be http(s)");
++  }
++  url.search = "";
++  url.hash = "";
++  const path = url.pathname.replace(/\/+$/, "");
++  url.pathname = path.endsWith("/search") ? path : `${path}/search`;
++  return url;
++}
++
++/** Map SearXNG JSON `results[]` (title, url, content) to web_search hits: http(s) only, deduped, capped. */
++export function parseSearxngResults(payload: unknown, maxResults: number): WebSearchHit[] {
++  const results =
++    payload && typeof payload === "object" ? (payload as { results?: unknown }).results : undefined;
++  if (!Array.isArray(results)) throw new Error("response has no results array");
++  const hits: WebSearchHit[] = [];
++  const seen = new Set<string>();
++  for (const item of results) {
++    if (!item || typeof item !== "object") continue;
++    const record = item as Record<string, unknown>;
++    if (typeof record.url !== "string") continue;
++    let url: string;
++    try {
++      const parsed = new URL(record.url);
++      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
++      url = parsed.href;
++    } catch {
++      continue;
++    }
++    if (seen.has(url)) continue;
++    const title = normalizeWhitespace(typeof record.title === "string" ? record.title : "") || url;
++    const snippet = normalizeWhitespace(typeof record.content === "string" ? record.content : "");
++    seen.add(url);
++    hits.push({ title, url, snippet });
++    if (hits.length >= maxResults) break;
++  }
++  return hits;
++}
++
++function normalizeWhitespace(text: string): string {
++  return text.replace(/\s+/g, " ").trim();
++}
+diff --git a/packages/adapters/src/web-provider-factory.ts b/packages/adapters/src/web-provider-factory.ts
+index 53e34fb9..51364988 100644
+--- a/packages/adapters/src/web-provider-factory.ts
++++ b/packages/adapters/src/web-provider-factory.ts
+@@ -1,6 +1,7 @@
+ import type { WebProvider } from "@rakazo/adapter-kit";
+ import { FakeWebProvider } from "./fake-web.js";
+ import { KeylessHttpWebProvider } from "./keyless-http-web.js";
++import { SearxngWebProvider } from "./searxng-web.js";
+ 
+ /**
+  * Resolve the deployment web provider.
+@@ -9,9 +10,14 @@ import { KeylessHttpWebProvider } from "./keyless-http-web.js";
+  * compose without vendor branches at the tool layer. Default is keyless HTTP so
+  * core runs with no hosted search vendor. Inject a custom adapter (or set
+  * WEB_PROVIDER=fake in tests) without changing builtin tool names.
++ *
++ * SearXNG: `SEARXNG_URL` alone selects it (unless WEB_PROVIDER says otherwise);
++ * `WEB_PROVIDER=searxng` requires `SEARXNG_URL`. Optional `SEARXNG_TIMEOUT_MS`,
++ * `SEARXNG_CATEGORIES`, `SEARXNG_LANGUAGE`. Falls back to keyless HTTP search.
+  */
+ export function resolveWebProviderKind(source: NodeJS.ProcessEnv = process.env): string {
+   const raw = source.WEB_PROVIDER?.trim().toLowerCase();
++  if (!raw && source.SEARXNG_URL?.trim()) return "searxng";
+   if (!raw || raw === "keyless" || raw === "keyless-http") return "keyless-http";
+   if (raw === "fake") return "fake";
+   return raw;
+@@ -20,6 +26,7 @@ export function resolveWebProviderKind(source: NodeJS.ProcessEnv = process.env):
+ export function createWebProvider(
+   kind: string = resolveWebProviderKind(),
+   options?: ConstructorParameters<typeof KeylessHttpWebProvider>[0],
++  source: NodeJS.ProcessEnv = process.env,
+ ): WebProvider {
+   switch (kind) {
+     case "fake":
+@@ -28,6 +35,18 @@ export function createWebProvider(
+     case "keyless":
+     case "":
+       return new KeylessHttpWebProvider(options);
++    case "searxng": {
++      const baseUrl = source.SEARXNG_URL?.trim();
++      if (!baseUrl) throw new Error("WEB_PROVIDER=searxng requires SEARXNG_URL");
++      const timeoutMs = Number(source.SEARXNG_TIMEOUT_MS);
++      return new SearxngWebProvider({
++        baseUrl,
++        timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
++        categories: source.SEARXNG_CATEGORIES,
++        language: source.SEARXNG_LANGUAGE,
++        fallback: new KeylessHttpWebProvider(options),
++      });
++    }
+     default:
+       throw new Error(`Unknown web provider "${kind}"`);
+   }
+-- 
+2.47.3
+

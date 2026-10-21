@@ -3,8 +3,12 @@ import {
   DEFAULT_DANGLING_NARRATION_NUDGES,
   danglingNarrationNudges,
   danglingNarrationPrompt,
+  frameMidRunSteering,
   hasLeakedToolCall,
   looksLikeDanglingNarration,
+  MID_RUN_STEERING_NOTE,
+  steeringContinueNoteEnabled,
+  steeringContinuePrompt,
   toolBudgetFinalSummaryEnabled,
   toolBudgetWrapUpPrompt,
 } from "./final-answer-guard.js";
@@ -97,5 +101,32 @@ describe("final-answer guard settings and prompts", () => {
     expect(toolBudgetWrapUpPrompt(500)).toContain("500 tool calls");
     expect(toolBudgetWrapUpPrompt(500, true)).toContain("stay silent");
     expect(danglingNarrationPrompt(true)).toContain("stay silent");
+  });
+});
+
+describe("mid-run steering note (patch 0027)", () => {
+  it("parses STEERING_CONTINUE_NOTE", () => {
+    expect(steeringContinueNoteEnabled({})).toBe(true);
+    expect(steeringContinueNoteEnabled({ STEERING_CONTINUE_NOTE: "1" })).toBe(true);
+    for (const off of ["0", "false", "Off", "no"]) {
+      expect(steeringContinueNoteEnabled({ STEERING_CONTINUE_NOTE: off })).toBe(false);
+    }
+  });
+
+  it("puts the note before the user's text", () => {
+    const framed = frameMidRunSteering("a che punto sei?");
+    expect(framed).toBe(`${MID_RUN_STEERING_NOTE}\n\na che punto sei?`);
+    expect(MID_RUN_STEERING_NOTE).toContain("continue the original task");
+    expect(MID_RUN_STEERING_NOTE).toContain("explicitly asks");
+    expect(MID_RUN_STEERING_NOTE).toContain("user's language");
+  });
+
+  it("asks to resume the task unless the user asked to stop", () => {
+    const prompt = steeringContinuePrompt();
+    expect(prompt).toContain("continue the original task");
+    expect(prompt).toContain("asked you to stop");
+    expect(prompt).toContain("continua");
+    expect(prompt).not.toContain("stay silent");
+    expect(steeringContinuePrompt(true)).toContain("stay silent");
   });
 });

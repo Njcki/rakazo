@@ -14,7 +14,8 @@ const fakeAgentState = vi.hoisted(() => ({
     | "nested-ask-pause"
     | "tools-then-empty-failure"
     | "tools-then-final-text"
-    | "dangling-narration",
+    | "dangling-narration"
+    | "steer-status",
   /** Text-only replies after one tool turn; each later one needs a new follow-up. */
   danglingReplies: [] as string[],
   /** Text the no-tools wrap-up call answers with (patch 0026). */
@@ -102,6 +103,37 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
         });
         this.emit({ type: "message_end", message });
         this.emit({ type: "turn_end", message, toolResults: [] });
+        return;
+      }
+      if (fakeAgentState.mode === "steer-status") {
+        const target =
+          this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
+        if (!target) throw new Error("expected tool was not exposed");
+        const args =
+          target.prepareArguments?.(fakeAgentState.invoke.args) ?? fakeAgentState.invoke.args;
+        this.emit({ type: "tool_execution_start", toolName: target.name, args });
+        await target.execute("call-1", args);
+        this.emit({
+          type: "turn_end",
+          message: {
+            role: "assistant",
+            content: [{ type: "toolCall", id: "call-1", name: target.name, arguments: args }],
+          },
+          toolResults: [{ toolCallId: "call-1", result: { ok: true } }],
+        });
+        // Next turn boundary: the runtime claims the mid-run message here.
+        await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
+        for (const [index, text] of fakeAgentState.danglingReplies.entries()) {
+          if (index > 0 && fakeAgentState.followUpMessages.length < index) break;
+          const message = { role: "assistant", content: [{ type: "text", text }] };
+          this.emit({ type: "message_start", message });
+          this.emit({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", delta: text },
+          });
+          this.emit({ type: "message_end", message });
+          this.emit({ type: "turn_end", message, toolResults: [] });
+        }
         return;
       }
       if (fakeAgentState.mode === "dangling-narration") {
@@ -433,6 +465,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
 }));
 
 import { toolCompletionAuditPayload } from "./executor.js";
+import { frameMidRunSteering, MID_RUN_STEERING_NOTE } from "./final-answer-guard.js";
 import {
   MISSING_TOOL_FINAL_RESPONSE_ERROR,
   maxToolCallsPerTurn,
@@ -498,6 +531,7 @@ describe("Pi connector tool dispatch", () => {
     fakeAgentState.wrapUpPrompts = [];
     delete process.env.DANGLING_NARRATION_NUDGES;
     delete process.env.TOOL_BUDGET_FINAL_SUMMARY;
+    delete process.env.STEERING_CONTINUE_NOTE;
     fakeAgentState.invoke = {
       name: "destination_write",
       args: { collection: "notes", title: "Result", body: "Done" },
@@ -549,11 +583,11 @@ describe("Pi connector tool dispatch", () => {
     expect(fakeAgentState.preparedMessages).toEqual([
       expect.objectContaining({
         role: "user",
-        content: "Use the newer customer totals.",
+        content: frameMidRunSteering("Use the newer customer totals."),
       }),
       expect.objectContaining({
         role: "user",
-        content: "Keep the original date range.",
+        content: frameMidRunSteering("Keep the original date range."),
       }),
     ]);
   });
@@ -603,8 +637,8 @@ describe("Pi connector tool dispatch", () => {
     expect(claimSteering).toHaveBeenNthCalledWith(2, []);
     expect(claimSteering).toHaveBeenNthCalledWith(3, ["steering-1"]);
     expect(fakeAgentState.preparedMessages).toEqual([
-      expect.objectContaining({ content: "First boundary context." }),
-      expect.objectContaining({ content: "Next boundary context." }),
+      expect.objectContaining({ content: frameMidRunSteering("First boundary context.") }),
+      expect.objectContaining({ content: frameMidRunSteering("Next boundary context.") }),
     ]);
   });
 
@@ -723,7 +757,7 @@ describe("Pi connector tool dispatch", () => {
     expect(fakeAgentState.steeredMessages).toContainEqual({
       role: "user",
       content: [
-        { type: "text", text: "Compare the second image." },
+        { type: "text", text: frameMidRunSteering("Compare the second image.") },
         { type: "image", data: "BAUG", mimeType: "image/png" },
       ],
       timestamp: expect.any(Number),
@@ -2293,6 +2327,107 @@ describe("Pi connector tool dispatch", () => {
         type: "done",
         text: "I stopped after reaching the limit of 80 tool calls in this turn. Send another message to continue.",
       });
+    });
+  });
+
+  describe("mid-run steering note (patch 0027)", () => {
+    const STATUS = "Sono a metà: 12 profili su 26 verificati.";
+    const FINAL = "Ho finito: 26 profili verificati, dossier aggiornato.";
+
+    async function runSteer(claimSteering: (seen: string[]) => Promise<unknown[]>) {
+      fakeAgentState.mode = "steer-status";
+      const runtime = new PiAgentRuntime();
+      const events: unknown[] = [];
+      for await (const event of runtime.run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: `steer-${Math.random()}`,
+          prompt: "verify all profiles",
+          instructions: "Use the destination tool.",
+          history: [],
+          tools: [destinationTool],
+          model: { provider: "test", id: "dispatch-test-model" },
+          executeTool: vi.fn(async () => ({ ok: true })),
+          claimSteering: claimSteering as never,
+        },
+        {
+          operationId: "steer",
+          traceId: "steer",
+          spaceId: "w",
+          userId: "u",
+          signal: new AbortController().signal,
+        },
+      )) {
+        events.push(event);
+      }
+      return events;
+    }
+
+    function midRunOnly() {
+      let calls = 0;
+      return vi.fn(async () => {
+        calls += 1;
+        return calls === 2
+          ? [{ id: "s-1", messageId: "m-1", text: "fammi un riassunto di dove sei" }]
+          : [];
+      });
+    }
+
+    it("frames a mid-run message and keeps the run going after a status reply", async () => {
+      fakeAgentState.danglingReplies = [STATUS, FINAL];
+      const events = await runSteer(midRunOnly());
+
+      expect(fakeAgentState.steeredMessages).toHaveLength(1);
+      const steered = fakeAgentState.steeredMessages[0] as { content: string };
+      expect(steered.content.startsWith(MID_RUN_STEERING_NOTE)).toBe(true);
+      expect(steered.content).toContain("in the user's language");
+      expect(steered.content.endsWith("fammi un riassunto di dove sei")).toBe(true);
+      expect(fakeAgentState.followUpMessages).toHaveLength(1);
+      expect(fakeAgentState.followUpMessages[0]).toEqual(
+        expect.objectContaining({
+          content: expect.stringContaining("the original task is paused"),
+        }),
+      );
+      const done = events.at(-1) as { type: string; text?: string };
+      expect(done.text?.endsWith(FINAL)).toBe(true);
+    });
+
+    it("does not frame the steering claimed at run start", async () => {
+      fakeAgentState.danglingReplies = [FINAL];
+      let calls = 0;
+      await runSteer(
+        vi.fn(async () => {
+          calls += 1;
+          return calls === 1 ? [{ id: "s-0", messageId: "m-0", text: "usa fonti primarie" }] : [];
+        }),
+      );
+
+      expect(fakeAgentState.promptInputs[0]).toContain("usa fonti primarie");
+      expect(fakeAgentState.promptInputs[0]).not.toContain(MID_RUN_STEERING_NOTE);
+      expect(fakeAgentState.steeredMessages).toHaveLength(0);
+      expect(fakeAgentState.followUpMessages).toHaveLength(0);
+    });
+
+    it("STEERING_CONTINUE_NOTE=0 injects verbatim and keeps the old ending", async () => {
+      process.env.STEERING_CONTINUE_NOTE = "0";
+      fakeAgentState.danglingReplies = [STATUS, FINAL];
+      const events = await runSteer(midRunOnly());
+
+      expect(fakeAgentState.steeredMessages[0]).toEqual(
+        expect.objectContaining({ content: "fammi un riassunto di dove sei" }),
+      );
+      expect(fakeAgentState.followUpMessages).toHaveLength(0);
+      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
+    });
+
+    it("shares the nudge cap with the dangling-narration guard", async () => {
+      process.env.DANGLING_NARRATION_NUDGES = "0";
+      fakeAgentState.danglingReplies = [STATUS, FINAL];
+      const events = await runSteer(midRunOnly());
+
+      expect(fakeAgentState.followUpMessages).toHaveLength(0);
+      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
     });
   });
 });

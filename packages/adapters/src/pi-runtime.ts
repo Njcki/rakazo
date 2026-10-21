@@ -40,7 +40,10 @@ import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
 import {
   danglingNarrationNudges,
   danglingNarrationPrompt,
+  frameMidRunSteering,
   looksLikeDanglingNarration,
+  steeringContinueNoteEnabled,
+  steeringContinuePrompt,
   toolBudgetFinalSummaryEnabled,
   toolBudgetWrapUpPrompt,
 } from "./final-answer-guard.js";
@@ -335,6 +338,11 @@ export class PiAgentRuntime implements AgentRuntime {
         const providerFailures = new WeakSet<AssistantMessage["content"]>();
         const hasBackups = Boolean(request.fallbackModels?.length);
         let agent: Agent;
+        // Patch 0027: set when a user message was injected mid-run and the model
+        // has not yet gone back to tool work; a text-only reply then is a status
+        // update, not the end of the task.
+        const steeringNote = steeringContinueNoteEnabled();
+        let midRunSteeringPending = false;
         let activeStreamTarget = host.activeModel;
         const fallbackState: FallbackStreamState = {
           request,
@@ -450,11 +458,13 @@ export class PiAgentRuntime implements AgentRuntime {
             const steering = await request.claimSteering([...seenSteeringIds]);
             if (steering.length === 0) return undefined;
             seenSteeringIds.push(...steering.map((item) => item.id));
+            if (steeringNote) midRunSteeringPending = true;
             for (const item of steering) {
               const images = toPiImages(item.images);
+              const text = steeringNote ? frameMidRunSteering(item.text) : item.text;
               agent.steer({
                 role: "user",
-                content: images.length ? [{ type: "text", text: item.text }, ...images] : item.text,
+                content: images.length ? [{ type: "text", text }, ...images] : text,
                 timestamp: Date.now(),
               });
             }
@@ -543,6 +553,7 @@ export class PiAgentRuntime implements AgentRuntime {
 
             // Text in a turn that also contains a tool call is narration, not a final
             // response. Keep the run alive until a later text-only turn answers the user.
+            if (hasToolCalls) midRunSteeringPending = false;
             if (hasToolCalls && hasToolResults && !host.pausePending) {
               toolWorkPendingFinal = true;
               silentToolContinuations = 0;
@@ -550,6 +561,8 @@ export class PiAgentRuntime implements AgentRuntime {
             } else if (toolWorkPendingFinal && !hasToolCalls && !hasToolResults) {
               const streamedFinal = streamed.slice(streamedBeforePendingFinal).trim();
               const candidateFinal = messageText.trim() || streamedFinal;
+              const answeredMidRunSteering = midRunSteeringPending;
+              midRunSteeringPending = false;
               if (
                 candidateFinal &&
                 !budgetWrapUp &&
@@ -557,16 +570,19 @@ export class PiAgentRuntime implements AgentRuntime {
                 !host.toolCallBudget.exceeded &&
                 danglingNudges < maxDanglingNudges &&
                 !providerFailureText(event.message) &&
-                looksLikeDanglingNarration(candidateFinal)
+                (answeredMidRunSteering || looksLikeDanglingNarration(candidateFinal))
               ) {
-                // The reply announces a step it never took. Treat it like tool
-                // narration and ask once more for tools or a real final answer.
+                // The reply announces a step it never took, or only answers a
+                // message sent mid-run (patch 0027). Treat it like tool narration
+                // and ask once more for tools or a real final answer.
                 danglingNudges += 1;
                 silentToolContinuations = 0;
                 streamedBeforePendingFinal = streamed.length;
                 agent.followUp({
                   role: "user",
-                  content: danglingNarrationPrompt(request.allowSilentEmpty),
+                  content: answeredMidRunSteering
+                    ? steeringContinuePrompt(request.allowSilentEmpty)
+                    : danglingNarrationPrompt(request.allowSilentEmpty),
                   timestamp: Date.now(),
                 });
               } else if (candidateFinal) {

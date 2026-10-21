@@ -1,0 +1,39 @@
+#!/bin/bash
+# Rakazo fork: headless-safe chromium wrapper (nk29).
+# The sandbox image preloads libnss_wrapper for every process; headless Chromium
+# hangs forever at startup with it loaded, and without user namespaces or the
+# SUID helper it needs --no-sandbox. Headless calls get a clean environment,
+# safe flags and a hard time limit that also reaps crashpad, so `| head` and
+# similar pipelines always end. Desktop (non-headless) launches pass through.
+REAL=/usr/bin/chromium
+headless=0
+for a in "$@"; do
+  case "$a" in --headless|--headless=*|--dump-dom|--print-to-pdf|--print-to-pdf=*|--screenshot|--screenshot=*) headless=1 ;; esac
+done
+[ "$headless" = 1 ] || exec "$REAL" "$@"
+limit="${RAKAZO_HEADLESS_CHROMIUM_TIMEOUT:-90}"
+has_headless=0; for a in "$@"; do case "$a" in --headless|--headless=*) has_headless=1 ;; esac; done
+extra=(--no-sandbox --disable-dev-shm-usage --no-first-run --no-default-browser-check --disable-crash-reporter --disable-breakpad)
+[ "$has_headless" = 1 ] || extra+=(--headless=new)
+profile=""
+for a in "$@"; do case "$a" in --user-data-dir=*) profile="-" ;; esac; done
+if [ -z "$profile" ]; then profile="$(mktemp -d /tmp/rakazo-headless-XXXXXX)"; extra+=(--user-data-dir="$profile"); fi
+# New session so the time limit can kill the whole tree, crashpad included.
+setsid env -u LD_PRELOAD -u NSS_WRAPPER_PASSWD -u NSS_WRAPPER_GROUP \
+  "$REAL" "${extra[@]}" "$@" &
+pid=$!
+exec 3>&2
+( exec </dev/null >/dev/null 2>/dev/null
+  sleep "$limit"
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "chromium: headless run exceeded ${limit}s, stopped (RAKAZO_HEADLESS_CHROMIUM_TIMEOUT)" >&3
+    kill -TERM -- "-$pid"; sleep 3; kill -KILL -- "-$pid"
+  fi ) &
+watch=$!
+wait "$pid"; rc=$?
+pkill -P "$watch" 2>/dev/null; kill "$watch" 2>/dev/null
+exec 3>&-
+# Reap leftovers of this session (crashpad keeps stdout open otherwise).
+kill -KILL -- "-$pid" 2>/dev/null
+[ "$profile" = "-" ] || rm -rf "$profile"
+exit "$rc"

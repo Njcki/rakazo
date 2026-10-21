@@ -1,0 +1,353 @@
+From 659e695f7015366c038120f327832043f4abc90c Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Wed, 21 Oct 2026 16:12:49 +0200
+Subject: [PATCH] fix(agent): server modelli offline rilevato in ~5 s e shell
+ senza "terminated" a 5 min / offline model server detected in ~5 s, quiet
+ shell commands no longer cut at 5 min
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: con il PC di casa spento (peer Tailscale offline) il provider
+OpenAI-compatible (Qwen) restava appeso sul connect TCP: timeout di connessione
+di default di undici 10 s, un retry di pi (MODEL_STREAM_MAX_RETRIES=1, ~0,4 s di
+attesa) e altri 10 s, quindi ~20 s più la preparazione del run (~26 s visti)
+prima del modello di riserva.
+- Il connect (solo handshake TCP/TLS, mai lo streaming della risposta) ha un
+  budget di OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS (default 5000; 0 = default
+  undici).
+- Un endpoint che fallisce il connect viene segnato offline per
+  OPENAI_COMPATIBLE_OFFLINE_TTL_MS (default 60000; 0 = disattivato): le
+  richieste successive falliscono subito come timeout di connessione, il retry
+  non riattende 5 s e il fallback parte. Scaduto il TTL la richiesta successiva
+  riprova davvero; un successo cancella lo stato.
+- "Connection error." dell'SDK OpenAI (connessione rifiutata, server giù ma PC
+  acceso) ora fa avanzare la catena di riserva come i timeout.
+Supervisor: un comando che non stampa nulla per 5 minuti faceva scattare il
+bodyTimeout di 300 s del fetch del worker ("terminated"), molto prima di
+SANDBOX_COMMAND_TIMEOUT_MS. /exec ora manda una riga vuota ogni
+SANDBOX_EXEC_HEARTBEAT_MS (default 30000; 0 = off), ignorata dal lettore NDJSON.
+
+EN: with the home PC off the OpenAI-compatible provider hung on TCP connect:
+undici's 10 s default connect timeout, one pi retry (~0.4 s backoff) and 10 s
+more, ~20 s plus run setup (~26 s observed) before the backup model.
+- Connect (TCP/TLS handshake only, never the streamed answer) is bounded by
+  OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS (default 5000; 0 = undici default).
+- An endpoint that fails to connect is marked offline for
+  OPENAI_COMPATIBLE_OFFLINE_TTL_MS (default 60000; 0 = off): later requests fail
+  at once as a connect timeout, so the retry does not wait again and the
+  fallback runs. After the TTL the next request re-probes; a success clears it.
+- The OpenAI SDK's "Connection error." (refused, server down while the PC is
+  up) now advances the backup chain like timeouts do.
+Supervisor: a command silent for 5 minutes tripped the worker fetch's 300 s
+bodyTimeout ("terminated"), well before SANDBOX_COMMAND_TIMEOUT_MS. /exec now
+sends a blank line every SANDBOX_EXEC_HEARTBEAT_MS (default 30000; 0 = off),
+which the NDJSON reader ignores.
+---
+ infra/sandboxes/supervisor/src/index.ts       |  24 ++++
+ .../src/pi-openai-compatible-offline.test.ts  |  91 +++++++++++++++
+ .../src/pi-openai-compatible-provider.ts      | 110 +++++++++++++++++-
+ packages/adapters/src/pi-runtime.ts           |   2 +-
+ 4 files changed, 224 insertions(+), 3 deletions(-)
+ create mode 100644 packages/adapters/src/pi-openai-compatible-offline.test.ts
+
+diff --git a/infra/sandboxes/supervisor/src/index.ts b/infra/sandboxes/supervisor/src/index.ts
+index de1e25da..1e69a7af 100644
+--- a/infra/sandboxes/supervisor/src/index.ts
++++ b/infra/sandboxes/supervisor/src/index.ts
+@@ -357,6 +357,12 @@ app.get("/computers/:id", async (c) => {
+   }
+ });
+ 
++/** Patch 0029: idle keep-alive for streamed exec output (0 disables). */
++function sandboxExecHeartbeatMs(): number {
++  const raw = Number(process.env.SANDBOX_EXEC_HEARTBEAT_MS ?? 30_000);
++  return Number.isSafeInteger(raw) && raw >= 0 && raw <= 240_000 ? raw : 30_000;
++}
++
+ app.post("/computers/:id/exec", async (c) => {
+   const id = c.req.param("id");
+   const body = z
+@@ -400,6 +406,23 @@ app.post("/computers/:id/exec", async (c) => {
+           closed = true;
+         }
+       };
++      // Patch 0029: a command that prints nothing for 5 minutes tripped the
++      // worker's fetch body timeout (undici default 300 s) and came back as
++      // "terminated" long before SANDBOX_COMMAND_TIMEOUT_MS. A bare newline is
++      // ignored by the NDJSON reader and keeps the stream alive.
++      const heartbeatMs = sandboxExecHeartbeatMs();
++      const heartbeat =
++        heartbeatMs > 0
++          ? setInterval(() => {
++              if (closed) return;
++              try {
++                controller.enqueue(encoder.encode("\n"));
++              } catch {
++                closed = true;
++              }
++            }, heartbeatMs)
++          : undefined;
++      heartbeat?.unref?.();
+       try {
+         let streamedStderr = "";
+         const result = await runContainerCommand(
+@@ -432,6 +455,7 @@ app.post("/computers/:id/exec", async (c) => {
+         send({ type: "stderr", data: message });
+         send({ type: "exit", code: 1 });
+       } finally {
++        if (heartbeat) clearInterval(heartbeat);
+         closed = true;
+         try {
+           controller.close();
+diff --git a/packages/adapters/src/pi-openai-compatible-offline.test.ts b/packages/adapters/src/pi-openai-compatible-offline.test.ts
+new file mode 100644
+index 00000000..ed0ffa27
+--- /dev/null
++++ b/packages/adapters/src/pi-openai-compatible-offline.test.ts
+@@ -0,0 +1,91 @@
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import {
++  createOpenAiCompatibleFetch,
++  isModelServerConnectFailure,
++  openAiCompatibleConnectTimeoutMs,
++  resetOpenAiCompatibleOfflineCache,
++} from "./pi-openai-compatible-provider.js";
++
++// Patch 0029: offline OpenAI-compatible servers fail fast so backups take over.
++describe("openai-compatible offline detection", () => {
++  const saved = { ...process.env };
++  beforeEach(() => resetOpenAiCompatibleOfflineCache());
++  afterEach(() => {
++    process.env = { ...saved };
++    resetOpenAiCompatibleOfflineCache();
++  });
++
++  it("defaults the connect budget to 5 s and honours the env override", () => {
++    delete process.env.OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS;
++    expect(openAiCompatibleConnectTimeoutMs()).toBe(5_000);
++    process.env.OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = "2500";
++    expect(openAiCompatibleConnectTimeoutMs()).toBe(2_500);
++    process.env.OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = "0";
++    expect(openAiCompatibleConnectTimeoutMs()).toBeUndefined();
++    process.env.OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = "nope";
++    expect(openAiCompatibleConnectTimeoutMs()).toBe(5_000);
++  });
++
++  it("recognises connect failures through the cause chain only", () => {
++    const connect = new TypeError("fetch failed", {
++      cause: Object.assign(new Error("Connect Timeout Error"), { code: "UND_ERR_CONNECT_TIMEOUT" }),
++    });
++    expect(isModelServerConnectFailure(connect)).toBe(true);
++    const refused = new TypeError("fetch failed", {
++      cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
++    });
++    expect(isModelServerConnectFailure(refused)).toBe(true);
++    expect(isModelServerConnectFailure(new Error("terminated"))).toBe(false);
++    expect(isModelServerConnectFailure(new DOMException("aborted", "AbortError"))).toBe(false);
++  });
++
++  it("marks a refused endpoint offline, skips it, then re-probes after the TTL", async () => {
++    process.env.OPENAI_COMPATIBLE_OFFLINE_TTL_MS = "200";
++    let calls = 0;
++    const failing = (async () => {
++      calls += 1;
++      throw new TypeError("fetch failed", {
++        cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
++      });
++    }) as unknown as typeof fetch;
++    const safeFetch = createOpenAiCompatibleFetch(failing);
++    const url = "http://127.0.0.1:9/v1/chat/completions";
++    await expect(safeFetch(url, { method: "POST", body: "{}" })).rejects.toThrow("fetch failed");
++    expect(calls).toBe(1);
++    const skipped = await safeFetch(url, { method: "POST", body: "{}" }).catch((error) => error);
++    expect(calls).toBe(1);
++    expect(String(skipped.cause)).toMatch(/timed out/);
++    expect(isModelServerConnectFailure(skipped)).toBe(true);
++    await new Promise((resolve) => setTimeout(resolve, 250));
++    await expect(safeFetch(url, { method: "POST", body: "{}" })).rejects.toThrow("fetch failed");
++    expect(calls).toBe(2);
++  });
++
++  it("does not cache when the TTL is 0 and clears on success", async () => {
++    process.env.OPENAI_COMPATIBLE_OFFLINE_TTL_MS = "0";
++    let calls = 0;
++    const failing = (async () => {
++      calls += 1;
++      throw new TypeError("fetch failed", {
++        cause: Object.assign(new Error("x"), { code: "EHOSTUNREACH" }),
++      });
++    }) as unknown as typeof fetch;
++    const safeFetch = createOpenAiCompatibleFetch(failing);
++    const url = "http://127.0.0.1:9/v1/models";
++    await expect(safeFetch(url)).rejects.toThrow();
++    await expect(safeFetch(url)).rejects.toThrow();
++    expect(calls).toBe(2);
++  });
++
++  it("bounds a blackholed connect by the connect budget, not the 10 s default", async () => {
++    process.env.OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = "300";
++    // Non-routable address: either dropped (bounded by the budget) or
++    // rejected at once by the host network; both must end well under 10 s.
++    const started = Date.now();
++    const safeFetch = createOpenAiCompatibleFetch();
++    const error = await safeFetch("http://10.255.255.1:8080/v1/models").catch((e) => e);
++    const elapsed = Date.now() - started;
++    expect(error).toBeInstanceOf(Error);
++    expect(elapsed).toBeLessThan(5_000);
++  }, 15_000);
++});
+diff --git a/packages/adapters/src/pi-openai-compatible-provider.ts b/packages/adapters/src/pi-openai-compatible-provider.ts
+index d54c4625..b6f296ac 100644
+--- a/packages/adapters/src/pi-openai-compatible-provider.ts
++++ b/packages/adapters/src/pi-openai-compatible-provider.ts
+@@ -182,10 +182,24 @@ export function createOpenAiCompatibleFetch(
+       assertHttpsForKeyedOpenAiCompatibleUrl(url, "present");
+     }
+     const hostname = url.hostname.replace(/^\[|\]$/g, "");
++    // Patch 0029: an endpoint that just failed to connect (home PC off,
++    // Tailscale peer offline) fails fast for a short while so the backup
++    // model takes over at once instead of waiting a connect timeout per try.
++    throwIfModelServerMarkedOffline(url);
++    const connectTimeoutMs = openAiCompatibleConnectTimeoutMs();
++    // An IP host only gets a dispatcher when this package's fetch drives it;
++    // a caller-supplied fetch (tests, emulators) cannot accept a package Agent.
++    const ownsTransport = fetchPairedWithDispatcher(baseFetch) === dispatcherFetch;
+     const dispatcher =
+-      isIP(hostname) === 0
++      isIP(hostname) === 0 || (connectTimeoutMs !== undefined && ownsTransport)
+         ? new Agent({
+-            connect: { lookup: createOpenAiCompatibleLookup(url, resolve) },
++            connect: {
++              ...(isIP(hostname) === 0
++                ? { lookup: createOpenAiCompatibleLookup(url, resolve) }
++                : {}),
++              // Bounds only the TCP/TLS handshake, never a streaming answer.
++              ...(connectTimeoutMs !== undefined ? { timeout: connectTimeoutMs } : {}),
++            },
+           })
+         : undefined;
+     // Node's fetch rejects this package Agent. Pair them only when the
+@@ -197,14 +211,106 @@ export function createOpenAiCompatibleFetch(
+         redirect: "error",
+         ...(dispatcher ? { dispatcher } : {}),
+       } as RequestInit & { dispatcher?: Agent });
++      clearModelServerOffline(url);
+       return dispatcher ? await closeDispatcherWithResponse(response, dispatcher) : response;
+     } catch (error) {
+       await dispatcher?.close().catch(() => undefined);
++      if (isModelServerConnectFailure(error)) markModelServerOffline(url);
+       throw error;
+     }
+   };
+ }
+ 
++/** Connect (TCP/TLS handshake) budget for OpenAI-compatible model servers.
++ * undici's default is 10 s per attempt; with one retry an offline home server
++ * cost ~20 s before the backup model ran. 0 or unset-invalid keeps undici's
++ * default. */
++export const OPENAI_COMPATIBLE_CONNECT_TIMEOUT_ENV = "OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS";
++export const DEFAULT_OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = 5_000;
++/** How long an endpoint that failed to connect is skipped (re-probed after). */
++export const OPENAI_COMPATIBLE_OFFLINE_TTL_ENV = "OPENAI_COMPATIBLE_OFFLINE_TTL_MS";
++export const DEFAULT_OPENAI_COMPATIBLE_OFFLINE_TTL_MS = 60_000;
++
++function envMs(name: string, fallback: number, max: number): number | undefined {
++  const raw = process.env[name]?.trim();
++  if (!raw) return fallback;
++  const value = Number(raw);
++  if (!Number.isSafeInteger(value) || value < 0 || value > max) return fallback;
++  return value === 0 ? undefined : value;
++}
++
++export function openAiCompatibleConnectTimeoutMs(): number | undefined {
++  return envMs(
++    OPENAI_COMPATIBLE_CONNECT_TIMEOUT_ENV,
++    DEFAULT_OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS,
++    120_000,
++  );
++}
++
++function openAiCompatibleOfflineTtlMs(): number | undefined {
++  return envMs(
++    OPENAI_COMPATIBLE_OFFLINE_TTL_ENV,
++    DEFAULT_OPENAI_COMPATIBLE_OFFLINE_TTL_MS,
++    3_600_000,
++  );
++}
++
++const offlineUntil = new Map<string, number>();
++
++/** Test seam: forget every cached offline endpoint. */
++export function resetOpenAiCompatibleOfflineCache(): void {
++  offlineUntil.clear();
++}
++
++const CONNECT_FAILURE_CODES = new Set([
++  "UND_ERR_CONNECT_TIMEOUT",
++  "ECONNREFUSED",
++  "EHOSTUNREACH",
++  "EHOSTDOWN",
++  "ENETUNREACH",
++  "ETIMEDOUT",
++]);
++
++/** True only for failures before any byte was exchanged (no socket). */
++export function isModelServerConnectFailure(error: unknown): boolean {
++  let current: unknown = error;
++  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
++    const code = (current as { code?: unknown }).code;
++    if (typeof code === "string" && CONNECT_FAILURE_CODES.has(code)) return true;
++    current = (current as { cause?: unknown }).cause;
++  }
++  return false;
++}
++
++function markModelServerOffline(url: URL): void {
++  const ttl = openAiCompatibleOfflineTtlMs();
++  if (ttl === undefined) return;
++  offlineUntil.set(url.origin, Date.now() + ttl);
++}
++
++function clearModelServerOffline(url: URL): void {
++  offlineUntil.delete(url.origin);
++}
++
++function throwIfModelServerMarkedOffline(url: URL): void {
++  const until = offlineUntil.get(url.origin);
++  if (until === undefined) return;
++  if (Date.now() >= until) {
++    // TTL over: let this request re-probe the server for real.
++    offlineUntil.delete(url.origin);
++    return;
++  }
++  // Shaped like undici's own failure so the OpenAI SDK classifies it as a
++  // connection timeout ("Request timed out.") and the fallback chain advances.
++  const cause = Object.assign(
++    new Error(
++      `Model server connect timed out recently; skipping it for ${Math.ceil((until - Date.now()) / 1000)}s`,
++    ),
++    { name: "ConnectTimeoutError", code: "UND_ERR_CONNECT_TIMEOUT" },
++  );
++  throw new TypeError("fetch failed", { cause });
++}
++
+ /** The base fetch comes from the undici package, which recognizes only its own
+  * Request class and reads a global Request as the string "[object Request]".
+  * Flatten Request inputs to a URL plus init, with init overriding the
+diff --git a/packages/adapters/src/pi-runtime.ts b/packages/adapters/src/pi-runtime.ts
+index a323dc38..2a9720a1 100644
+--- a/packages/adapters/src/pi-runtime.ts
++++ b/packages/adapters/src/pi-runtime.ts
+@@ -2471,7 +2471,7 @@ export function isRetryableProviderUnavailable(error: unknown): boolean {
+   )
+     return true;
+   if ([...statuses].some((status) => status >= 400 && status < 600)) return false;
+-  return /rate.?limit|too many requests|quota|overload|capacity|temporarily unavailable|service unavailable|retry[- ](?:after|delay)|server error|upstream error|gateway timeout|timed? out|timeout|connection reset|connection refused|network error|max retries exceeded/.test(
++  return /rate.?limit|too many requests|quota|overload|capacity|temporarily unavailable|service unavailable|retry[- ](?:after|delay)|server error|upstream error|gateway timeout|timed? out|timeout|connection reset|connection refused|connection error|network error|max retries exceeded/.test(
+     text,
+   );
+ }
+-- 
+2.47.3
+

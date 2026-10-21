@@ -71,6 +71,34 @@ the previous tag; it refuses (exit 3) when that image or the computer image is m
 previous tag. Older snapshots with `rakazo-rollback-*` images roll back as before. `SNAPSHOT_COMMIT_IMAGES=1`
 brings back the old `docker commit`. Final healthcheck only with `RAKAZO_HOST`.
 
+### Backup notturno incrementale / nightly incremental backup (2026-10-21)
+
+IT: `backup-nightly.sh` (da copiare in `~/rakazo/`) fa un backup restic cifrato e deduplicato del volume
+`rakazo_appdata` (letto in sola lettura via `sudo`; esclusi le cartelle con `CACHEDIR.TAG` e `homes/*/.cache`),
+di un `pg_dump -Fc -Z 0` appena fatto (non compresso, così restic lo deduplica e lo comprime) e di `.env` e dei
+file compose. Retention `--keep-daily 7 --keep-weekly 4 --keep-monthly 3 --prune`; la domenica `restic check
+--read-data-subset=5%`. Gira con `nice -n 19 ionice -c3` e `flock` (una sola istanza), log in
+`~/rakazo/backups/nightly-*.log` (ultimi 14), `LAST_NIGHTLY_OK` a fine run. Prerequisiti: binario restic statico
+in `~/bin/restic` (SHA256 verificato su `SHA256SUMS` della release), password in
+`~/.config/rakazo-backup/restic-password` (mode 600: senza questo file i backup sono illeggibili, conservarne una
+copia fuori dal server), `restic init` su `~/rakazo-backups-repo` (di root, perché restic gira via sudo). Cron
+utente: `CRON_TZ=Europe/Rome` e `30 4 * * * ~/rakazo/backup-nightly.sh`. Il repository sta sullo stesso disco:
+protegge da errori e cancellazioni, non dalla perdita del server; per quello serve una copia esterna
+(object storage o PC di casa, ad es. `restic copy`).
+
+EN: `backup-nightly.sh` (copy to `~/rakazo/`) makes an encrypted, deduplicated restic backup of the
+`rakazo_appdata` volume (read-only through `sudo`; `CACHEDIR.TAG` folders and `homes/*/.cache` excluded), a fresh
+`pg_dump -Fc -Z 0` (uncompressed so restic can deduplicate and compress it) and `.env` plus the compose files.
+Retention `--keep-daily 7 --keep-weekly 4 --keep-monthly 3 --prune`; on Sundays `restic check
+--read-data-subset=5%`. Runs under `nice -n 19 ionice -c3` and `flock` (single instance), logs to
+`~/rakazo/backups/nightly-*.log` (last 14), writes `LAST_NIGHTLY_OK` when done. Needs a static restic binary in
+`~/bin/restic` (SHA256 checked against the release `SHA256SUMS`), a password in
+`~/.config/rakazo-backup/restic-password` (mode 600: without it the backups cannot be read, keep a copy off the
+server) and `restic init` on `~/rakazo-backups-repo` (root-owned, since restic runs through sudo). User cron:
+`CRON_TZ=Europe/Rome` and `30 4 * * * ~/rakazo/backup-nightly.sh`. The repository sits on the same disk: it
+covers mistakes and deletions, not losing the server; that needs an off-site copy (object storage or a home PC,
+e.g. `restic copy`).
+
 - 0016 UI: Advanced accordion groups in light cards; sticky Save footer flush to panel bottom (settings pb-0 + footer -mb).
 
 - 0017 plan: keep completed plans visible in sidebar until plan_create replaces them (getDisplayPlan); no nested sub-steps.

@@ -8,6 +8,19 @@
 #   ./update-rakazo-v2.sh cutover --yes            # snapshot prod, migrate, recreate on the new image
 #   ./update-rakazo-v2.sh rollback --yes [STAMP]   # back to the image tag + DB dump of a snapshot (default LAST_CUTOVER)
 #
+# Cutover modes / Modalità di cutover (CUTOVER_MODE):
+#   fast (default): IT: tutto ciò che non ferma nulla (snapshot, immagine tools, compose, migrazioni one-shot,
+#     cache corepack) prima; poi ricrea un servizio alla volta con --no-deps: supervisor -> api -> web -> worker,
+#     aspettando ogni servizio con un polling da 0,5 s invece degli healthcheck da 10 s di compose.
+#     EN: everything that stops nothing (snapshot, tools image, compose, one-shot migrations, corepack cache)
+#     first; then one service at a time with --no-deps: supervisor -> api -> web -> worker, each awaited with a
+#     0.5 s poll instead of compose's 10 s healthchecks.
+#   legacy: IT/EN: il vecchio percorso (force-recreate di tutto lo stack + --wait) / the old whole-stack path.
+#   PREMIGRATE=0 salta le migrazioni one-shot (fallo se una migrazione non è retrocompatibile: le esegue api
+#     all'avvio) / skips the one-shot migrations (use it when a migration is not backward compatible).
+#   ALLOW_ACTIVE_RUNS=1 salta il controllo delle run attive / skips the active-run check.
+#   Ogni fase finisce in backups/cutover-<STAMP>/phases.log / every phase is logged there with timestamps.
+#
 # Snapshot (fast, default): copies .env (which holds the previous RAKAZO_IMAGE_TAG), the compose files
 # and a pg_dump -Fc (zstd:3 when supported) run with nice/ionice inside the postgres container. No
 # docker commit: the previous rakazo-app-nk:<tag> image is the rollback image, so it must not be pruned.
@@ -40,6 +53,27 @@ STAMP=$(date +%Y%m%dT%H%M%S)
 need_yes(){ [[ $YES -eq 1 ]] || { echo "refusing without --yes"; exit 2; }; }
 env_get(){ { grep -E "^$1=" "$2" || true; } | tail -1 | cut -d= -f2-; }
 PG_USER="${POSTGRES_USER:-rakazo}"; PG_DB="${POSTGRES_DB:-rakazo}"
+# Public hostname for the final check: env, else RAKAZO_HOST from .env / da env, altrimenti da .env.
+RAKAZO_HOST="${RAKAZO_HOST:-$(env_get RAKAZO_HOST .env 2>/dev/null)}"
+CUTOVER_MODE="${CUTOVER_MODE:-fast}"
+PHASE_LOG=/dev/null; T_START=$(date +%s.%N)
+# phase MSG: timestamped line (UTC) with seconds since start, to stdout and PHASE_LOG.
+phase(){ local now; now=$(date +%s.%N)
+  printf '%s +%6.1fs %s\n' "$(date -u +%H:%M:%S.%3N)" "$(awk -v a="$now" -v b="$T_START" 'BEGIN{print a-b}')" "$*" | tee -a "$PHASE_LOG"; }
+# wait_for DESC TIMEOUT_S CMD...: poll CMD every 0.5 s until it succeeds.
+wait_for(){ local desc="$1" tmo="$2" t0; shift 2; t0=$(date +%s)
+  until "$@" >/dev/null 2>&1; do
+    (( $(date +%s) - t0 >= tmo )) && { phase "TIMEOUT waiting for $desc (${tmo}s)"; return 1; }
+    sleep 0.5
+  done; phase "ready: $desc"; }
+# Active or queued runs (ACTIVE_RUN_STATUSES in packages/core/src/run-state.ts).
+active_runs(){ docker exec rakazo-postgres-1 psql -U "$PG_USER" -d "$PG_DB" -At -c \
+  "select count(*) from runs where status in ('queued','leased','running','waiting_input','waiting_takeover')"; }
+sup_healthy(){ docker exec rakazo-supervisor-1 node -e \
+  "fetch('http://127.0.0.1:7091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; }
+api_healthy(){ curl -fsS -m 2 -o /dev/null "http://127.0.0.1:${API_PORT}/health"; }
+web_ready(){ curl -fsS -m 2 -o /dev/null "http://127.0.0.1:${WEB_PORT}/"; }
+worker_ready(){ docker logs --since "$1" rakazo-worker-1 2>&1 | grep -q '"worker ready"'; }
 # snapshot_prod DIR: no restart, nothing recreated.
 snapshot_prod(){
   local B="$1" t0; mkdir -p "$B"; t0=$(date +%s)
@@ -82,13 +116,21 @@ build)
 cutover)
   need_yes
   docker image inspect "$IMAGE" >/dev/null
-  B="$ROOT/backups/cutover-$STAMP"
+  [[ "$CUTOVER_MODE" == fast || "$CUTOVER_MODE" == legacy ]] || { echo "CUTOVER_MODE must be fast or legacy"; exit 2; }
+  B="$ROOT/backups/cutover-$STAMP"; mkdir -p "$B"; PHASE_LOG="$B/phases.log"
+  phase "cutover $STAMP mode=$CUTOVER_MODE target=$IMAGE"
+  if [[ "${ALLOW_ACTIVE_RUNS:-0}" != 1 ]]; then
+    n=$(active_runs); [[ "$n" == 0 ]] || { phase "refusing: $n active/queued runs (ALLOW_ACTIVE_RUNS=1 to override)"; exit 4; }
+  fi
+  phase "snapshot start"
   snapshot_prod "$B"
   echo "$STAMP" > "$ROOT/backups/LAST_CUTOVER"
+  phase "snapshot done"
   echo "== computer tools image on pinned computer digest =="
   docker pull -q "$COMP_REPO@$COMPUTER_DIGEST"
   sed "s#^FROM .*#FROM $COMP_REPO@$COMPUTER_DIGEST#" computer-tools/Dockerfile > "$B/Dockerfile.tools"
   docker build -q -t "$TOOLS_IMAGE" -f "$B/Dockerfile.tools" computer-tools
+  phase "tools image done"
   echo "== compose v2 = upstream compose (from the image) + our compose patches =="
   docker run --rm --entrypoint cat "$IMAGE" /app/infra/compose/docker-compose.images.yml > docker-compose.images.v2.yml
   for cp in "$P2"/compose/*.patch; do docker run --rm -i -u "$(id -u)" -v "$ROOT:/w" -w /w --entrypoint patch "$IMAGE" --batch -s -p1 docker-compose.images.v2.yml < "$cp"; done
@@ -99,15 +141,51 @@ cutover)
   set_env RAKAZO_COMPUTER_IMAGE "${TOOLS_IMAGE%%:*}"
   set_env RAKAZO_COMPUTER_IMAGE_TAG "${TOOLS_IMAGE#*:}"
   set_env RAKAZO_WEB_PORT 5173
+  # IT: api/worker leggono .env (env_file): la cache corepack su appdata evita di riscaricare pnpm a ogni avvio.
+  # EN: api/worker read .env (env_file): a corepack cache on appdata avoids re-downloading pnpm on every start.
+  [[ "$CUTOVER_MODE" == fast ]] && set_env COREPACK_HOME /data/.corepack
   "${NEWC[@]}" config -q
-  echo "== recreate (downtime starts) =="
-  "${NEWC[@]}" up -d --pull never --force-recreate supervisor api worker web
-  "${NEWC[@]}" up -d --wait --wait-timeout 400 supervisor api worker web
+  API_PORT=$(env_get RAKAZO_API_PORT .env); API_PORT=${API_PORT:-3100}
+  WEB_PORT=$(env_get RAKAZO_WEB_PORT .env); WEB_PORT=${WEB_PORT:-5173}
+  phase "compose + .env done"
+  if [[ "$CUTOVER_MODE" == legacy ]]; then
+    phase "legacy: recreate whole stack (downtime starts)"
+    "${NEWC[@]}" up -d --pull never --force-recreate supervisor api worker web
+    phase "legacy: containers recreated"
+    "${NEWC[@]}" up -d --wait --wait-timeout 400 supervisor api worker web
+    phase "legacy: stack healthy"
+  else
+    if [[ "${PREMIGRATE:-1}" == 1 ]]; then
+      # One-shot on the new image while the old stack serves; also warms the corepack cache.
+      phase "premigrate start (one-shot, old stack still serving)"
+      "${NEWC[@]}" run --rm --no-deps -T api bash -lc "pnpm --filter @rakazo/db exec prisma migrate deploy" 2>&1 | tail -3
+      phase "premigrate done"
+    fi
+    phase "supervisor recreate"
+    "${NEWC[@]}" up -d --no-deps --pull never --force-recreate supervisor
+    wait_for supervisor 180 sup_healthy
+    phase "api recreate (API downtime starts)"
+    "${NEWC[@]}" up -d --no-deps --pull never --force-recreate api
+    phase "api container started"
+    wait_for "api /health" 400 api_healthy
+    phase "web recreate (proxy retries hide the gap)"
+    "${NEWC[@]}" up -d --no-deps --pull never --force-recreate web
+    wait_for "web /" 300 web_ready
+    phase "worker recreate"
+    WSINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    "${NEWC[@]}" up -d --no-deps --pull never --force-recreate worker
+    wait_for worker 400 worker_ready "$WSINCE"
+    phase "reconcile (compose --wait, recreates nothing that is current)"
+    "${NEWC[@]}" up -d --pull never --wait --wait-timeout 400 supervisor api worker web
+    phase "stack healthy"
+  fi
   "${NEWC[@]}" ps
-  # Optional healthcheck: set RAKAZO_HOST to your public hostname (no scheme).
+  # Optional healthcheck: RAKAZO_HOST (env or .env) is your public hostname (no scheme).
   if [ -n "${RAKAZO_HOST:-}" ]; then
     curl -fsS -o /dev/null -w "site %{http_code}\n" "https://${RAKAZO_HOST}/" || true
   fi
+  phase "cutover done"
+  echo "phases: $PHASE_LOG"
   echo "rollback: $0 rollback --yes  (snapshot $STAMP)" ;;
 snapshot)
   snapshot_prod "$ROOT/backups/snapshot-$STAMP"

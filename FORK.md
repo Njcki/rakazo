@@ -76,7 +76,7 @@ Funzioni aggiunte rispetto a upstream:
 - Allegati: «Apri» vs «Condividi».
 - Selettori del modello raggruppati per provider.
 - Temi **Sistema / Chiaro / Scuro / Nero**, tema scuro più leggibile, selettore aspetto 2×2.
-- Caricamento modelli selettivo/differito nei parametri bot (filtro `providers` su `models/list`) e selettori lunghi Android nella safe area.
+- Caricamento modelli differito nei parametri bot (catalogo scaricato una volta per sessione e filtrato sul telefono ai provider collegati; il filtro `providers` lato API c'è ma l'immagine self-host non lo espone ancora) e selettori lunghi Android nella safe area.
 - Grafici `render_plot` nella chat (interattivi) e formule TeX (KaTeX per i blocchi, testo Unicode in linea).
 - Allegati `.apk` aperti nell'installer di Android (MIME corretto + `REQUEST_INSTALL_PACKAGES`).
 - La chat resta in fondo ai nuovi messaggi (`autoscrollToTopThreshold` sulla lista invertita); chi è salito a leggere non viene spostato.
@@ -86,7 +86,9 @@ Funzioni aggiunte rispetto a upstream:
 - Swipe orizzontale sulle tabelle che vince sulla lista della chat (vista nativa `rakazo-scroll-guard`) e sfumature solo dove c'è altro contenuto / Horizontal table swipes win over the chat list (native `rakazo-scroll-guard` view), fades only where more content is.
 - Chiamate in vivavoce con cancellazione dell'eco (modalità comunicazione + `VOICE_COMMUNICATION`/AEC), interruzione vocale invariata / Speakerphone calls with echo cancellation (communication mode + `VOICE_COMMUNICATION`/AEC), barge-in kept.
 
-Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
+Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`. Versione corrente / current version: **1.0.21 (vc21)**.
+
+**Versioni / Versioning:** a ogni APK pubblicata `expo.version` sale di una patch (`1.0.N`) e `android.versionCode` di 1 (`vcN`, con N uguale); riga nuova in README + changelog. / Every released APK bumps `expo.version` by one patch (`1.0.N`) and `android.versionCode` by 1 (`vcN`, same N); add a README row and a changelog entry.
 
 ### Build
 

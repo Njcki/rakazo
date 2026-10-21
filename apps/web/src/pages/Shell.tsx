@@ -240,9 +240,12 @@ import {
   toolStepCount,
 } from "../lib/tool-activity-view";
 import {
+  observeTranscriptContent,
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
+  transcriptLatestChange,
   transcriptMovedDown,
+  transcriptShouldSnap,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
 import { errorText } from "../lib/user-error";
@@ -4928,6 +4931,14 @@ const Transcript = memo(function Transcript({
   const [atEnd, setAtEnd] = useState(true);
   const following = useRef(true);
   const autoScrolling = useRef(false);
+  // A pointer/touch held in the transcript (text selection, scrollbar drag, an unsettled
+  // fling) defers follow snaps instead of unfollowing: a click or tap at the bottom must
+  // not stop the transcript from sticking to new messages.
+  const pointerHeld = useRef(false);
+  const pointerScrolled = useRef(false);
+  const pointerSettleTimer = useRef<number | undefined>(undefined);
+  const latestMessageId = useRef<string | null>(null);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
@@ -5106,8 +5117,88 @@ const Transcript = memo(function Transcript({
   }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled]);
 
   useLayoutEffect(() => {
-    if (following.current) snapToEnd();
+    const change = transcriptLatestChange(latestMessageId.current, messages.at(-1));
+    if (change !== "none") latestMessageId.current = messages.at(-1)?.id ?? null;
+    // The reader's own send always returns to the end; others' messages never yank a
+    // reader who scrolled up, they only light the jump-to-latest affordance.
+    if (change === "own" && !jumpScrolling.current) {
+      following.current = true;
+      pointerHeld.current = false;
+    }
+    if (following.current) {
+      if (!pointerHeld.current) snapToEnd();
+    } else if (change === "incoming") {
+      setHasNewMessages(true);
+    }
   }, [messages, running, snapToEnd]);
+
+  useEffect(() => {
+    if (atEnd) setHasNewMessages(false);
+  }, [atEnd]);
+
+  // Streaming growth and late layout (images, charts, KaTeX, code blocks) change row
+  // heights after the commit; keep the end pinned while following.
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    return observeTranscriptContent(element, () => {
+      if (
+        !transcriptShouldSnap({
+          following: following.current,
+          pointerHeld: pointerHeld.current,
+          jumpScrolling: jumpScrolling.current,
+          autoScrolling: autoScrolling.current,
+        })
+      ) {
+        return;
+      }
+      const end = element.scrollHeight - element.clientHeight;
+      if (Math.abs(element.scrollTop - end) > 1) element.scrollTop = element.scrollHeight;
+    });
+  }, [scrollRef]);
+
+  const releasePointer = useCallback(() => {
+    window.clearTimeout(pointerSettleTimer.current);
+    if (!pointerHeld.current) return;
+    pointerHeld.current = false;
+    const element = scrollRef.current;
+    if (
+      element &&
+      transcriptShouldSnap({
+        following: following.current,
+        pointerHeld: false,
+        jumpScrolling: jumpScrolling.current,
+        autoScrolling: autoScrolling.current,
+      })
+    ) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [scrollRef]);
+
+  useEffect(() => {
+    const onRelease = () => {
+      if (!pointerHeld.current) return;
+      // A fling keeps scrolling after the finger lifts: wait for it to settle.
+      if (pointerScrolled.current) {
+        window.clearTimeout(pointerSettleTimer.current);
+        pointerSettleTimer.current = window.setTimeout(releasePointer, 600);
+        scrollRef.current?.addEventListener("scrollend", releasePointer, { once: true });
+      } else {
+        releasePointer();
+      }
+    };
+    document.addEventListener("pointerup", onRelease, true);
+    document.addEventListener("pointercancel", onRelease, true);
+    document.addEventListener("touchend", onRelease, true);
+    document.addEventListener("touchcancel", onRelease, true);
+    return () => {
+      document.removeEventListener("pointerup", onRelease, true);
+      document.removeEventListener("pointercancel", onRelease, true);
+      document.removeEventListener("touchend", onRelease, true);
+      document.removeEventListener("touchcancel", onRelease, true);
+      window.clearTimeout(pointerSettleTimer.current);
+    };
+  }, [releasePointer, scrollRef]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5149,12 +5240,18 @@ const Transcript = memo(function Transcript({
         onPointerDown={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
-          following.current = false;
+          pointerHeld.current = true;
+          pointerScrolled.current = false;
+          window.clearTimeout(pointerSettleTimer.current);
+          event.currentTarget.removeEventListener("scrollend", releasePointer);
         }}
         onTouchStart={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
-          following.current = false;
+          pointerHeld.current = true;
+          pointerScrolled.current = false;
+          window.clearTimeout(pointerSettleTimer.current);
+          event.currentTarget.removeEventListener("scrollend", releasePointer);
         }}
         onWheel={(event) => {
           if (event.deltaY < 0) {
@@ -5169,6 +5266,7 @@ const Transcript = memo(function Transcript({
             event.currentTarget.scrollTop,
           );
           lastScrollTop.current = event.currentTarget.scrollTop;
+          if (pointerHeld.current) pointerScrolled.current = true;
           const nearEnd = transcriptIsNearEnd(event.currentTarget);
           setAtEnd(nearEnd);
           // A jump scroll owns the viewport until its animation settles; its
@@ -5354,7 +5452,7 @@ const Transcript = memo(function Transcript({
       <button
         ref={jumpButtonRef}
         type="button"
-        aria-label={t`Jump to latest`}
+        aria-label={hasNewMessages ? t`Jump to latest, new messages` : t`Jump to latest`}
         aria-hidden={atEnd}
         tabIndex={atEnd ? -1 : 0}
         onClick={jumpToLatest}
@@ -5363,6 +5461,12 @@ const Transcript = memo(function Transcript({
         }`}
       >
         <ArrowDown size={17} strokeWidth={1.8} />
+        {hasNewMessages ? (
+          <span
+            data-testid="transcript-new-messages"
+            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
+          />
+        ) : null}
       </button>
     </div>
   );

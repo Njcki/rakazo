@@ -2484,6 +2484,10 @@ msgstr ""
 msgid "Jump to latest"
 msgstr "Vai all'ultimo"
 
+#: src/pages/Shell.tsx
+msgid "Jump to latest, new messages"
+msgstr "Vai all'ultimo, nuovi messaggi"
+
 #: src/pages/shell/chat-context.tsx
 msgid "Jump to replied message: {excerpt}"
 msgstr "Vai al messaggio citato: {excerpt}"

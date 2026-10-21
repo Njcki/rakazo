@@ -1,5 +1,10 @@
-/** A heard line longer than this is a real turn, however much it overlaps the reply. */
+/** A heard line longer than this is a real turn, unless nearly all of it is the reply. */
 const MAX_ECHO_WORDS = 12;
+/**
+ * A long transcript that is this much the reply, word for word in order, is the speaker
+ * read back through the microphone: a caller rarely repeats a dozen words of the bot.
+ */
+const LONG_ECHO_RATIO = 0.85;
 /** Fewer matched words than this is coincidence, not the speaker leaking into the mic. */
 const MIN_ECHO_WORDS = 3;
 const ECHO_MATCH_RATIO = 0.6;
@@ -41,7 +46,8 @@ export function isEchoOfSpeech(
 ): boolean {
   const heardWords = words(heard);
   const spokenWords = words(spoken);
-  if (heardWords.length > MAX_ECHO_WORDS || !spokenWords.length) return false;
+  if (!spokenWords.length) return false;
+  const long = heardWords.length > MAX_ECHO_WORDS;
   if (heardWords.length === 2) {
     return spokenWords.some(
       (word, i) => word === heardWords[0] && spokenWords[i + 1] === heardWords[1],
@@ -56,7 +62,7 @@ export function isEchoOfSpeech(
     cursor = at + 1;
   }
   if (matched < MIN_ECHO_WORDS) return false;
-  return matched / heardWords.length >= threshold;
+  return matched / heardWords.length >= (long ? Math.max(threshold, LONG_ECHO_RATIO) : threshold);
 }
 
 /** How long a spoken line can still come back through the microphone. */
@@ -77,6 +83,22 @@ export class SpokenMemory {
     if (!trimmed) return;
     this.entries.push({ text: trimmed, at: now });
     this.prune(now);
+  }
+
+  /**
+   * The line finished playing: its echo window runs from now, not from when it started,
+   * so the tail of a long reply is still recognised when the microphone delivers it.
+   */
+  finished(text: string, now = Date.now()): void {
+    const trimmed = text.trim();
+    for (let i = this.entries.length - 1; i >= 0; i -= 1) {
+      const entry = this.entries[i];
+      if (entry?.text === trimmed) {
+        entry.at = Math.max(entry.at, now);
+        return;
+      }
+    }
+    this.remember(trimmed, now);
   }
 
   clear(): void {

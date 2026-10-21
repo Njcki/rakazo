@@ -1,0 +1,87 @@
+diff --git a/android/src/main/java/expo/modules/speechrecognition/ExpoAudioRecorder.kt b/android/src/main/java/expo/modules/speechrecognition/ExpoAudioRecorder.kt
+index ae17503e81c630173367a6d00cdbcbc4b4b0a688..af9a9bf001e112fec237bb8600b2d1f933ae3c42 100644
+--- a/android/src/main/java/expo/modules/speechrecognition/ExpoAudioRecorder.kt
++++ b/android/src/main/java/expo/modules/speechrecognition/ExpoAudioRecorder.kt
+@@ -135,15 +135,66 @@ class ExpoAudioRecorder(
+         return file
+     }
+ 
++    private var echoCanceler: android.media.audiofx.AcousticEchoCanceler? = null
++    private var noiseSuppressor: android.media.audiofx.NoiseSuppressor? = null
++
++    /**
++     * Rakazo: while the app holds the device in communication mode (a hands-free call), record
++     * through the voice-communication path so the platform's echo canceller removes the bot's
++     * own voice coming out of the speaker, and the caller can still talk over it.
++     */
++    private fun inCommunicationMode(): Boolean {
++        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
++        return audioManager?.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
++    }
++
+     @SuppressLint("MissingPermission")
+-    private fun createRecorder(): AudioRecord =
+-        AudioRecord(
+-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
+-            sampleRateInHz,
+-            channelConfig,
+-            AudioFormat.ENCODING_PCM_16BIT,
+-            bufferSizeInBytes,
+-        )
++    private fun createRecorder(): AudioRecord {
++        val communication = inCommunicationMode()
++        val record =
++            AudioRecord(
++                if (communication) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.VOICE_RECOGNITION,
++                sampleRateInHz,
++                channelConfig,
++                AudioFormat.ENCODING_PCM_16BIT,
++                bufferSizeInBytes,
++            )
++        if (communication && record.state != AudioRecord.STATE_INITIALIZED) {
++            // A device without a voice-communication input: fall back to the plain one.
++            record.release()
++            return AudioRecord(
++                MediaRecorder.AudioSource.VOICE_RECOGNITION,
++                sampleRateInHz,
++                channelConfig,
++                AudioFormat.ENCODING_PCM_16BIT,
++                bufferSizeInBytes,
++            )
++        }
++        if (communication) {
++            try {
++                if (android.media.audiofx.AcousticEchoCanceler.isAvailable()) {
++                    echoCanceler = android.media.audiofx.AcousticEchoCanceler.create(record.audioSessionId)?.apply { enabled = true }
++                }
++                if (android.media.audiofx.NoiseSuppressor.isAvailable()) {
++                    noiseSuppressor = android.media.audiofx.NoiseSuppressor.create(record.audioSessionId)?.apply { enabled = true }
++                }
++            } catch (e: Exception) {
++                Log.w(TAG, "Echo cancellation unavailable", e)
++            }
++        }
++        return record
++    }
++
++    private fun releaseEffects() {
++        try {
++            echoCanceler?.release()
++            noiseSuppressor?.release()
++        } catch (e: Exception) {
++            Log.w(TAG, "Failed to release audio effects", e)
++        }
++        echoCanceler = null
++        noiseSuppressor = null
++    }
+ 
+     override fun start() {
+         createRecorder().apply {
+@@ -169,6 +220,7 @@ class ExpoAudioRecorder(
+         isRecordingAudio = false
+         audioRecorder?.stop()
+         stoppedAtMillis = System.currentTimeMillis()
++        releaseEffects()
+         audioRecorder?.release()
+         audioRecorder = null
+         recordingThread = null

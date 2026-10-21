@@ -22,6 +22,7 @@ import {
 vi.mock("expo-localization", () => ({ getLocales: () => [{ languageTag: "en-US" }] }));
 
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
+vi.mock("./call-audio", () => ({ reassertCallAudio: vi.fn() }));
 vi.mock("expo-file-system", () => ({
   File: class {
     uri = "file:///cache/rakazo-voice.mp3";

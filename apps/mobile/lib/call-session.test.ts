@@ -13,6 +13,11 @@ import {
 vi.mock("expo-file-system", () => ({ File: class {}, Paths: {} }));
 vi.mock("./voice", () => ({ speakText: vi.fn(), stopSpeaking: vi.fn() }));
 vi.mock("./call-sounds", () => ({ playCallCue: vi.fn() }));
+vi.mock("./call-audio", () => ({
+  enterCallAudio: vi.fn(),
+  leaveCallAudio: vi.fn(),
+  reassertCallAudio: vi.fn(),
+}));
 vi.mock("./api", () => ({
   applyMobileThreadEvent: vi.fn(),
   blockText: vi.fn(),
@@ -58,7 +63,9 @@ function fakes(opts: { onDevice?: boolean } = {}) {
   });
   const cues: string[] = [];
   const waits: string[] = [];
+  const audio = { enter: vi.fn(), leave: vi.fn() };
   const deps: CallDeps = {
+    audio,
     cue: async (cue) => {
       cues.push(cue);
     },
@@ -96,6 +103,7 @@ function fakes(opts: { onDevice?: boolean } = {}) {
   };
   return {
     deps,
+    audio,
     cues,
     waits,
     stopSpeaking,
@@ -118,6 +126,46 @@ function fakes(opts: { onDevice?: boolean } = {}) {
 afterEach(() => endCall());
 
 describe("mobile call session", () => {
+  it("holds echo-cancelled call audio from the first microphone to the hang-up", async () => {
+    const fake = fakes({ onDevice: true });
+    startCall({ botId: "bot-1", botName: "Ada", transcribe: false }, fake.deps);
+    expect(fake.audio.enter).toHaveBeenCalledOnce();
+    await flush();
+    expect(fake.signals).toHaveLength(1);
+    expect(fake.audio.leave).not.toHaveBeenCalled();
+
+    endCall();
+    expect(fake.audio.leave).toHaveBeenCalledOnce();
+  });
+
+  it("drops the reply read back by the microphone after it finished, and keeps listening", async () => {
+    const fake = fakes({ onDevice: true });
+    startCall({ botId: "bot-1", botName: "Ada", transcribe: false }, fake.deps);
+    await flush();
+    fake.hear("what is on my calendar");
+    await flush();
+    const reply =
+      "You have a review with the design team at three and then the weekly planning call with everyone at five";
+    fake.replyWith("message-1", reply, "run-1");
+    await flush();
+    expect(getSnapshot()).toMatchObject({ phase: "speaking" });
+    fake.speeches[0]?.resolve();
+    await flush();
+
+    // The recogniser delivers the speaker's tail only once the reply is over.
+    fake.hear(
+      "a review with the design team at three and then the weekly planning call with everyone",
+    );
+    await flush();
+
+    expect(fake.send).toHaveBeenCalledOnce();
+    expect(getSnapshot()).toMatchObject({ phase: "listening" });
+
+    fake.hear("move the planning call to tomorrow");
+    await flush();
+    expect(fake.send).toHaveBeenCalledTimes(2);
+  });
+
   it("starts listening for the bot on the call", async () => {
     const fake = fakes();
     startCall({ botId: "bot-1", botName: "Ada" }, fake.deps);

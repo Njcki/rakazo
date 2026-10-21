@@ -51,7 +51,8 @@
       "e2b>undici8": "npm:undici@8.10.2"
     },
     "patchedDependencies": {
-      "app-builder-lib@26.15.3": "patches/app-builder-lib@26.15.3.patch"
+      "app-builder-lib@26.15.3": "patches/app-builder-lib@26.15.3.patch",
+      "expo-speech-recognition@57.1.0": "patches/expo-speech-recognition@57.1.0.patch"
     }
   }
 }

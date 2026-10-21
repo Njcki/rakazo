@@ -82,6 +82,8 @@ Funzioni aggiunte rispetto a upstream:
 - La chat resta in fondo ai nuovi messaggi (`autoscrollToTopThreshold` sulla lista invertita); chi è salito a leggere non viene spostato.
 - Il proprio messaggio non compare più doppio per un istante all'invio (bolla locale nascosta nello stesso render in cui arriva la copia del server).
 - Fix completo: l'invio in corso è una riga della stessa lista che la copia del server sostituisce sul posto con la stessa chiave (anche per la copia live senza seq); sparisce solo l'etichetta «Invio…».
+- Tabelle larghe scorrevoli in orizzontale (colonne sempre a piena altezza, barra di scorrimento visibile) / Wide tables scroll horizontally (full-height columns, visible scrollbar).
+- Chiamate in vivavoce con cancellazione dell'eco (modalità comunicazione + `VOICE_COMMUNICATION`/AEC), interruzione vocale invariata / Speakerphone calls with echo cancellation (communication mode + `VOICE_COMMUNICATION`/AEC), barge-in kept.
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

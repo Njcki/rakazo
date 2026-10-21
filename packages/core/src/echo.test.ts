@@ -30,6 +30,23 @@ describe("isEchoOfSpeech", () => {
     expect(isEchoOfSpeech("I am here what about that", SPOKEN, 0.4)).toBe(true);
   });
 
+  it("drops a long transcript that is the reply read back", () => {
+    const reply =
+      "Sure, I have moved the meeting with the design team to Thursday at three and sent everyone the new invite";
+    expect(
+      isEchoOfSpeech(
+        "I have moved the meeting with the design team to Thursday at three and sent everyone",
+        reply,
+      ),
+    ).toBe(true);
+    expect(
+      isEchoOfSpeech(
+        "no wait I wanted the meeting with the design team on Friday not Thursday please fix it",
+        reply,
+      ),
+    ).toBe(false);
+  });
+
   it("keeps everything when nothing was spoken", () => {
     expect(isEchoOfSpeech("I am here in", "")).toBe(false);
   });
@@ -84,6 +101,15 @@ describe("SpokenMemory", () => {
 
     expect(memory.isEcho("hey I am here and here", undefined, 14_000)).toBe(true);
     expect(memory.isEcho("hey I am here and here", undefined, 16_000)).toBe(false);
+  });
+
+  it("counts the window from when a long reply finished playing", () => {
+    const memory = new SpokenMemory();
+    memory.remember(SPOKEN, 0);
+    memory.finished(SPOKEN, 20_000);
+
+    expect(memory.isEcho("hey I am here and here", undefined, 30_000)).toBe(true);
+    expect(memory.isEcho("hey I am here and here", undefined, 36_000)).toBe(false);
   });
 
   it("keeps a genuine turn, and everything once cleared", () => {

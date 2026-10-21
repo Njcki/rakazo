@@ -21,6 +21,7 @@ import {
   rpc,
   subscribeThread,
 } from "./api";
+import { enterCallAudio, leaveCallAudio, reassertCallAudio } from "./call-audio";
 import type { CallCue } from "./call-sounds";
 import {
   playCallCue,
@@ -80,6 +81,8 @@ export type CallDeps = {
     onReply: (messageId: string, text: string, runId?: string) => void,
     onCallEnded: (ended: CallEnded) => void,
   ) => () => void;
+  /** Hands-free call audio (communication mode with echo cancellation) for the call's length. */
+  audio: { enter: () => void; leave: () => void };
 };
 
 /** The bot a caller asked to be put through to, and how to ring it once this call hangs up. */
@@ -197,6 +200,9 @@ export function startCall(
   micOpen = false;
   bargedIn = false;
   spokenMemory.clear();
+  // Communication mode before the first microphone session, so it records with the echo
+  // canceller and the bot's voice from the speaker is not heard as the caller.
+  deps.audio.enter();
   state = {
     botId: call.botId,
     botName: call.botName,
@@ -271,6 +277,7 @@ export function endCall(): void {
   clearInterim();
   spokenMemory.clear();
   if (!state) return;
+  deps.audio.leave();
   state = null;
   emit();
 }
@@ -596,6 +603,8 @@ function speakAndListen(text: string): void {
     })
     .finally(() => {
       if (state?.botId !== botId || callId !== speakingCallId) return;
+      // The tail of a long reply can still be on its way through the recogniser.
+      spokenMemory.finished(text);
       if (blockedByConsent) return;
       // The caller cut in: the microphone is already theirs and their turn is on its way.
       if (bargedIn) return;
@@ -636,6 +645,7 @@ function productionDeps(): CallDeps {
       else releaseWaitSound();
     },
     watch: watchReplies,
+    audio: { enter: enterCallAudio, leave: leaveCallAudio },
   };
 }
 
@@ -655,6 +665,7 @@ async function recordClip(signal: AbortSignal): Promise<CallClip | null> {
   let heardSpeech = false;
   try {
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    reassertCallAudio();
     recorder = new AudioModule.AudioRecorder({
       ...RecordingPresets.HIGH_QUALITY,
       isMeteringEnabled: true,
@@ -688,6 +699,7 @@ async function recordClip(signal: AbortSignal): Promise<CallClip | null> {
   } finally {
     recorder?.release();
     await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    reassertCallAudio();
   }
 }
 

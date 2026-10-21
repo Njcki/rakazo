@@ -6,6 +6,7 @@ import { promptAiConsent } from "./ai-consent";
 import type { ApiRequestContext } from "./api";
 import { aiConsentCoalesceKey, captureApiRequestContext, rpc } from "./api";
 import { voiceForBot } from "./bot-voices";
+import { reassertCallAudio } from "./call-audio";
 import { loadDeviceVoiceEnabled } from "./device-voice";
 import { t } from "./i18n";
 import { errorText } from "./user-error";
@@ -513,6 +514,8 @@ async function playWithNativeAudio(bytes: Uint8Array, session?: HostedSession): 
     interruptionMode: "mixWithOthers",
     shouldPlayInBackground: false,
   });
+  // Setting the audio mode drops a call's communication mode, and with it echo cancellation.
+  reassertCallAudio();
   const file = new File(Paths.cache, `rakazo-voice-${Date.now()}.mp3`);
   file.create({ overwrite: true });
   file.write(bytesToBase64(bytes), { encoding: "base64" });

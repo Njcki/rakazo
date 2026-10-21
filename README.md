@@ -75,6 +75,8 @@ docker build --build-arg BASE=ghcr.io/elie222/rakazo/app@$(. ./PINS; echo $APP_D
 
 **IT —** `patches-v2/update-rakazo-v2.sh` è lo script che uso sul mio server (adatta i percorsi). Le tabelle del Piano vengono create dalla normale migrazione di Rakazo. `patches-v2/compose/` contiene una patch opzionale (timeout comandi 20 min, `SANDBOX_IDLE_MS`).
 **EN —** `patches-v2/update-rakazo-v2.sh` is the script I use on my server (adjust paths). Plan tables are created by Rakazo's normal migration. `patches-v2/compose/` holds an optional patch (20 min command timeout, `SANDBOX_IDLE_MS`).
+**IT —** `cutover --yes` ora usa di default la modalità `fast`: migrazioni e preparazione prima di fermare qualcosa, poi un servizio alla volta (api resta giù solo per il suo avvio, ~18 s); `CUTOVER_MODE=legacy` ripristina il vecchio riavvio di tutto lo stack. Con Caddy davanti a web conviene aggiungere nel blocco `reverse_proxy` `lb_try_duration 30s`, `lb_try_interval 250ms`, `health_uri /`, `health_interval 1s`, `health_timeout 3s`, `health_fails 1`, `health_passes 1`: durante il riavvio di web le richieste aspettano invece di ricevere 502.
+**EN —** `cutover --yes` now defaults to `fast` mode: migrations and preparation before anything stops, then one service at a time (api is down only for its own start, ~18 s); `CUTOVER_MODE=legacy` restores the old whole-stack restart. With Caddy in front of web, add `lb_try_duration 30s`, `lb_try_interval 250ms`, `health_uri /`, `health_interval 1s`, `health_timeout 3s`, `health_fails 1`, `health_passes 1` to the `reverse_proxy` block so requests wait instead of getting 502 while web restarts.
 
 Vedi anche / see also [FORK.md](FORK.md).
 

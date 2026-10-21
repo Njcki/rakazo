@@ -681,17 +681,19 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 14, flexShrink: 1, textAlign: "right" },
 });
 
-/** Session cache of narrowed catalogs, keyed by sorted provider list. */
-const connectedCatalogCache = new Map<string, Promise<MobileModel[]>>();
+/** Session cache: one full `models/list` fetch, then filter to the connected providers on the
+ *  device. The self-host API (selfhost-v2 image) does not accept `{ providers }` on models/list
+ *  yet; once it does, the server-side filter from fb79cf11 can come back. */
+let fullCatalogPromise: Promise<MobileModel[]> | null = null;
 
 function loadConnectedCatalog(providers: string[]): Promise<MobileModel[]> {
   if (!providers.length) return Promise.resolve([]);
-  const key = [...providers].sort().join("|");
-  let pending = connectedCatalogCache.get(key);
-  if (!pending) {
-    pending = rpc<MobileModel[]>("models/list", { providers: key.split("|") });
-    pending.catch(() => connectedCatalogCache.delete(key));
-    connectedCatalogCache.set(key, pending);
+  const wanted = new Set(providers);
+  if (!fullCatalogPromise) {
+    fullCatalogPromise = rpc<MobileModel[]>("models/list");
+    fullCatalogPromise.catch(() => {
+      fullCatalogPromise = null;
+    });
   }
-  return pending;
+  return fullCatalogPromise.then((full) => full.filter((entry) => wanted.has(entry.provider)));
 }

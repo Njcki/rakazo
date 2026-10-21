@@ -80,6 +80,7 @@ Funzioni aggiunte rispetto a upstream:
 - Grafici `render_plot` nella chat (interattivi) e formule TeX (KaTeX per i blocchi, testo Unicode in linea).
 - Allegati `.apk` aperti nell'installer di Android (MIME corretto + `REQUEST_INSTALL_PACKAGES`).
 - La chat resta in fondo ai nuovi messaggi (`autoscrollToTopThreshold` sulla lista invertita); chi è salito a leggere non viene spostato.
+- Il proprio messaggio non compare più doppio per un istante all'invio (bolla locale nascosta nello stesso render in cui arriva la copia del server).
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

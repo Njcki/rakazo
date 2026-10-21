@@ -1,7 +1,12 @@
 import type { ThreadScrollState } from "@rakazo/core";
 import { reconcileThreadScrollState } from "@rakazo/core";
 import { describe, expect, it } from "vitest";
-import { ThreadScrollBehavior } from "./thread-scroll.js";
+import {
+  LIVE_THREAD_LIST_POSITION,
+  PINNED_PAGE_LIST_POSITION,
+  THREAD_FOLLOW_THRESHOLD_PX,
+  ThreadScrollBehavior,
+} from "./thread-scroll.js";
 
 describe("mobile thread initial scroll", () => {
   it("waits for layout when messages arrive first, then opens at the latest message", () => {
@@ -103,5 +108,29 @@ describe("mobile thread initial scroll", () => {
     publish(behavior.onUserScroll(80));
     expect(afterCommits).toBe(2);
     expect(after).toEqual({ detached: false, unread: false });
+  });
+
+  it("treats 100 px from the latest message as the bottom", () => {
+    const behavior = new ThreadScrollBehavior();
+    behavior.openThread("thread-1");
+    behavior.onLayout();
+    behavior.onContentChanged(false, "m1");
+
+    expect(behavior.onUserScroll(THREAD_FOLLOW_THRESHOLD_PX)).toEqual({
+      detached: false,
+      unread: false,
+    });
+    expect(behavior.onContentChanged(false, "m2")).toBe("smooth");
+    expect(behavior.onUserScroll(THREAD_FOLLOW_THRESHOLD_PX + 1).detached).toBe(true);
+    expect(behavior.onContentChanged(false, "m3")).toBe(null);
+    expect(behavior.state()).toEqual({ detached: true, unread: true });
+  });
+
+  it("lets the native list re-pin the bottom only for the live thread", () => {
+    expect(LIVE_THREAD_LIST_POSITION).toEqual({
+      minIndexForVisible: 0,
+      autoscrollToTopThreshold: THREAD_FOLLOW_THRESHOLD_PX,
+    });
+    expect(PINNED_PAGE_LIST_POSITION).toEqual({ minIndexForVisible: 0 });
   });
 });

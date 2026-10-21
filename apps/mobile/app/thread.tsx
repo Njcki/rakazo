@@ -201,7 +201,12 @@ import {
   subscribeSessionGeneration,
 } from "../lib/session";
 import type { SendAttempt } from "../lib/thread-feedback";
-import { confirmEchoes, subscribeDelivered, useThreadFeedback } from "../lib/thread-feedback";
+import {
+  confirmEchoes,
+  subscribeDelivered,
+  useThreadFeedback,
+  withoutEchoedSends,
+} from "../lib/thread-feedback";
 import { ThreadJumpAnchor } from "../lib/thread-jump";
 import { ThreadReadOnlyContext } from "../lib/thread-read-only";
 import type { ThreadScrollAction, ThreadScrollState } from "../lib/thread-scroll";
@@ -1627,6 +1632,10 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
         attachments,
         replyTargetId: replyTarget?.id,
         replyQuote,
+        echoAfterSeq:
+          snap && (snap.groupId ?? snap.botId) === originThreadKey
+            ? snap.messages.reduce((max, message) => Math.max(max, message.seq ?? -1), -1)
+            : undefined,
       });
     } catch (error) {
       Alert.alert(t("Failed to send message"), errorText(error));
@@ -2263,7 +2272,11 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
       </Pressable>
     ) : null;
 
-  const failedSendBubbles = feedback.unsentSends.map((attempt) => (
+  // Hide a local bubble in the same render its server copy appears, so it never shows twice.
+  const failedSendBubbles = withoutEchoedSends(
+    feedback.unsentSends,
+    snap && (snap.groupId ?? snap.botId) === threadKey ? snap.messages : undefined,
+  ).map((attempt) => (
     <FailedSendBubble
       key={attempt.clientNonce}
       attempt={attempt}

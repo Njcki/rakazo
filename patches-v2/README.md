@@ -50,6 +50,27 @@ cambiato, `.env`/compose solo se mtime cambiato, **nessun** `docker commit`; ret
 Il rollback alle immagini resta sui tag `0723154-nkN` e sugli snapshot di cutover
 (`update-rakazo-v2.sh cutover` / `rollback`). Changelog patch: `CHANGELOG.md`.
 
+### Snapshot di cutover veloce / fast cutover snapshot (2026-10-21)
+
+IT: `update-rakazo-v2.sh cutover` non fa più `docker commit` dei container (circa 9 minuti su una VPS
+lenta, sito rallentato): lo snapshot salva `.env` (con il `RAKAZO_IMAGE_TAG` precedente), i file compose,
+`PREVIOUS` (immagini in uso) e un `pg_dump -Fc -Z zstd:3` eseguito con `nice -n 19 ionice -c3` dentro il
+container postgres, verificato con `pg_restore -l`; in prova circa 2 s. `snapshot` fa solo lo snapshot
+(nessun container ricreato, `LAST_CUTOVER` invariato). `rollback --yes [STAMP]` ripristina `.env`, compose e
+DB e ricrea sul tag precedente; rifiuta (exit 3) se l'immagine del tag o quella computer mancano, quindi il
+tag precedente non va eliminato. Gli snapshot vecchi con immagini `rakazo-rollback-*` tornano indietro come
+prima. `SNAPSHOT_COMMIT_IMAGES=1` ripristina il vecchio `docker commit`. Healthcheck finale solo con
+`RAKAZO_HOST`.
+
+EN: `cutover` no longer runs `docker commit` on the containers (about 9 minutes on a slow VPS, site slowed
+down). The snapshot keeps `.env` (holding the previous `RAKAZO_IMAGE_TAG`), the compose files, `PREVIOUS`
+(images in use) and a `pg_dump -Fc -Z zstd:3` run under `nice -n 19 ionice -c3` inside the postgres
+container and checked with `pg_restore -l`; about 2 s in testing. `snapshot` takes only the snapshot (nothing
+recreated, `LAST_CUTOVER` unchanged). `rollback --yes [STAMP]` restores `.env`, compose and DB and recreates on
+the previous tag; it refuses (exit 3) when that image or the computer image is missing, so never prune the
+previous tag. Older snapshots with `rakazo-rollback-*` images roll back as before. `SNAPSHOT_COMMIT_IMAGES=1`
+brings back the old `docker commit`. Final healthcheck only with `RAKAZO_HOST`.
+
 - 0016 UI: Advanced accordion groups in light cards; sticky Save footer flush to panel bottom (settings pb-0 + footer -mb).
 
 - 0017 plan: keep completed plans visible in sidebar until plan_create replaces them (getDisplayPlan); no nested sub-steps.

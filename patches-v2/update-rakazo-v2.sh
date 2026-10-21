@@ -4,8 +4,15 @@
 #
 #   ./update-rakazo-v2.sh check                    # show pinned vs remote digests, patch list
 #   ./update-rakazo-v2.sh build  [APP_DIGEST]      # build rakazo-app-nk:<tag> (applies series, builds web)
+#   ./update-rakazo-v2.sh snapshot                 # snapshot only (.env, compose, DB dump); recreates nothing
 #   ./update-rakazo-v2.sh cutover --yes            # snapshot prod, migrate, recreate on the new image
-#   ./update-rakazo-v2.sh rollback --yes           # back to the snapshot images + DB dump taken at cutover
+#   ./update-rakazo-v2.sh rollback --yes [STAMP]   # back to the image tag + DB dump of a snapshot (default LAST_CUTOVER)
+#
+# Snapshot (fast, default): copies .env (which holds the previous RAKAZO_IMAGE_TAG), the compose files
+# and a pg_dump -Fc (zstd:3 when supported) run with nice/ionice inside the postgres container. No
+# docker commit: the previous rakazo-app-nk:<tag> image is the rollback image, so it must not be pruned.
+# SNAPSHOT_COMMIT_IMAGES=1 restores the old, slow behaviour (docker commit of api/worker/web/supervisor).
+# Older snapshots that carry rakazo-rollback-* images still roll back the old way.
 #
 # Pins live in patches-v2/PINS (APP_DIGEST, COMPUTER_DIGEST, UPSTREAM_COMMIT).
 #
@@ -31,6 +38,33 @@ OLDC=(docker compose --env-file .env -f docker-compose.images.yml)
 NEWC=(docker compose --env-file .env -f docker-compose.images.v2.yml)
 STAMP=$(date +%Y%m%dT%H%M%S)
 need_yes(){ [[ $YES -eq 1 ]] || { echo "refusing without --yes"; exit 2; }; }
+env_get(){ { grep -E "^$1=" "$2" || true; } | tail -1 | cut -d= -f2-; }
+PG_USER="${POSTGRES_USER:-rakazo}"; PG_DB="${POSTGRES_DB:-rakazo}"
+# snapshot_prod DIR: no restart, nothing recreated.
+snapshot_prod(){
+  local B="$1" t0; mkdir -p "$B"; t0=$(date +%s)
+  if [[ "${SNAPSHOT_COMMIT_IMAGES:-0}" == "1" ]]; then
+    echo "== snapshot: docker commit (SNAPSHOT_COMMIT_IMAGES=1, slow) =="
+    for s in api worker web supervisor; do
+      docker commit --pause=false "rakazo-$s-1" "rakazo-rollback-$s:$(basename "$B" | sed 's/^[a-z-]*-//')" >/dev/null
+    done
+    echo images > "$B/MODE"
+  else
+    echo tag > "$B/MODE"
+  fi
+  cp -p .env "$B/.env"; chmod 600 "$B/.env"
+  for f in docker-compose.images.v2.yml docker-compose.images.yml; do [[ -f "$f" ]] && cp -p "$f" "$B/"; done
+  { echo "image=$(env_get RAKAZO_IMAGE .env):$(env_get RAKAZO_IMAGE_TAG .env)"
+    echo "computer=$(env_get RAKAZO_COMPUTER_IMAGE .env):$(env_get RAKAZO_COMPUTER_IMAGE_TAG .env)"; } > "$B/PREVIOUS"
+  echo "== snapshot: pg_dump (nice/ionice) =="
+  local PGD=(docker exec rakazo-postgres-1 nice -n 19 ionice -c3 pg_dump -U "$PG_USER" -d "$PG_DB" -Fc)
+  if ! "${PGD[@]}" -Z zstd:3 > "$B/db.dump" 2>"$B/pg_dump.err"; then
+    echo "zstd not available, default compression"; "${PGD[@]}" > "$B/db.dump"
+  fi
+  rm -f "$B/pg_dump.err"
+  docker exec -i rakazo-postgres-1 pg_restore -l < "$B/db.dump" >/dev/null || { echo "db.dump unreadable"; exit 1; }
+  echo "snapshot $(basename "$B"): $(cat "$B/MODE"), $(cat "$B/PREVIOUS" | tr '\n' ' ')db $(du -h "$B/db.dump" | cut -f1), $(( $(date +%s) - t0 )) s"
+}
 
 case "$CMD" in
 check)
@@ -48,13 +82,8 @@ build)
 cutover)
   need_yes
   docker image inspect "$IMAGE" >/dev/null
-  B="$ROOT/backups/cutover-$STAMP"; mkdir -p "$B"
-  echo "== snapshot prod (no restart; --pause=false) =="
-  for s in api worker web supervisor; do
-    docker commit --pause=false "rakazo-$s-1" "rakazo-rollback-$s:$STAMP" >/dev/null
-  done
-  cp .env docker-compose.images.yml "$B/"
-  docker exec rakazo-postgres-1 pg_dump -U "${POSTGRES_USER:-rakazo}" -d "${POSTGRES_DB:-rakazo}" -Fc > "$B/db.dump"
+  B="$ROOT/backups/cutover-$STAMP"
+  snapshot_prod "$B"
   echo "$STAMP" > "$ROOT/backups/LAST_CUTOVER"
   echo "== computer tools image on pinned computer digest =="
   docker pull -q "$COMP_REPO@$COMPUTER_DIGEST"
@@ -80,23 +109,55 @@ cutover)
     curl -fsS -o /dev/null -w "site %{http_code}\n" "https://${RAKAZO_HOST}/" || true
   fi
   echo "rollback: $0 rollback --yes  (snapshot $STAMP)" ;;
+snapshot)
+  snapshot_prod "$ROOT/backups/snapshot-$STAMP"
+  echo "snapshot only: nothing recreated, LAST_CUTOVER unchanged" ;;
 rollback)
   need_yes
-  S=$(cat "$ROOT/backups/LAST_CUTOVER"); B="$ROOT/backups/cutover-$S"
-  "${NEWC[@]}" stop api worker web supervisor || true
-  cp "$B/.env" .env; cp "$B/docker-compose.images.yml" docker-compose.images.yml
-  echo "== restore DB (new migrations are forward-only) =="
-  docker exec -i rakazo-postgres-1 pg_restore -U "${POSTGRES_USER:-rakazo}" -d "${POSTGRES_DB:-rakazo}" --clean --if-exists --no-owner < "$B/db.dump"
-  # Snapshot images carry the old live patches (incl. Italian web dist) in their layers.
-  cat > docker-compose.rollback.override.yml <<YML
+  S="${ROLLBACK_STAMP:-}"
+  for a in "$@"; do [[ "$a" =~ ^[0-9]{8}T[0-9]{6}$ ]] && S="$a"; done
+  [[ -n "$S" ]] || S=$(cat "$ROOT/backups/LAST_CUTOVER")
+  B="$ROOT/backups/cutover-$S"
+  [[ -d "$B" && -f "$B/db.dump" ]] || { echo "refusing: snapshot $B or its db.dump is missing"; exit 3; }
+  MODE=$(cat "$B/MODE" 2>/dev/null || echo images)
+  if [[ "$MODE" == "tag" ]]; then
+    OLD_IMAGE="$(env_get RAKAZO_IMAGE "$B/.env"):$(env_get RAKAZO_IMAGE_TAG "$B/.env")"
+    OLD_COMP="$(env_get RAKAZO_COMPUTER_IMAGE "$B/.env"):$(env_get RAKAZO_COMPUTER_IMAGE_TAG "$B/.env")"
+    docker image inspect "$OLD_IMAGE" >/dev/null 2>&1 || {
+      echo "refusing: rollback image $OLD_IMAGE is missing (pruned?). Rebuild it or pick another snapshot."; exit 3; }
+    [[ "$OLD_COMP" == ":" ]] || docker image inspect "$OLD_COMP" >/dev/null 2>&1 || {
+      echo "refusing: computer image $OLD_COMP is missing. Rebuild it or pick another snapshot."; exit 3; }
+    [[ -f "$B/docker-compose.images.v2.yml" ]] || { echo "refusing: $B has no docker-compose.images.v2.yml"; exit 3; }
+    echo "== rollback to $OLD_IMAGE (snapshot $S) =="
+    "${NEWC[@]}" stop api worker web supervisor || true
+    cp -p "$B/.env" .env; cp -p "$B/docker-compose.images.v2.yml" docker-compose.images.v2.yml
+    echo "== restore DB (new migrations are forward-only) =="
+    docker exec -i rakazo-postgres-1 pg_restore -U "$PG_USER" -d "$PG_DB" --clean --if-exists --no-owner < "$B/db.dump"
+    "${NEWC[@]}" up -d --pull never --force-recreate --wait --wait-timeout 400 supervisor api worker web
+    echo "rolled back to $OLD_IMAGE (snapshot $S)"
+  else
+    # Legacy snapshot: rakazo-rollback-* images from docker commit.
+    for s in api worker web supervisor; do
+      docker image inspect "rakazo-rollback-$s:$S" >/dev/null 2>&1 || {
+        echo "refusing: legacy snapshot $S lacks image rakazo-rollback-$s:$S"; exit 3; }
+    done
+    # Snapshots taken with SNAPSHOT_COMMIT_IMAGES=1 (MODE file) saved the v2 compose; older ones the v1 file.
+    LCF=docker-compose.images.yml; [[ -f "$B/MODE" && -f "$B/docker-compose.images.v2.yml" ]] && LCF=docker-compose.images.v2.yml
+    "${NEWC[@]}" stop api worker web supervisor || true
+    cp "$B/.env" .env; cp "$B/$LCF" "$LCF"
+    echo "== restore DB (new migrations are forward-only) =="
+    docker exec -i rakazo-postgres-1 pg_restore -U "$PG_USER" -d "$PG_DB" --clean --if-exists --no-owner < "$B/db.dump"
+    # Snapshot images carry the old live patches (incl. Italian web dist) in their layers.
+    cat > docker-compose.rollback.override.yml <<YML
 services:
   api: {image: rakazo-rollback-api:$S}
   worker: {image: rakazo-rollback-worker:$S}
   web: {image: rakazo-rollback-web:$S}
   supervisor: {image: rakazo-rollback-supervisor:$S}
 YML
-  docker compose --env-file .env -f docker-compose.images.yml -f docker-compose.rollback.override.yml \
-    up -d --force-recreate --wait --wait-timeout 400 supervisor api worker web
-  echo "rolled back to snapshot $S" ;;
+    docker compose --env-file .env -f "$LCF" -f docker-compose.rollback.override.yml \
+      up -d --force-recreate --wait --wait-timeout 400 supervisor api worker web
+    echo "rolled back to legacy snapshot $S"
+  fi ;;
 *) echo "unknown command $CMD"; exit 2 ;;
 esac

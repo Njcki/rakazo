@@ -4,6 +4,24 @@ export type { ThreadScrollState } from "@rakazo/core";
 
 export type ThreadScrollAction = "jump" | "smooth" | null;
 
+/** Within this distance of the latest message the reader counts as "at the bottom" and follows. */
+export const THREAD_FOLLOW_THRESHOLD_PX = 100;
+
+/**
+ * maintainVisibleContentPosition for the inverted live thread. Keeping the newest row in place
+ * is right for a reader who scrolled up, but at the bottom it pushes a new message, the working
+ * indicator or a failed-send bubble just below the screen; autoscrollToTopThreshold makes the
+ * native side scroll back to offset 0 (the latest message) when the reader was within the
+ * follow threshold, before JS sees the change.
+ */
+export const LIVE_THREAD_LIST_POSITION = {
+  minIndexForVisible: 0,
+  autoscrollToTopThreshold: THREAD_FOLLOW_THRESHOLD_PX,
+} as const;
+
+/** The pinned (non-inverted) history page: offset 0 is the oldest row, so never autoscroll. */
+export const PINNED_PAGE_LIST_POSITION = { minIndexForVisible: 0 } as const;
+
 export class ThreadScrollBehavior {
   private threadKey: string | null = null;
   private laidOut = false;
@@ -40,7 +58,7 @@ export class ThreadScrollBehavior {
   }
 
   onUserScroll(distanceFromEnd: number): ThreadScrollState {
-    const detached = distanceFromEnd > 80;
+    const detached = distanceFromEnd > THREAD_FOLLOW_THRESHOLD_PX;
     this.currentState = {
       detached,
       unread: detached ? this.currentState.unread : false,

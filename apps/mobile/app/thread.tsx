@@ -205,7 +205,11 @@ import { confirmEchoes, subscribeDelivered, useThreadFeedback } from "../lib/thr
 import { ThreadJumpAnchor } from "../lib/thread-jump";
 import { ThreadReadOnlyContext } from "../lib/thread-read-only";
 import type { ThreadScrollAction, ThreadScrollState } from "../lib/thread-scroll";
-import { ThreadScrollBehavior } from "../lib/thread-scroll";
+import {
+  LIVE_THREAD_LIST_POSITION,
+  PINNED_PAGE_LIST_POSITION,
+  ThreadScrollBehavior,
+} from "../lib/thread-scroll";
 import { reconcileVisibleThreadSnapshot } from "../lib/thread-snapshot";
 import { prepareUnsentSends } from "../lib/unsent-sends";
 import { errorText } from "../lib/user-error";
@@ -2293,7 +2297,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
             ref={pinnedScroll}
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 16 }}
-            maintainVisibleContentPosition={messageListPosition}
+            maintainVisibleContentPosition={PINNED_PAGE_LIST_POSITION}
             scrollEventThrottle={16}
             onLayout={(event) => {
               pinnedScrollMetrics.current.viewport = event.nativeEvent.layout.height;
@@ -2358,7 +2362,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
             style={messageListStyles.list}
             // Inverted, so the bottom padding is the visual top, clear of the transparent header.
             contentContainerStyle={listContentStyle}
-            maintainVisibleContentPosition={messageListPosition}
+            maintainVisibleContentPosition={LIVE_THREAD_LIST_POSITION}
             scrollEventThrottle={16}
             onScrollBeginDrag={() => {
               userDragging.current = true;
@@ -2805,7 +2809,6 @@ const messageListStyles = StyleSheet.create({
   list: { flex: 1 },
   row: { marginTop: 12, width: "100%" },
 });
-const messageListPosition = { minIndexForVisible: 0 };
 function threadItemKey(item: ThreadItem<MobileMessage>) {
   return item.kind === "voiceChat" ? item.key : item.message.id;
 }

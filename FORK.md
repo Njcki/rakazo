@@ -79,6 +79,7 @@ Funzioni aggiunte rispetto a upstream:
 - Caricamento modelli selettivo/differito nei parametri bot (filtro `providers` su `models/list`) e selettori lunghi Android nella safe area.
 - Grafici `render_plot` nella chat (interattivi) e formule TeX (KaTeX per i blocchi, testo Unicode in linea).
 - Allegati `.apk` aperti nell'installer di Android (MIME corretto + `REQUEST_INSTALL_PACKAGES`).
+- La chat resta in fondo ai nuovi messaggi (`autoscrollToTopThreshold` sulla lista invertita); chi è salito a leggere non viene spostato.
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

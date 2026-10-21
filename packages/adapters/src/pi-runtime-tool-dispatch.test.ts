@@ -473,6 +473,7 @@ import {
   providerFailureText,
 } from "./pi-runtime.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
+import { frameQuickAckedSteering } from "./quick-reply.js";
 
 const destinationTool: ConnectorTool = {
   name: "destination.write",
@@ -2391,6 +2392,35 @@ describe("Pi connector tool dispatch", () => {
       );
       const done = events.at(-1) as { type: string; text?: string };
       expect(done.text?.endsWith(FINAL)).toBe(true);
+    });
+
+    it("uses the quick-acked note when a quick reply already answered (patch 0030)", async () => {
+      fakeAgentState.danglingReplies = [STATUS, FINAL];
+      let calls = 0;
+      await runSteer(
+        vi.fn(async () => {
+          calls += 1;
+          return calls === 2
+            ? [
+                {
+                  id: "s-1",
+                  messageId: "m-1",
+                  text: "a che punto sei?",
+                  quickReplyText: "Sono al passo 2 di 4, ti aggiorno a breve.",
+                },
+              ]
+            : [];
+        }),
+      );
+
+      expect(fakeAgentState.steeredMessages).toHaveLength(1);
+      const steered = fakeAgentState.steeredMessages[0] as { content: string };
+      expect(steered.content).toBe(
+        frameQuickAckedSteering("a che punto sei?", "Sono al passo 2 di 4, ti aggiorno a breve."),
+      );
+      expect(steered.content).not.toContain(MID_RUN_STEERING_NOTE);
+      expect(steered.content).toContain("Do not acknowledge the message again");
+      expect(steered.content).toContain("Sono al passo 2 di 4");
     });
 
     it("does not frame the steering claimed at run start", async () => {

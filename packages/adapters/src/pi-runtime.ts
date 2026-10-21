@@ -80,6 +80,7 @@ import {
   progressCadenceConfig,
   progressNudgeContinuePrompt,
 } from "./progress-cadence.js";
+import { frameQuickAckedSteering } from "./quick-reply.js";
 import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy, VERBATIM_TOOL_RESULTS } from "./runtime-context.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
@@ -489,7 +490,12 @@ export class PiAgentRuntime implements AgentRuntime {
             if (steeringNote) midRunSteeringPending = true;
             for (const item of steering) {
               const images = toPiImages(item.images);
-              const text = steeringNote ? frameMidRunSteering(item.text) : item.text;
+              // Patch 0030: a quick reply already acknowledged it; do not ask for a second ack.
+              const text = item.quickReplyText
+                ? frameQuickAckedSteering(item.text, item.quickReplyText)
+                : steeringNote
+                  ? frameMidRunSteering(item.text)
+                  : item.text;
               agent.steer({
                 role: "user",
                 content: images.length ? [{ type: "text", text }, ...images] : text,

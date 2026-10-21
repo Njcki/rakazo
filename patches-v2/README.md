@@ -99,6 +99,29 @@ server) and `restic init` on `~/rakazo-backups-repo` (root-owned, since restic r
 covers mistakes and deletions, not losing the server; that needs an off-site copy (object storage or a home PC,
 e.g. `restic copy`).
 
+Copie esterne / offsite copies: ogni file `~/.config/rakazo-backup/offsite-NOME.env` (mode 600) è una
+destinazione. Dopo un backup locale riuscito lo script esegue `restic copy` (solo host/tag del nightly) e
+`forget --prune` 7/4/3 sulla destinazione, con `nice`/`ionice` e un timeout per comando (`OFFSITE_TIMEOUT_MIN`,
+default 240; restic ritenta a lungo una destinazione irraggiungibile). Una destinazione che fallisce scrive solo un
+`WARN` nel log e non fa fallire il backup locale. Guardia di dimensione: se la stima (dimensione del repo locale,
+che la copia rispecchia con la stessa retention) supera `OFFSITE_MAX_GB` (default 18, sotto i 20 GB gratuiti di
+OCI) la copia viene saltata con un avviso. Chiavi: `OFFSITE_REPOSITORY` (es.
+`s3:https://NAMESPACE.compat.objectstorage.REGION.oraclecloud.com/BUCKET/restic`), `OFFSITE_PASSWORD_FILE`
+(diversa da quella locale), `OFFSITE_PRUNE` (0 per destinazioni append-only), `OFFSITE_RESTIC_ARGS` (per OCI
+`-o s3.bucket-lookup=path`), `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`AWS_DEFAULT_REGION` (Customer Secret Key
+OCI) oppure `RESTIC_REST_USERNAME`/`RESTIC_REST_PASSWORD`. Inizializzare con `restic init --copy-chunker-params
+--from-repo …` per mantenere la deduplicazione. `--offsite-only` esegue solo le copie.
+
+EN: each `~/.config/rakazo-backup/offsite-NAME.env` file (mode 600) is one target. After a successful local
+backup the script runs `restic copy` (nightly host/tag only) and `forget --prune` 7/4/3 on the target, under
+`nice`/`ionice` with a per-command timeout (`OFFSITE_TIMEOUT_MIN`, default 240; restic keeps retrying a dead target
+for a long time). A failing target only logs a `WARN` and never fails the local backup. Size guard: when the
+estimate (the local repo size, which the copy mirrors with the same retention) exceeds `OFFSITE_MAX_GB` (default
+18, below OCI's 20 GB free tier) the copy is skipped with a warning. Keys as listed above; initialise with
+`restic init --copy-chunker-params --from-repo …` to keep deduplication. `--offsite-only` runs just the copies.
+A home PC can instead pull over a private network (e.g. Tailscale) with `restic copy --no-lock` from a
+read-only source, so it needs no inbound port.
+
 - 0016 UI: Advanced accordion groups in light cards; sticky Save footer flush to panel bottom (settings pb-0 + footer -mb).
 
 - 0017 plan: keep completed plans visible in sidebar until plan_create replaces them (getDisplayPlan); no nested sub-steps.

@@ -158,3 +158,30 @@ export function toolBudgetWrapUpPrompt(limit: number, allowSilentEmpty?: boolean
     (allowSilentEmpty ? SILENT_CLAUSE : "")
   );
 }
+
+// Patch 0027: user messages that arrive while a run is working (mid-run steering).
+
+/** STEERING_CONTINUE_NOTE=0 (or false/off/no) injects mid-run messages verbatim, as before. */
+export function steeringContinueNoteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = env.STEERING_CONTINUE_NOTE?.trim().toLowerCase();
+  return !(raw === "0" || raw === "false" || raw === "off" || raw === "no");
+}
+
+export const MID_RUN_STEERING_NOTE =
+  "[The user sent the message below while you are still working on the current task. " +
+  "If it asks for status or a summary, answer briefly in the user's language, with the message_user tool if available or in text alongside your next tool call, then continue the original task. " +
+  "Stop or change course only if the user explicitly asks you to.]";
+
+/** Frames a mid-run steering message so a status question does not end the work. */
+export function frameMidRunSteering(text: string): string {
+  return `${MID_RUN_STEERING_NOTE}\n\n${text}`;
+}
+
+export function steeringContinuePrompt(allowSilentEmpty?: boolean): string {
+  return (
+    "You answered the user's message sent during the task, but did not call any tool, so the original task is paused. " +
+    "Unless the user explicitly asked you to stop or change course, continue the original task now with native tool calls; do not repeat the status update. " +
+    `If the user asked you to stop, or the task is actually complete, write the final answer instead. ${FINAL_SUMMARY_SHAPE}` +
+    (allowSilentEmpty ? SILENT_CLAUSE : "")
+  );
+}

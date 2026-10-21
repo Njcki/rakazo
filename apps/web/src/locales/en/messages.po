@@ -2508,6 +2508,10 @@ msgstr "Its conversation, files, and routines will be permanently deleted. Bots 
 msgid "Jump to latest"
 msgstr "Jump to latest"
 
+#: src/pages/Shell.tsx
+msgid "Jump to latest, new messages"
+msgstr "Jump to latest, new messages"
+
 #: src/pages/shell/chat-context.tsx
 msgid "Jump to replied message: {excerpt}"
 msgstr "Jump to replied message: {excerpt}"

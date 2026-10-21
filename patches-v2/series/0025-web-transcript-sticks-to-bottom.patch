@@ -1,0 +1,452 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 02:15:49 +0200
+Subject: [PATCH] fix(web): la chat resta in fondo ai nuovi messaggi /
+ transcript sticks to the bottom on new messages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: se sei in fondo alla chat (entro 100 px) i nuovi messaggi restano visibili:
+risposte del bot, streaming e contenuti che crescono dopo il render (immagini,
+grafici, KaTeX) tramite ResizeObserver sulle righe. Causa: pointerdown/touchstart
+nella trascrizione azzeravano "following", quindi dopo un qualunque clic o tap in
+fondo la chat smetteva di seguire finché non si scorreva in giù; e la crescita
+tardiva senza nuovo render non veniva seguita. Ora un clic/tap rimanda solo lo
+scatto fino al rilascio (selezione testo, trascinamento, fling); scorrere in su
+oltre la soglia smette di seguire. Il proprio messaggio inviato riporta sempre in
+fondo; i messaggi in arrivo mentre sei più in alto non spostano la vista e
+accendono il pallino sul pulsante "Vai all'ultimo, nuovi messaggi".
+
+EN: when the reader is at the bottom (within 100 px) new messages stay in view:
+bot replies, streaming growth and content that grows after the render (images,
+charts, KaTeX) via a ResizeObserver on the rows. Root cause: pointerdown/touchstart
+inside the transcript cleared "following", so any click or tap at the bottom
+stopped tail-following until a downward scroll; late growth without a new commit
+was never followed. A click/tap now only defers the snap until release (text
+selection, drag, fling); scrolling up past the threshold unfollows. The reader's
+own send always returns to the bottom; incoming messages while scrolled up do not
+move the view and light a dot on the "Jump to latest, new messages" button.
+---
+ apps/web/src/lib/transcript-scroll.test.ts |  84 +++++++++++++++-
+ apps/web/src/lib/transcript-scroll.ts      |  87 +++++++++++++++-
+ apps/web/src/locales/en/messages.po        |   4 +
+ apps/web/src/locales/it/messages.po        |   4 +
+ apps/web/src/pages/Shell.tsx               | 112 ++++++++++++++++++++-
+ 5 files changed, 283 insertions(+), 8 deletions(-)
+
+diff --git a/apps/web/src/lib/transcript-scroll.test.ts b/apps/web/src/lib/transcript-scroll.test.ts
+index 2b1cb12f..d667112f 100644
+--- a/apps/web/src/lib/transcript-scroll.test.ts
++++ b/apps/web/src/lib/transcript-scroll.test.ts
+@@ -1,16 +1,19 @@
+ import { describe, expect, it } from "vitest";
+ import {
++  observeTranscriptContent,
+   transcriptCanSnapAfterFrame,
+   transcriptIsNearEnd,
++  transcriptLatestChange,
+   transcriptMovedDown,
++  transcriptShouldSnap,
+ } from "./transcript-scroll.js";
+ 
+ describe("transcriptIsNearEnd", () => {
+-  it("follows only while the viewport is within 80px of the latest message", () => {
+-    expect(transcriptIsNearEnd({ scrollHeight: 1_000, scrollTop: 421, clientHeight: 500 })).toBe(
++  it("follows only while the viewport is within 100px of the latest message", () => {
++    expect(transcriptIsNearEnd({ scrollHeight: 1_000, scrollTop: 401, clientHeight: 500 })).toBe(
+       true,
+     );
+-    expect(transcriptIsNearEnd({ scrollHeight: 1_000, scrollTop: 420, clientHeight: 500 })).toBe(
++    expect(transcriptIsNearEnd({ scrollHeight: 1_000, scrollTop: 400, clientHeight: 500 })).toBe(
+       false,
+     );
+   });
+@@ -38,3 +41,78 @@ describe("transcriptMovedDown", () => {
+     expect(transcriptMovedDown(920, 950)).toBe(true);
+   });
+ });
++
++describe("transcriptShouldSnap", () => {
++  const base = { following: true, pointerHeld: false, jumpScrolling: false, autoScrolling: false };
++  it("pins the end only while following and nothing else owns the viewport", () => {
++    expect(transcriptShouldSnap(base)).toBe(true);
++    expect(transcriptShouldSnap({ ...base, following: false })).toBe(false);
++    expect(transcriptShouldSnap({ ...base, pointerHeld: true })).toBe(false);
++    expect(transcriptShouldSnap({ ...base, jumpScrolling: true })).toBe(false);
++    expect(transcriptShouldSnap({ ...base, autoScrolling: true })).toBe(false);
++  });
++});
++
++describe("transcriptLatestChange", () => {
++  it("separates the reader's own send from incoming messages", () => {
++    expect(transcriptLatestChange(null, undefined)).toBe("none");
++    expect(transcriptLatestChange(null, { id: "a", role: "assistant" })).toBe("initial");
++    expect(transcriptLatestChange("a", { id: "a", role: "assistant" })).toBe("none");
++    expect(transcriptLatestChange("a", { id: "b", role: "user" })).toBe("own");
++    expect(transcriptLatestChange("b", { id: "c", role: "assistant" })).toBe("incoming");
++  });
++});
++
++describe("observeTranscriptContent", () => {
++  it("observes the viewport, existing rows and rows mounted later", () => {
++    const observed: unknown[] = [];
++    let resize: () => void = () => {};
++    let mutate: () => void = () => {};
++    let disconnected = 0;
++    class FakeResizeObserver {
++      constructor(callback: () => void) {
++        resize = callback;
++      }
++      observe(target: Element) {
++        observed.push(target);
++      }
++      disconnect() {
++        disconnected += 1;
++      }
++    }
++    class FakeMutationObserver {
++      constructor(callback: () => void) {
++        mutate = callback;
++      }
++      observe() {}
++      disconnect() {
++        disconnected += 1;
++      }
++    }
++    const rowA = { id: "a" };
++    const rowB = { id: "b" };
++    const element = { children: [rowA] } as unknown as HTMLElement;
++    let calls = 0;
++    const stop = observeTranscriptContent(
++      element,
++      () => {
++        calls += 1;
++      },
++      { ResizeObserver: FakeResizeObserver, MutationObserver: FakeMutationObserver },
++    );
++    expect(observed).toEqual([element, rowA]);
++    resize();
++    expect(calls).toBe(1);
++    (element as unknown as { children: unknown[] }).children = [rowA, rowB];
++    mutate();
++    expect(observed).toEqual([element, rowA, rowB]);
++    expect(calls).toBe(2);
++    stop();
++    expect(disconnected).toBe(2);
++  });
++
++  it("is a no-op without ResizeObserver", () => {
++    const stop = observeTranscriptContent({ children: [] } as unknown as HTMLElement, () => {}, {});
++    expect(() => stop()).not.toThrow();
++  });
++});
+diff --git a/apps/web/src/lib/transcript-scroll.ts b/apps/web/src/lib/transcript-scroll.ts
+index 8f5d9ea8..307951b0 100644
+--- a/apps/web/src/lib/transcript-scroll.ts
++++ b/apps/web/src/lib/transcript-scroll.ts
+@@ -1,7 +1,12 @@
++/** Within this many px of the end the transcript counts as "at the bottom" and follows new content. */
++export const TRANSCRIPT_FOLLOW_THRESHOLD_PX = 100;
++
+ export function transcriptIsNearEnd(
+   element: Pick<HTMLElement, "scrollHeight" | "scrollTop" | "clientHeight">,
+ ): boolean {
+-  return element.scrollHeight - element.scrollTop - element.clientHeight < 80;
++  return (
++    element.scrollHeight - element.scrollTop - element.clientHeight < TRANSCRIPT_FOLLOW_THRESHOLD_PX
++  );
+ }
+ 
+ export function transcriptCanSnapAfterFrame(
+@@ -15,3 +20,83 @@ export function transcriptCanSnapAfterFrame(
+ export function transcriptMovedDown(previousScrollTop: number | null, scrollTop: number): boolean {
+   return previousScrollTop !== null && scrollTop >= previousScrollTop;
+ }
++
++export type TranscriptFollowFlags = {
++  /** The reader is at (or near) the end and the transcript follows new content. */
++  following: boolean;
++  /** A pointer/touch is down in the transcript (text selection, drag, fling not settled). */
++  pointerHeld: boolean;
++  /** A jump-to-message scroll owns the viewport. */
++  jumpScrolling: boolean;
++  /** A smooth jump-to-latest animation is running. */
++  autoScrolling: boolean;
++};
++
++/** Whether a content/viewport resize should re-pin the transcript to its end right now. */
++export function transcriptShouldSnap(flags: TranscriptFollowFlags): boolean {
++  return flags.following && !flags.pointerHeld && !flags.jumpScrolling && !flags.autoScrolling;
++}
++
++export type TranscriptLatestChange = "none" | "initial" | "own" | "incoming";
++
++/**
++ * Classify a change of the newest message: the user's own send always re-follows the end;
++ * an incoming message while the reader is scrolled up only marks "new messages".
++ */
++export function transcriptLatestChange(
++  previousLatestId: string | null,
++  latest: { id: string; role: string } | undefined,
++): TranscriptLatestChange {
++  if (!latest || latest.id === previousLatestId) return "none";
++  if (previousLatestId === null) return "initial";
++  return latest.role === "user" ? "own" : "incoming";
++}
++
++type ResizeObserverLike = { observe(target: Element): void; disconnect(): void };
++type MutationObserverLike = {
++  observe(target: Node, options: MutationObserverInit): void;
++  disconnect(): void;
++};
++
++/**
++ * Call `onResize` whenever the transcript viewport or any of its rows changes size: streaming
++ * text, images, charts and KaTeX that lay out after the commit. New rows are observed as they
++ * mount. Returns a disconnect function; a no-op where ResizeObserver is unavailable.
++ */
++export function observeTranscriptContent(
++  element: HTMLElement,
++  onResize: () => void,
++  deps: {
++    ResizeObserver?: new (callback: () => void) => ResizeObserverLike;
++    MutationObserver?: new (callback: () => void) => MutationObserverLike;
++  } = {
++    ResizeObserver: globalThis.ResizeObserver,
++    MutationObserver: globalThis.MutationObserver,
++  },
++): () => void {
++  const RO = deps.ResizeObserver;
++  if (!RO) return () => {};
++  const resize = new RO(onResize);
++  const observed = new WeakSet<Element>();
++  const observeChildren = () => {
++    for (const child of Array.from(element.children)) {
++      if (observed.has(child)) continue;
++      observed.add(child);
++      resize.observe(child);
++    }
++  };
++  resize.observe(element);
++  observeChildren();
++  const MO = deps.MutationObserver;
++  const mutations = MO
++    ? new MO(() => {
++        observeChildren();
++        onResize();
++      })
++    : null;
++  mutations?.observe(element, { childList: true });
++  return () => {
++    resize.disconnect();
++    mutations?.disconnect();
++  };
++}
+diff --git a/apps/web/src/locales/en/messages.po b/apps/web/src/locales/en/messages.po
+index 63179513..501cbeaa 100644
+--- a/apps/web/src/locales/en/messages.po
++++ b/apps/web/src/locales/en/messages.po
+@@ -2508,6 +2508,10 @@ msgstr "Its conversation, files, and routines will be permanently deleted. Bots
+ msgid "Jump to latest"
+ msgstr "Jump to latest"
+ 
++#: src/pages/Shell.tsx
++msgid "Jump to latest, new messages"
++msgstr "Jump to latest, new messages"
++
+ #: src/pages/shell/chat-context.tsx
+ msgid "Jump to replied message: {excerpt}"
+ msgstr "Jump to replied message: {excerpt}"
+diff --git a/apps/web/src/locales/it/messages.po b/apps/web/src/locales/it/messages.po
+index e4d5c637..a5f496ba 100644
+--- a/apps/web/src/locales/it/messages.po
++++ b/apps/web/src/locales/it/messages.po
+@@ -2484,6 +2484,10 @@ msgstr ""
+ msgid "Jump to latest"
+ msgstr "Vai all'ultimo"
+ 
++#: src/pages/Shell.tsx
++msgid "Jump to latest, new messages"
++msgstr "Vai all'ultimo, nuovi messaggi"
++
+ #: src/pages/shell/chat-context.tsx
+ msgid "Jump to replied message: {excerpt}"
+ msgstr "Vai al messaggio citato: {excerpt}"
+diff --git a/apps/web/src/pages/Shell.tsx b/apps/web/src/pages/Shell.tsx
+index 53a2a933..001c234f 100644
+--- a/apps/web/src/pages/Shell.tsx
++++ b/apps/web/src/pages/Shell.tsx
+@@ -240,9 +240,12 @@ import {
+   toolStepCount,
+ } from "../lib/tool-activity-view";
+ import {
++  observeTranscriptContent,
+   transcriptCanSnapAfterFrame,
+   transcriptIsNearEnd,
++  transcriptLatestChange,
+   transcriptMovedDown,
++  transcriptShouldSnap,
+ } from "../lib/transcript-scroll";
+ import { speaker } from "../lib/tts";
+ import { errorText } from "../lib/user-error";
+@@ -4928,6 +4931,14 @@ const Transcript = memo(function Transcript({
+   const [atEnd, setAtEnd] = useState(true);
+   const following = useRef(true);
+   const autoScrolling = useRef(false);
++  // A pointer/touch held in the transcript (text selection, scrollbar drag, an unsettled
++  // fling) defers follow snaps instead of unfollowing: a click or tap at the bottom must
++  // not stop the transcript from sticking to new messages.
++  const pointerHeld = useRef(false);
++  const pointerScrolled = useRef(false);
++  const pointerSettleTimer = useRef<number | undefined>(undefined);
++  const latestMessageId = useRef<string | null>(null);
++  const [hasNewMessages, setHasNewMessages] = useState(false);
+   const lastScrollTop = useRef<number | null>(null);
+   const autoScrollTimer = useRef<number | undefined>(undefined);
+   const jumpButtonRef = useRef<HTMLButtonElement>(null);
+@@ -5106,9 +5117,89 @@ const Transcript = memo(function Transcript({
+   }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled]);
+ 
+   useLayoutEffect(() => {
+-    if (following.current) snapToEnd();
++    const change = transcriptLatestChange(latestMessageId.current, messages.at(-1));
++    if (change !== "none") latestMessageId.current = messages.at(-1)?.id ?? null;
++    // The reader's own send always returns to the end; others' messages never yank a
++    // reader who scrolled up, they only light the jump-to-latest affordance.
++    if (change === "own" && !jumpScrolling.current) {
++      following.current = true;
++      pointerHeld.current = false;
++    }
++    if (following.current) {
++      if (!pointerHeld.current) snapToEnd();
++    } else if (change === "incoming") {
++      setHasNewMessages(true);
++    }
+   }, [messages, running, snapToEnd]);
+ 
++  useEffect(() => {
++    if (atEnd) setHasNewMessages(false);
++  }, [atEnd]);
++
++  // Streaming growth and late layout (images, charts, KaTeX, code blocks) change row
++  // heights after the commit; keep the end pinned while following.
++  useEffect(() => {
++    const element = scrollRef.current;
++    if (!element) return;
++    return observeTranscriptContent(element, () => {
++      if (
++        !transcriptShouldSnap({
++          following: following.current,
++          pointerHeld: pointerHeld.current,
++          jumpScrolling: jumpScrolling.current,
++          autoScrolling: autoScrolling.current,
++        })
++      ) {
++        return;
++      }
++      const end = element.scrollHeight - element.clientHeight;
++      if (Math.abs(element.scrollTop - end) > 1) element.scrollTop = element.scrollHeight;
++    });
++  }, [scrollRef]);
++
++  const releasePointer = useCallback(() => {
++    window.clearTimeout(pointerSettleTimer.current);
++    if (!pointerHeld.current) return;
++    pointerHeld.current = false;
++    const element = scrollRef.current;
++    if (
++      element &&
++      transcriptShouldSnap({
++        following: following.current,
++        pointerHeld: false,
++        jumpScrolling: jumpScrolling.current,
++        autoScrolling: autoScrolling.current,
++      })
++    ) {
++      element.scrollTop = element.scrollHeight;
++    }
++  }, [scrollRef]);
++
++  useEffect(() => {
++    const onRelease = () => {
++      if (!pointerHeld.current) return;
++      // A fling keeps scrolling after the finger lifts: wait for it to settle.
++      if (pointerScrolled.current) {
++        window.clearTimeout(pointerSettleTimer.current);
++        pointerSettleTimer.current = window.setTimeout(releasePointer, 600);
++        scrollRef.current?.addEventListener("scrollend", releasePointer, { once: true });
++      } else {
++        releasePointer();
++      }
++    };
++    document.addEventListener("pointerup", onRelease, true);
++    document.addEventListener("pointercancel", onRelease, true);
++    document.addEventListener("touchend", onRelease, true);
++    document.addEventListener("touchcancel", onRelease, true);
++    return () => {
++      document.removeEventListener("pointerup", onRelease, true);
++      document.removeEventListener("pointercancel", onRelease, true);
++      document.removeEventListener("touchend", onRelease, true);
++      document.removeEventListener("touchcancel", onRelease, true);
++      window.clearTimeout(pointerSettleTimer.current);
++    };
++  }, [releasePointer, scrollRef]);
++
+   useLayoutEffect(() => {
+     const button = jumpButtonRef.current;
+     if (atEnd && button && document.activeElement === button) {
+@@ -5149,12 +5240,18 @@ const Transcript = memo(function Transcript({
+         onPointerDown={(event) => {
+           lastScrollTop.current = event.currentTarget.scrollTop;
+           autoScrolling.current = false;
+-          following.current = false;
++          pointerHeld.current = true;
++          pointerScrolled.current = false;
++          window.clearTimeout(pointerSettleTimer.current);
++          event.currentTarget.removeEventListener("scrollend", releasePointer);
+         }}
+         onTouchStart={(event) => {
+           lastScrollTop.current = event.currentTarget.scrollTop;
+           autoScrolling.current = false;
+-          following.current = false;
++          pointerHeld.current = true;
++          pointerScrolled.current = false;
++          window.clearTimeout(pointerSettleTimer.current);
++          event.currentTarget.removeEventListener("scrollend", releasePointer);
+         }}
+         onWheel={(event) => {
+           if (event.deltaY < 0) {
+@@ -5169,6 +5266,7 @@ const Transcript = memo(function Transcript({
+             event.currentTarget.scrollTop,
+           );
+           lastScrollTop.current = event.currentTarget.scrollTop;
++          if (pointerHeld.current) pointerScrolled.current = true;
+           const nearEnd = transcriptIsNearEnd(event.currentTarget);
+           setAtEnd(nearEnd);
+           // A jump scroll owns the viewport until its animation settles; its
+@@ -5354,7 +5452,7 @@ const Transcript = memo(function Transcript({
+       <button
+         ref={jumpButtonRef}
+         type="button"
+-        aria-label={t`Jump to latest`}
++        aria-label={hasNewMessages ? t`Jump to latest, new messages` : t`Jump to latest`}
+         aria-hidden={atEnd}
+         tabIndex={atEnd ? -1 : 0}
+         onClick={jumpToLatest}
+@@ -5363,6 +5461,12 @@ const Transcript = memo(function Transcript({
+         }`}
+       >
+         <ArrowDown size={17} strokeWidth={1.8} />
++        {hasNewMessages ? (
++          <span
++            data-testid="transcript-new-messages"
++            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
++          />
++        ) : null}
+       </button>
+     </div>
+   );
+-- 
+2.47.3
+

@@ -37,6 +37,13 @@ import { DELEGATION_TOOL_NAMES } from "./builtin-tools.js";
 import { withCloudflareGatewayAuth } from "./cloudflare-ai-gateway.js";
 import { shortenToolResultText } from "./context-selection.js";
 import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+import {
+  danglingNarrationNudges,
+  danglingNarrationPrompt,
+  looksLikeDanglingNarration,
+  toolBudgetFinalSummaryEnabled,
+  toolBudgetWrapUpPrompt,
+} from "./final-answer-guard.js";
 import { estimateModelContextTokens } from "./model-context.js";
 import { IMAGE_RETURNING_COMPUTER_TOOLS } from "./model-vision.js";
 import {
@@ -482,6 +489,11 @@ export class PiAgentRuntime implements AgentRuntime {
         // Text streamed before this point is tool-turn narration. Only text after
         // it counts as the final reply, including when the completed message omits it.
         let streamedBeforePendingFinal = 0;
+        // Patch 0026: bounded nudges for a text-only reply that only announces
+        // the next step, and a no-tools wrap-up call after the tool budget.
+        const maxDanglingNudges = danglingNarrationNudges();
+        let danglingNudges = 0;
+        let budgetWrapUp = false;
         agent.subscribe(async (event) => {
           if (event.type === "message_end") {
             await piSession?.appendMessage(event.message);
@@ -522,6 +534,12 @@ export class PiAgentRuntime implements AgentRuntime {
               event.message.role === "assistant" ? assistantText(event.message) : "";
             const hasToolCalls = messageHasToolCall(event.message);
             const hasToolResults = event.toolResults.length > 0;
+            // The wrap-up call has no tools; a model that still emits one must not
+            // start another tool loop after the budget is spent.
+            if (budgetWrapUp && hasToolCalls) {
+              agent.abort();
+              return;
+            }
 
             // Text in a turn that also contains a tool call is narration, not a final
             // response. Keep the run alive until a later text-only turn answers the user.
@@ -531,7 +549,27 @@ export class PiAgentRuntime implements AgentRuntime {
               streamedBeforePendingFinal = streamed.length;
             } else if (toolWorkPendingFinal && !hasToolCalls && !hasToolResults) {
               const streamedFinal = streamed.slice(streamedBeforePendingFinal).trim();
-              if (messageText.trim() || streamedFinal) {
+              const candidateFinal = messageText.trim() || streamedFinal;
+              if (
+                candidateFinal &&
+                !budgetWrapUp &&
+                !host.pausePending &&
+                !host.toolCallBudget.exceeded &&
+                danglingNudges < maxDanglingNudges &&
+                !providerFailureText(event.message) &&
+                looksLikeDanglingNarration(candidateFinal)
+              ) {
+                // The reply announces a step it never took. Treat it like tool
+                // narration and ask once more for tools or a real final answer.
+                danglingNudges += 1;
+                silentToolContinuations = 0;
+                streamedBeforePendingFinal = streamed.length;
+                agent.followUp({
+                  role: "user",
+                  content: danglingNarrationPrompt(request.allowSilentEmpty),
+                  timestamp: Date.now(),
+                });
+              } else if (candidateFinal) {
                 toolWorkPendingFinal = false;
                 silentToolContinuations = 0;
                 // A provider can put the answer only on the completed message after
@@ -545,6 +583,7 @@ export class PiAgentRuntime implements AgentRuntime {
                 // another model turn that would hide the error.
                 !providerFailureText(event.message) &&
                 !host.pausePending &&
+                !budgetWrapUp &&
                 silentToolContinuations < MAX_SILENT_TOOL_CONTINUATIONS
               ) {
                 silentToolContinuations += 1;
@@ -590,6 +629,34 @@ export class PiAgentRuntime implements AgentRuntime {
         } finally {
           try {
             await agent.waitForIdle();
+          } finally {
+            signal.removeEventListener("abort", onAbort);
+          }
+        }
+
+        // Patch 0026: after the tool budget aborts the turn, ask once more with
+        // no tools so the user gets a summary instead of only the stop notice.
+        if (
+          host.toolCallBudget.exceeded &&
+          !signal.aborted &&
+          !host.pausePending &&
+          toolBudgetFinalSummaryEnabled()
+        ) {
+          budgetWrapUp = true;
+          toolWorkPendingFinal = true;
+          streamedBeforePendingFinal = streamed.length;
+          signal.addEventListener("abort", onAbort);
+          try {
+            agent.state.tools = [];
+            await agent.prompt(
+              toolBudgetWrapUpPrompt(host.toolCallBudget.limit, request.allowSilentEmpty),
+            );
+            await agent.waitForIdle();
+          } catch (wrapUpError) {
+            getLogger().warn("tool budget wrap-up call failed", {
+              runId: request.runId,
+              error: wrapUpError,
+            });
           } finally {
             signal.removeEventListener("abort", onAbort);
           }

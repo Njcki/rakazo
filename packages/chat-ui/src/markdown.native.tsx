@@ -10,8 +10,17 @@ import Markdown, {
   FitImage,
   MarkdownStream,
 } from "@ronradtke/react-native-markdown-display";
-import type { ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
+import type { ComponentProps, ComponentType, ReactNode } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import {
   Alert,
@@ -664,6 +673,12 @@ function TableRow({
   );
 }
 
+const tableGuard: ViewStyle = { flexShrink: 1, minWidth: 0 };
+
+function PlainGuard({ style, children }: ComponentProps<TableGestureGuard>) {
+  return <View style={style}>{children}</View>;
+}
+
 const tableFrame: ViewStyle = {
   width: "100%",
   maxWidth: "100%",
@@ -671,6 +686,26 @@ const tableFrame: ViewStyle = {
   flexShrink: 1,
   flexDirection: "row",
 };
+
+/**
+ * Wraps a wide table's horizontal scroller. The app supplies a native guard on Android so a
+ * sideways swipe goes to the table instead of the chat list around it; elsewhere a plain View.
+ */
+export type TableGestureGuard = ComponentType<{
+  enabled: boolean;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+}>;
+export const TableGestureGuardContext = createContext<TableGestureGuard | null>(null);
+
+/** Width of each edge fade, in dp. */
+const TABLE_FADE = 24;
+
+/** Which sides of a scrolled table still hide columns: only those get a fade. */
+export function tableFadeEdges(offset: number, contentWidth: number, viewportWidth: number) {
+  if (viewportWidth <= 0 || contentWidth <= viewportWidth + 1) return { start: false, end: false };
+  return { start: offset > 1, end: offset < contentWidth - viewportWidth - 1 };
+}
 
 function TableScrollView({
   table,
@@ -685,9 +720,26 @@ function TableScrollView({
   const widths = useMemo(() => fittedColumnWidths(table, viewportWidth), [table, viewportWidth]);
   const contentWidth = widths.reduce((total, width) => total + width, 0);
   const tableLayout = useMemo(() => ({ widths }), [widths]);
-  // Only a table wider than the bubble is a scroll area; it then shows a persistent bar and
-  // faded edges so it reads as swipeable instead of cut off.
+  // Only a table wider than the bubble is a scroll area; it then shows a persistent bar.
   const overflows = viewportWidth > 0 && contentWidth > viewportWidth + 1;
+  // Android's fading edges do not follow the scroll position on their own, so each side's fade
+  // is switched from the offset: hidden at that end. A prop change, never a re-layout.
+  const metrics = useRef({ offset: 0, content: 0 });
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const Guard = useContext(TableGestureGuardContext) ?? PlainGuard;
+  const updateEdges = useCallback(
+    (viewport: number) => {
+      const { offset, content } = metrics.current;
+      const next = tableFadeEdges(offset, content || contentWidth, viewport);
+      setEdges((current) =>
+        current.start === next.start && current.end === next.end ? current : next,
+      );
+    },
+    [contentWidth],
+  );
+  useEffect(() => {
+    updateEdges(viewportWidth);
+  }, [updateEdges, viewportWidth]);
   return (
     <View
       style={tableFrame}
@@ -697,25 +749,39 @@ function TableScrollView({
       }}
     >
       <TableLayoutContext.Provider value={tableLayout}>
-        <ScrollView
-          horizontal
-          nestedScrollEnabled
-          directionalLockEnabled
-          scrollEnabled={overflows}
-          showsHorizontalScrollIndicator={overflows}
-          persistentScrollbar={overflows}
-          fadingEdgeLength={overflows ? 24 : 0}
-          showsVerticalScrollIndicator={false}
-          style={[
-            style,
-            viewportWidth > 0 ? { width: viewportWidth } : { flexGrow: 1, flexShrink: 1 },
-          ]}
-          contentContainerStyle={{ flexGrow: 0 }}
-        >
-          <View style={{ width: contentWidth, minWidth: contentWidth, flexShrink: 0 }}>
-            {children}
-          </View>
-        </ScrollView>
+        <Guard enabled={overflows} style={tableGuard}>
+          <ScrollView
+            horizontal
+            nestedScrollEnabled
+            directionalLockEnabled
+            scrollEnabled={overflows}
+            showsHorizontalScrollIndicator={overflows}
+            persistentScrollbar={overflows}
+            fadingEdgeLength={{
+              start: edges.start ? TABLE_FADE : 0,
+              end: edges.end ? TABLE_FADE : 0,
+            }}
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            onScroll={(event) => {
+              metrics.current.offset = event.nativeEvent.contentOffset.x;
+              updateEdges(viewportWidth);
+            }}
+            onContentSizeChange={(width) => {
+              metrics.current.content = width;
+              updateEdges(viewportWidth);
+            }}
+            style={[
+              style,
+              viewportWidth > 0 ? { width: viewportWidth } : { flexGrow: 1, flexShrink: 1 },
+            ]}
+            contentContainerStyle={{ flexGrow: 0 }}
+          >
+            <View style={{ width: contentWidth, minWidth: contentWidth, flexShrink: 0 }}>
+              {children}
+            </View>
+          </ScrollView>
+        </Guard>
       </TableLayoutContext.Provider>
     </View>
   );

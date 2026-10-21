@@ -4,6 +4,7 @@ import {
   MarkdownLinkPromptProvider,
   MathBlockContext,
   RemoteImagesContext,
+  TableGestureGuardContext,
 } from "@rakazo/chat-ui/native";
 import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
@@ -22,6 +23,7 @@ import { floatingHeaderOptions, glassHeaderOptions } from "../components/glass-t
 import { MathBlockRenderer } from "../components/math-block";
 import { MessageActionSheetHost } from "../components/message-action-sheet-host";
 import { NativeSymbol } from "../components/native-symbol";
+import { TableGestureGuardView } from "../components/table-gesture-guard";
 import { VoicePlayerBar } from "../components/voice-player-bar";
 import {
   currentApiBase,
@@ -85,7 +87,9 @@ function ChatContentProviders({
       <RemoteImagesContext.Provider value={loadRemoteImages}>
         <LinkFaviconsContext.Provider value={linkFavicons}>
           <MathBlockContext.Provider value={MathBlockRenderer}>
-            {children}
+            <TableGestureGuardContext.Provider value={TableGestureGuardView}>
+              {children}
+            </TableGestureGuardContext.Provider>
           </MathBlockContext.Provider>
         </LinkFaviconsContext.Provider>
       </RemoteImagesContext.Provider>

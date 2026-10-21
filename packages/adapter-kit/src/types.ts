@@ -398,6 +398,8 @@ export interface AgentSteeringMessage {
   /** Persisted history text before attachment paths are appended. */
   historyText?: string;
   images?: AgentInputImage[];
+  /** Patch 0030: text of the quick reply already posted for this message, if any. */
+  quickReplyText?: string;
 }
 
 /** Adapter-supplied cache policy metadata; absent fields mean unknown. */

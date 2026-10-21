@@ -299,6 +299,7 @@ import {
   completePlanFromTool,
   createPlanFromTool,
   getActivePlan,
+  getDisplayPlan,
   planStaleReminder,
   planStatusFromTool,
   updatePlanStepFromTool,
@@ -319,6 +320,13 @@ import {
   progressCadenceConfig,
   shouldPromoteNarration,
 } from "./progress-cadence.js";
+import {
+  callQuickReplyModel,
+  QUICK_REPLY_MAX_TOKENS,
+  quickReplyConfig,
+  quickReplyEligible,
+  startRunQuickReply,
+} from "./quick-reply.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
@@ -6647,6 +6655,159 @@ export function createRunExecutor(deps: ExecutorDeps) {
             .map((candidate) => JSON.stringify([candidate.provider, candidate.modelId])),
         );
 
+        const runModel: AgentRunRequest["model"] = {
+          provider: runModelProvider,
+          id: runModelId,
+          apiKey: resolved.oauth ? undefined : resolved.apiKey,
+          ...cloudflareRunFields(resolved),
+          baseUrl: resolved.baseUrl,
+          cacheCapabilities: resolved.cacheCapabilities,
+          contextWindow: resolved.contextWindow,
+
+          reasoning: resolved.reasoning,
+          maxTokens: resolved.maxTokens,
+          acceptsImages: resolved.acceptsImages,
+          maxImagesPerPrompt: resolved.maxImagesPerPrompt,
+          thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
+          oauth: resolved.oauth
+            ? {
+                credential: resolved.oauth,
+                persist: resolved.persistOAuth,
+                retire: resolved.retireOAuth,
+              }
+            : undefined,
+        };
+
+        // Patch 0030: a separate fast reply to messages sent while this run works.
+        const quickReplySettings = quickReplyConfig();
+        const quickReplyActivity: Array<{ text: string; at: number }> = [];
+        const runStartedAtMs = (current.startedAt ?? new Date()).getTime();
+        let quickReplyCount = 0;
+        let steeringClaims = 0;
+        const quickReply = quickReplyEligible({
+          trigger: run.trigger,
+          scripted,
+          // A voice call speaks bot messages aloud; keep calls on the main run only.
+          messageUserDisabled: disabledBuiltinTools.has("message_user") || voiceCall,
+          config: quickReplySettings,
+        })
+          ? startRunQuickReply({
+              config: quickReplySettings,
+              pollSteering: async (sinceMs) => {
+                const rows = await deps.prisma.steeringMessage.findMany({
+                  where: {
+                    botId: bot.id,
+                    claimedAt: null,
+                    createdAt: { gte: new Date(sinceMs) },
+                    OR: [{ runId }, { runId: null, originTrigger: null }],
+                    message: {
+                      threadId: thread.id,
+                      NOT: { blocks: { array_contains: [{ kind: "channel_message" }] } },
+                    },
+                  },
+                  include: { message: { select: { blocks: true } } },
+                  orderBy: { createdAt: "asc" },
+                  take: 10,
+                });
+                return rows.map((row) => ({
+                  id: row.id,
+                  messageId: row.messageId,
+                  text: blocksToAgentHistoryText(row.message.blocks as MessageBlock[]),
+                }));
+              },
+              resolveModel: async () => {
+                const choice = quickReplySettings.model ??
+                  fallbackModels[0] ?? { provider: runModelProvider, modelId: runModelId };
+                const base =
+                  choice.provider === runModelProvider && choice.modelId === runModelId
+                    ? runModel
+                    : await resolveConnectedModel(
+                        { userId: run.userId, spaceId: run.spaceId },
+                        choice.provider,
+                        choice.modelId,
+                        (values) => runSecrets.push(...values),
+                        true,
+                      );
+                return {
+                  ...base,
+                  thinkingLevel: quickReplySettings.reasoning,
+                  maxTokens: Math.min(
+                    base.maxTokens ?? QUICK_REPLY_MAX_TOKENS,
+                    QUICK_REPLY_MAX_TOKENS,
+                  ),
+                };
+              },
+              loadContext: async () => {
+                const plan = await getDisplayPlan(deps, {
+                  spaceId: run.spaceId,
+                  botId: bot.id,
+                }).catch(() => null);
+                return {
+                  botName: bot.name,
+                  persona: redactSecrets(runIdentityInstruction(bot, run.trigger), runSecrets),
+                  task: redactSecrets(taskPrompt, runSecrets),
+                  plan: plan
+                    ? {
+                        title: plan.title,
+                        status: plan.status,
+                        progress: { done: plan.progress.done, total: plan.progress.total },
+                        steps: plan.steps.map((step) => ({
+                          index: step.index,
+                          title: step.title,
+                          status: step.status,
+                        })),
+                      }
+                    : null,
+                  recentActivity: [...quickReplyActivity],
+                  recentUpdates: midTurnUserTexts.slice(-2),
+                  runStartedAt: runStartedAtMs,
+                  now: Date.now(),
+                };
+              },
+              generate: (model, prompt, signal) =>
+                callQuickReplyModel({
+                  runtime: deps.runtime,
+                  model,
+                  instructions: prompt.instructions,
+                  prompt: prompt.prompt,
+                  runId,
+                  botId: bot.id,
+                  threadId: thread.id,
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  timeoutMs: quickReplySettings.timeoutMs,
+                  signal,
+                  onUsage: (event) =>
+                    recordUsage(deps.prisma, event, {
+                      spaceId: run.spaceId,
+                      botId: bot.id,
+                      userId: run.userId,
+                      runId,
+                      parentRunId: runId,
+                      operationId: `${runId}:quick-reply`,
+                    }),
+                }),
+              publish: async (text) => {
+                if (!leaseValid || runAbortController?.signal.aborted) return false;
+                const still = await deps.prisma.run.findFirst({
+                  where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
+                  select: { id: true },
+                });
+                if (!still) return false;
+                await publishMessage(
+                  deps,
+                  run,
+                  "bot",
+                  [{ kind: "text", text: redactSecrets(text, runSecrets) }],
+                  true,
+                  userProgressClientNonce(`${run.id}:quick`, quickReplyCount++),
+                );
+                markDurableProgress();
+                return true;
+              },
+            })
+          : undefined;
+
         try {
           const runtimeEvents = deps.runtime.run(
             {
@@ -6701,28 +6862,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               history: runtimeHistory,
               currentTurnImages,
               tools,
-              model: {
-                provider: runModelProvider,
-                id: runModelId,
-                apiKey: resolved.oauth ? undefined : resolved.apiKey,
-                ...cloudflareRunFields(resolved),
-                baseUrl: resolved.baseUrl,
-                cacheCapabilities: resolved.cacheCapabilities,
-                contextWindow: resolved.contextWindow,
-
-                reasoning: resolved.reasoning,
-                maxTokens: resolved.maxTokens,
-                acceptsImages: resolved.acceptsImages,
-                maxImagesPerPrompt: resolved.maxImagesPerPrompt,
-                thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
-                oauth: resolved.oauth
-                  ? {
-                      credential: resolved.oauth,
-                      persist: resolved.persistOAuth,
-                      retire: resolved.retireOAuth,
-                    }
-                  : undefined,
-              },
+              model: runModel,
               fallbackModels: fallbackModels.map(({ provider, modelId }) => ({
                 provider,
                 id: modelId,
@@ -6792,8 +6932,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       leaseFence: fence,
                       seenIds,
                     });
-                    // Patch 0028: the reply to a mid-run message is never throttled.
-                    if (steering.length > 0) steeringSinceDurableProgress = true;
+                    // Patch 0030: the first claim is the request itself; later ones are
+                    // mid-run messages that get (or already got) a quick reply.
+                    const firstClaim = steeringClaims++ === 0;
+                    let quickAcks = new Map<string, string>();
+                    if (quickReply) {
+                      if (firstClaim) {
+                        quickReply.arm(steering.map((item) => item.messageId));
+                      } else if (steering.length > 0) {
+                        quickAcks = await quickReply.settle(
+                          steering.map((item) => ({
+                            id: item.id,
+                            messageId: item.messageId,
+                            text: item.text,
+                          })),
+                        );
+                      }
+                    }
+                    // Patch 0028: the reply to a mid-run message is never throttled
+                    // (unless the quick reply already answered every one of them).
+                    if (steering.some((item) => !quickAcks.has(item.messageId))) {
+                      steeringSinceDurableProgress = true;
+                    }
                     return Promise.all(
                       steering.map(async (item) => {
                         const { images, files, unavailableInstruction } =
@@ -6823,6 +6983,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         return {
                           id: item.id,
                           messageId: item.messageId,
+                          quickReplyText: quickAcks.get(item.messageId),
                           historyText: item.text,
                           text: [
                             await loadReplyContext(deps.prisma, thread.id, item.messageId),
@@ -6906,6 +7067,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   ...(event.activity ? { activity: true } : {}),
                 },
               });
+              if (quickReply && event.activity) {
+                quickReplyActivity.push({
+                  text: redactSecrets(event.text, runSecrets),
+                  at: Date.now(),
+                });
+                if (quickReplyActivity.length > 8) quickReplyActivity.shift();
+              }
             } else if (event.type === "ask") {
               if (!(await renewRunLease(deps, runId, workerId, fence))) return;
               const safeText = redactSecrets(event.text, runSecrets);
@@ -7187,6 +7355,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
           }
 
+          // Patch 0030: nothing quick-replies after the turn is over.
+          quickReply?.stop();
           if (approvalPausePending || !leaseValid) return;
           approvedEffectReplays.assertDrained();
           pendingProgress += progressRedactor.finish();
@@ -7397,6 +7567,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               threadId: thread.id,
             });
           }
+        } finally {
+          quickReply?.stop();
         }
       } catch (setupError) {
         const computerBusy = setupError instanceof ComputerBusyError;

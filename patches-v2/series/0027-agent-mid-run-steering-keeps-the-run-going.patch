@@ -1,0 +1,443 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 02:34:50 +0200
+Subject: [PATCH] fix(agent): un messaggio inviato durante il lavoro non
+ interrompe il run / a mid-run message no longer ends the run
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: un messaggio dell'utente che arriva mentre il bot sta lavorando (steering
+iniettato al confine del turno successivo in prepareNextTurnWithContext) veniva
+passato al modello così com'era. Una domanda come «fammi un riassunto di dove
+sei» invitava una risposta di solo testo, che il runtime considera finale: il run
+si chiudeva e il lavoro restava a metà.
+- Solo sul percorso di steering a metà run viene anteposta una nota in inglese
+  (MID_RUN_STEERING_NOTE in final-answer-guard.ts): il messaggio è arrivato
+  mentre stai ancora lavorando; se chiede stato o riepilogo rispondi in breve
+  nella lingua dell'utente, con message_user se disponibile o nel testo insieme
+  alla prossima chiamata a strumento, poi riprendi il compito originale; fermati
+  o cambia strada solo se l'utente lo chiede esplicitamente. Lo steering letto
+  all'avvio del run e i run di continuazione restano invariati; nel database e
+  nella cronologia resta il testo originale.
+- Se dopo uno steering a metà run il modello risponde solo con testo, quella
+  risposta è trattata come aggiornamento di stato e parte un follow-up interno
+  (steeringContinuePrompt): riprendi il compito con strumenti veri senza ripetere
+  l'aggiornamento; se l'utente ha chiesto di fermarti o il compito è finito,
+  scrivi la risposta finale (fatto, trovato, cosa resta, «continua»). Usa lo
+  stesso limite della 0026 (DANGLING_NARRATION_NUDGES, default 2 per run) e le
+  stesse esclusioni (ask_user in pausa, budget esaurito, errore del provider,
+  clausola del silenzio con allowSilentEmpty).
+- STEERING_CONTINUE_NOTE=0 (false/off/no) disattiva nota e follow-up; default
+  attivo.
+Test in final-answer-guard.test.ts e pi-runtime-tool-dispatch.test.ts (nota solo a
+metà run, nessuna nota all'avvio, interruttore env, limite condiviso); aggiornate
+le attese dei test upstream sullo steering al confine del turno.
+
+EN: a user message arriving while the bot is working (steering injected at the
+next turn boundary in prepareNextTurnWithContext) reached the model verbatim. A
+question like "give me a summary of where you are" invited a text-only reply,
+which the runtime treats as final: the run closed and the work stopped halfway.
+- On the mid-run steering path only, an English note is prepended
+  (MID_RUN_STEERING_NOTE in final-answer-guard.ts): the message arrived while you
+  are still working; if it asks for status or a summary, answer briefly in the
+  user's language, with message_user if available or in text alongside your next
+  tool call, then continue the original task; stop or change course only if the
+  user explicitly asks. Steering claimed at run start and continuation runs are
+  unchanged; the database and history keep the original text.
+- If the model answers a mid-run steer with text only, that reply is treated as
+  a status update and an internal follow-up (steeringContinuePrompt) asks it to
+  resume the task with real tool calls without repeating the update, or, if the
+  user asked to stop or the task is done, to write the final answer (done, found,
+  remains, "continua"). It shares 0026's cap (DANGLING_NARRATION_NUDGES, default
+  2 per run) and exclusions (pending ask_user, spent budget, provider error,
+  silence clause with allowSilentEmpty).
+- STEERING_CONTINUE_NOTE=0 (false/off/no) disables both note and follow-up; on by
+  default.
+Tests in final-answer-guard.test.ts and pi-runtime-tool-dispatch.test.ts (note
+only mid-run, no note at run start, env switch, shared cap); upstream
+turn-boundary steering expectations updated.
+---
+ .../adapters/src/final-answer-guard.test.ts   |  31 ++++
+ packages/adapters/src/final-answer-guard.ts   |  27 ++++
+ .../src/pi-runtime-tool-dispatch.test.ts      | 147 +++++++++++++++++-
+ packages/adapters/src/pi-runtime.ts           |  26 +++-
+ 4 files changed, 220 insertions(+), 11 deletions(-)
+
+diff --git a/packages/adapters/src/final-answer-guard.test.ts b/packages/adapters/src/final-answer-guard.test.ts
+index 1b448468..7caa49c6 100644
+--- a/packages/adapters/src/final-answer-guard.test.ts
++++ b/packages/adapters/src/final-answer-guard.test.ts
+@@ -3,8 +3,12 @@ import {
+   DEFAULT_DANGLING_NARRATION_NUDGES,
+   danglingNarrationNudges,
+   danglingNarrationPrompt,
++  frameMidRunSteering,
+   hasLeakedToolCall,
+   looksLikeDanglingNarration,
++  MID_RUN_STEERING_NOTE,
++  steeringContinueNoteEnabled,
++  steeringContinuePrompt,
+   toolBudgetFinalSummaryEnabled,
+   toolBudgetWrapUpPrompt,
+ } from "./final-answer-guard.js";
+@@ -99,3 +103,30 @@ describe("final-answer guard settings and prompts", () => {
+     expect(danglingNarrationPrompt(true)).toContain("stay silent");
+   });
+ });
++
++describe("mid-run steering note (patch 0027)", () => {
++  it("parses STEERING_CONTINUE_NOTE", () => {
++    expect(steeringContinueNoteEnabled({})).toBe(true);
++    expect(steeringContinueNoteEnabled({ STEERING_CONTINUE_NOTE: "1" })).toBe(true);
++    for (const off of ["0", "false", "Off", "no"]) {
++      expect(steeringContinueNoteEnabled({ STEERING_CONTINUE_NOTE: off })).toBe(false);
++    }
++  });
++
++  it("puts the note before the user's text", () => {
++    const framed = frameMidRunSteering("a che punto sei?");
++    expect(framed).toBe(`${MID_RUN_STEERING_NOTE}\n\na che punto sei?`);
++    expect(MID_RUN_STEERING_NOTE).toContain("continue the original task");
++    expect(MID_RUN_STEERING_NOTE).toContain("explicitly asks");
++    expect(MID_RUN_STEERING_NOTE).toContain("user's language");
++  });
++
++  it("asks to resume the task unless the user asked to stop", () => {
++    const prompt = steeringContinuePrompt();
++    expect(prompt).toContain("continue the original task");
++    expect(prompt).toContain("asked you to stop");
++    expect(prompt).toContain("continua");
++    expect(prompt).not.toContain("stay silent");
++    expect(steeringContinuePrompt(true)).toContain("stay silent");
++  });
++});
+diff --git a/packages/adapters/src/final-answer-guard.ts b/packages/adapters/src/final-answer-guard.ts
+index adb01fd3..8d9f7fe9 100644
+--- a/packages/adapters/src/final-answer-guard.ts
++++ b/packages/adapters/src/final-answer-guard.ts
+@@ -158,3 +158,30 @@ export function toolBudgetWrapUpPrompt(limit: number, allowSilentEmpty?: boolean
+     (allowSilentEmpty ? SILENT_CLAUSE : "")
+   );
+ }
++
++// Patch 0027: user messages that arrive while a run is working (mid-run steering).
++
++/** STEERING_CONTINUE_NOTE=0 (or false/off/no) injects mid-run messages verbatim, as before. */
++export function steeringContinueNoteEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
++  const raw = env.STEERING_CONTINUE_NOTE?.trim().toLowerCase();
++  return !(raw === "0" || raw === "false" || raw === "off" || raw === "no");
++}
++
++export const MID_RUN_STEERING_NOTE =
++  "[The user sent the message below while you are still working on the current task. " +
++  "If it asks for status or a summary, answer briefly in the user's language, with the message_user tool if available or in text alongside your next tool call, then continue the original task. " +
++  "Stop or change course only if the user explicitly asks you to.]";
++
++/** Frames a mid-run steering message so a status question does not end the work. */
++export function frameMidRunSteering(text: string): string {
++  return `${MID_RUN_STEERING_NOTE}\n\n${text}`;
++}
++
++export function steeringContinuePrompt(allowSilentEmpty?: boolean): string {
++  return (
++    "You answered the user's message sent during the task, but did not call any tool, so the original task is paused. " +
++    "Unless the user explicitly asked you to stop or change course, continue the original task now with native tool calls; do not repeat the status update. " +
++    `If the user asked you to stop, or the task is actually complete, write the final answer instead. ${FINAL_SUMMARY_SHAPE}` +
++    (allowSilentEmpty ? SILENT_CLAUSE : "")
++  );
++}
+diff --git a/packages/adapters/src/pi-runtime-tool-dispatch.test.ts b/packages/adapters/src/pi-runtime-tool-dispatch.test.ts
+index f995e7b3..ab805d22 100644
+--- a/packages/adapters/src/pi-runtime-tool-dispatch.test.ts
++++ b/packages/adapters/src/pi-runtime-tool-dispatch.test.ts
+@@ -14,7 +14,8 @@ const fakeAgentState = vi.hoisted(() => ({
+     | "nested-ask-pause"
+     | "tools-then-empty-failure"
+     | "tools-then-final-text"
+-    | "dangling-narration",
++    | "dangling-narration"
++    | "steer-status",
+   /** Text-only replies after one tool turn; each later one needs a new follow-up. */
+   danglingReplies: [] as string[],
+   /** Text the no-tools wrap-up call answers with (patch 0026). */
+@@ -104,6 +105,37 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
+         this.emit({ type: "turn_end", message, toolResults: [] });
+         return;
+       }
++      if (fakeAgentState.mode === "steer-status") {
++        const target =
++          this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
++        if (!target) throw new Error("expected tool was not exposed");
++        const args =
++          target.prepareArguments?.(fakeAgentState.invoke.args) ?? fakeAgentState.invoke.args;
++        this.emit({ type: "tool_execution_start", toolName: target.name, args });
++        await target.execute("call-1", args);
++        this.emit({
++          type: "turn_end",
++          message: {
++            role: "assistant",
++            content: [{ type: "toolCall", id: "call-1", name: target.name, arguments: args }],
++          },
++          toolResults: [{ toolCallId: "call-1", result: { ok: true } }],
++        });
++        // Next turn boundary: the runtime claims the mid-run message here.
++        await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
++        for (const [index, text] of fakeAgentState.danglingReplies.entries()) {
++          if (index > 0 && fakeAgentState.followUpMessages.length < index) break;
++          const message = { role: "assistant", content: [{ type: "text", text }] };
++          this.emit({ type: "message_start", message });
++          this.emit({
++            type: "message_update",
++            assistantMessageEvent: { type: "text_delta", delta: text },
++          });
++          this.emit({ type: "message_end", message });
++          this.emit({ type: "turn_end", message, toolResults: [] });
++        }
++        return;
++      }
+       if (fakeAgentState.mode === "dangling-narration") {
+         const target =
+           this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
+@@ -433,6 +465,7 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
+ }));
+ 
+ import { toolCompletionAuditPayload } from "./executor.js";
++import { frameMidRunSteering, MID_RUN_STEERING_NOTE } from "./final-answer-guard.js";
+ import {
+   MISSING_TOOL_FINAL_RESPONSE_ERROR,
+   maxToolCallsPerTurn,
+@@ -498,6 +531,7 @@ describe("Pi connector tool dispatch", () => {
+     fakeAgentState.wrapUpPrompts = [];
+     delete process.env.DANGLING_NARRATION_NUDGES;
+     delete process.env.TOOL_BUDGET_FINAL_SUMMARY;
++    delete process.env.STEERING_CONTINUE_NOTE;
+     fakeAgentState.invoke = {
+       name: "destination_write",
+       args: { collection: "notes", title: "Result", body: "Done" },
+@@ -549,11 +583,11 @@ describe("Pi connector tool dispatch", () => {
+     expect(fakeAgentState.preparedMessages).toEqual([
+       expect.objectContaining({
+         role: "user",
+-        content: "Use the newer customer totals.",
++        content: frameMidRunSteering("Use the newer customer totals."),
+       }),
+       expect.objectContaining({
+         role: "user",
+-        content: "Keep the original date range.",
++        content: frameMidRunSteering("Keep the original date range."),
+       }),
+     ]);
+   });
+@@ -603,8 +637,8 @@ describe("Pi connector tool dispatch", () => {
+     expect(claimSteering).toHaveBeenNthCalledWith(2, []);
+     expect(claimSteering).toHaveBeenNthCalledWith(3, ["steering-1"]);
+     expect(fakeAgentState.preparedMessages).toEqual([
+-      expect.objectContaining({ content: "First boundary context." }),
+-      expect.objectContaining({ content: "Next boundary context." }),
++      expect.objectContaining({ content: frameMidRunSteering("First boundary context.") }),
++      expect.objectContaining({ content: frameMidRunSteering("Next boundary context.") }),
+     ]);
+   });
+ 
+@@ -723,7 +757,7 @@ describe("Pi connector tool dispatch", () => {
+     expect(fakeAgentState.steeredMessages).toContainEqual({
+       role: "user",
+       content: [
+-        { type: "text", text: "Compare the second image." },
++        { type: "text", text: frameMidRunSteering("Compare the second image.") },
+         { type: "image", data: "BAUG", mimeType: "image/png" },
+       ],
+       timestamp: expect.any(Number),
+@@ -2295,4 +2329,105 @@ describe("Pi connector tool dispatch", () => {
+       });
+     });
+   });
++
++  describe("mid-run steering note (patch 0027)", () => {
++    const STATUS = "Sono a metà: 12 profili su 26 verificati.";
++    const FINAL = "Ho finito: 26 profili verificati, dossier aggiornato.";
++
++    async function runSteer(claimSteering: (seen: string[]) => Promise<unknown[]>) {
++      fakeAgentState.mode = "steer-status";
++      const runtime = new PiAgentRuntime();
++      const events: unknown[] = [];
++      for await (const event of runtime.run(
++        {
++          botId: "b",
++          threadId: "t",
++          runId: `steer-${Math.random()}`,
++          prompt: "verify all profiles",
++          instructions: "Use the destination tool.",
++          history: [],
++          tools: [destinationTool],
++          model: { provider: "test", id: "dispatch-test-model" },
++          executeTool: vi.fn(async () => ({ ok: true })),
++          claimSteering: claimSteering as never,
++        },
++        {
++          operationId: "steer",
++          traceId: "steer",
++          spaceId: "w",
++          userId: "u",
++          signal: new AbortController().signal,
++        },
++      )) {
++        events.push(event);
++      }
++      return events;
++    }
++
++    function midRunOnly() {
++      let calls = 0;
++      return vi.fn(async () => {
++        calls += 1;
++        return calls === 2
++          ? [{ id: "s-1", messageId: "m-1", text: "fammi un riassunto di dove sei" }]
++          : [];
++      });
++    }
++
++    it("frames a mid-run message and keeps the run going after a status reply", async () => {
++      fakeAgentState.danglingReplies = [STATUS, FINAL];
++      const events = await runSteer(midRunOnly());
++
++      expect(fakeAgentState.steeredMessages).toHaveLength(1);
++      const steered = fakeAgentState.steeredMessages[0] as { content: string };
++      expect(steered.content.startsWith(MID_RUN_STEERING_NOTE)).toBe(true);
++      expect(steered.content).toContain("in the user's language");
++      expect(steered.content.endsWith("fammi un riassunto di dove sei")).toBe(true);
++      expect(fakeAgentState.followUpMessages).toHaveLength(1);
++      expect(fakeAgentState.followUpMessages[0]).toEqual(
++        expect.objectContaining({
++          content: expect.stringContaining("the original task is paused"),
++        }),
++      );
++      const done = events.at(-1) as { type: string; text?: string };
++      expect(done.text?.endsWith(FINAL)).toBe(true);
++    });
++
++    it("does not frame the steering claimed at run start", async () => {
++      fakeAgentState.danglingReplies = [FINAL];
++      let calls = 0;
++      await runSteer(
++        vi.fn(async () => {
++          calls += 1;
++          return calls === 1 ? [{ id: "s-0", messageId: "m-0", text: "usa fonti primarie" }] : [];
++        }),
++      );
++
++      expect(fakeAgentState.promptInputs[0]).toContain("usa fonti primarie");
++      expect(fakeAgentState.promptInputs[0]).not.toContain(MID_RUN_STEERING_NOTE);
++      expect(fakeAgentState.steeredMessages).toHaveLength(0);
++      expect(fakeAgentState.followUpMessages).toHaveLength(0);
++    });
++
++    it("STEERING_CONTINUE_NOTE=0 injects verbatim and keeps the old ending", async () => {
++      process.env.STEERING_CONTINUE_NOTE = "0";
++      fakeAgentState.danglingReplies = [STATUS, FINAL];
++      const events = await runSteer(midRunOnly());
++
++      expect(fakeAgentState.steeredMessages[0]).toEqual(
++        expect.objectContaining({ content: "fammi un riassunto di dove sei" }),
++      );
++      expect(fakeAgentState.followUpMessages).toHaveLength(0);
++      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
++    });
++
++    it("shares the nudge cap with the dangling-narration guard", async () => {
++      process.env.DANGLING_NARRATION_NUDGES = "0";
++      fakeAgentState.danglingReplies = [STATUS, FINAL];
++      const events = await runSteer(midRunOnly());
++
++      expect(fakeAgentState.followUpMessages).toHaveLength(0);
++      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
++    });
++  });
+ });
+diff --git a/packages/adapters/src/pi-runtime.ts b/packages/adapters/src/pi-runtime.ts
+index d7885ff7..a69ced52 100644
+--- a/packages/adapters/src/pi-runtime.ts
++++ b/packages/adapters/src/pi-runtime.ts
+@@ -40,7 +40,10 @@ import { DEFAULT_OPENROUTER_MODEL_ID } from "./deployment-model.js";
+ import {
+   danglingNarrationNudges,
+   danglingNarrationPrompt,
++  frameMidRunSteering,
+   looksLikeDanglingNarration,
++  steeringContinueNoteEnabled,
++  steeringContinuePrompt,
+   toolBudgetFinalSummaryEnabled,
+   toolBudgetWrapUpPrompt,
+ } from "./final-answer-guard.js";
+@@ -335,6 +338,11 @@ export class PiAgentRuntime implements AgentRuntime {
+         const providerFailures = new WeakSet<AssistantMessage["content"]>();
+         const hasBackups = Boolean(request.fallbackModels?.length);
+         let agent: Agent;
++        // Patch 0027: set when a user message was injected mid-run and the model
++        // has not yet gone back to tool work; a text-only reply then is a status
++        // update, not the end of the task.
++        const steeringNote = steeringContinueNoteEnabled();
++        let midRunSteeringPending = false;
+         let activeStreamTarget = host.activeModel;
+         const fallbackState: FallbackStreamState = {
+           request,
+@@ -450,11 +458,13 @@ export class PiAgentRuntime implements AgentRuntime {
+             const steering = await request.claimSteering([...seenSteeringIds]);
+             if (steering.length === 0) return undefined;
+             seenSteeringIds.push(...steering.map((item) => item.id));
++            if (steeringNote) midRunSteeringPending = true;
+             for (const item of steering) {
+               const images = toPiImages(item.images);
++              const text = steeringNote ? frameMidRunSteering(item.text) : item.text;
+               agent.steer({
+                 role: "user",
+-                content: images.length ? [{ type: "text", text: item.text }, ...images] : item.text,
++                content: images.length ? [{ type: "text", text }, ...images] : text,
+                 timestamp: Date.now(),
+               });
+             }
+@@ -543,6 +553,7 @@ export class PiAgentRuntime implements AgentRuntime {
+ 
+             // Text in a turn that also contains a tool call is narration, not a final
+             // response. Keep the run alive until a later text-only turn answers the user.
++            if (hasToolCalls) midRunSteeringPending = false;
+             if (hasToolCalls && hasToolResults && !host.pausePending) {
+               toolWorkPendingFinal = true;
+               silentToolContinuations = 0;
+@@ -550,6 +561,8 @@ export class PiAgentRuntime implements AgentRuntime {
+             } else if (toolWorkPendingFinal && !hasToolCalls && !hasToolResults) {
+               const streamedFinal = streamed.slice(streamedBeforePendingFinal).trim();
+               const candidateFinal = messageText.trim() || streamedFinal;
++              const answeredMidRunSteering = midRunSteeringPending;
++              midRunSteeringPending = false;
+               if (
+                 candidateFinal &&
+                 !budgetWrapUp &&
+@@ -557,16 +570,19 @@ export class PiAgentRuntime implements AgentRuntime {
+                 !host.toolCallBudget.exceeded &&
+                 danglingNudges < maxDanglingNudges &&
+                 !providerFailureText(event.message) &&
+-                looksLikeDanglingNarration(candidateFinal)
++                (answeredMidRunSteering || looksLikeDanglingNarration(candidateFinal))
+               ) {
+-                // The reply announces a step it never took. Treat it like tool
+-                // narration and ask once more for tools or a real final answer.
++                // The reply announces a step it never took, or only answers a
++                // message sent mid-run (patch 0027). Treat it like tool narration
++                // and ask once more for tools or a real final answer.
+                 danglingNudges += 1;
+                 silentToolContinuations = 0;
+                 streamedBeforePendingFinal = streamed.length;
+                 agent.followUp({
+                   role: "user",
+-                  content: danglingNarrationPrompt(request.allowSilentEmpty),
++                  content: answeredMidRunSteering
++                    ? steeringContinuePrompt(request.allowSilentEmpty)
++                    : danglingNarrationPrompt(request.allowSilentEmpty),
+                   timestamp: Date.now(),
+                 });
+               } else if (candidateFinal) {
+-- 
+2.47.3
+

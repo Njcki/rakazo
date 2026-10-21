@@ -81,6 +81,7 @@ Funzioni aggiunte rispetto a upstream:
 - Allegati `.apk` aperti nell'installer di Android (MIME corretto + `REQUEST_INSTALL_PACKAGES`).
 - La chat resta in fondo ai nuovi messaggi (`autoscrollToTopThreshold` sulla lista invertita); chi è salito a leggere non viene spostato.
 - Il proprio messaggio non compare più doppio per un istante all'invio (bolla locale nascosta nello stesso render in cui arriva la copia del server).
+- Fix completo: l'invio in corso è una riga della stessa lista che la copia del server sostituisce sul posto con la stessa chiave (anche per la copia live senza seq); sparisce solo l'etichetta «Invio…».
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.
 

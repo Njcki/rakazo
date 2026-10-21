@@ -176,6 +176,7 @@ import {
   threadSpaceRequest,
   threadSpaceSwitchResult,
 } from "../lib/notification-open";
+import { reconcileOutgoing } from "../lib/outgoing-reconcile";
 import type { PickedAttachment } from "../lib/pick-attachments";
 import { pickDocuments, pickFromLibrary, takePhoto } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
@@ -201,12 +202,7 @@ import {
   subscribeSessionGeneration,
 } from "../lib/session";
 import type { SendAttempt } from "../lib/thread-feedback";
-import {
-  confirmEchoes,
-  subscribeDelivered,
-  useThreadFeedback,
-  withoutEchoedSends,
-} from "../lib/thread-feedback";
+import { confirmEchoes, subscribeDelivered, useThreadFeedback } from "../lib/thread-feedback";
 import { ThreadJumpAnchor } from "../lib/thread-jump";
 import { ThreadReadOnlyContext } from "../lib/thread-read-only";
 import type { ThreadScrollAction, ThreadScrollState } from "../lib/thread-scroll";
@@ -623,6 +619,38 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
   );
   const visibleMessages = reactionView.visibleMessages;
   const latestMessageId = visibleMessages.at(-1)?.id ?? null;
+  // Sends in flight are rows of the same list, keyed by their nonce before and after the server
+  // copy arrives: one bubble that only loses "Sending…", never two copies or a remount.
+  const outgoingKeys = useRef({ thread: threadKey, keys: new Map<string, string>() });
+  if (outgoingKeys.current.thread !== threadKey)
+    outgoingKeys.current = { thread: threadKey, keys: new Map() };
+  const snapInThread = Boolean(snap && (snap.groupId ?? snap.botId) === threadKey);
+  const sendsSignature = feedback.unsentSends
+    .map(
+      (a) =>
+        `${a.clientNonce}:${a.state}:${a.acceptedSeq ?? ""}:${a.acceptedRunId ?? ""}:${a.error ? 1 : 0}`,
+    )
+    .join("|");
+  // Same array until a send changes; the signature covers every field the reconciliation reads.
+  const threadSends = useMemo(() => feedback.unsentSends, [sendsSignature]);
+  const outgoing = useMemo(
+    () =>
+      snapInThread
+        ? reconcileOutgoing(
+            visibleMessages,
+            threadSends,
+            outgoingKeys.current.keys,
+            outgoingStandIn,
+          )
+        : {
+            messages: visibleMessages,
+            pendingIds: new Set<string>(),
+            separate: threadSends,
+            keyOf: (id: string) => id,
+          },
+    [visibleMessages, threadSends, snapInThread],
+  );
+  const threadMessages = outgoing.messages;
   const activePendingAttachments = attachmentsForThread(pendingAttachments, threadKey);
   const composerRef = useRef<ThreadComposerHandle>(null);
   const composerMentionTargets = useMemo(
@@ -1636,6 +1664,13 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
           snap && (snap.groupId ?? snap.botId) === originThreadKey
             ? snap.messages.reduce((max, message) => Math.max(max, message.seq ?? -1), -1)
             : undefined,
+        echoKnownIds:
+          snap && (snap.groupId ?? snap.botId) === originThreadKey
+            ? snap.messages.flatMap((message) =>
+                message.role === "user" && message.seq === undefined ? [message.id] : [],
+              )
+            : undefined,
+        sentAt: new Date().toISOString(),
       });
     } catch (error) {
       Alert.alert(t("Failed to send message"), errorText(error));
@@ -1925,7 +1960,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
 
   const answerableAskMessageId = latestAnswerableAskMessageId(snap);
   const runError = snap?.run?.status === "failed" ? (snap.run.error ?? null) : null;
-  const separatorIds = useMemo(() => timeSeparatorIds(visibleMessages), [visibleMessages]);
+  const separatorIds = useMemo(() => timeSeparatorIds(threadMessages), [threadMessages]);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -1935,7 +1970,12 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     [],
   );
   // Group calls in reading order, then reverse for the inverted list.
-  const liveItems = useMemo(() => groupVoiceChats(visibleMessages).reverse(), [visibleMessages]);
+  const liveItems = useMemo(() => groupVoiceChats(threadMessages).reverse(), [threadMessages]);
+  const liveItemKey = useCallback(
+    (item: ThreadItem<MobileMessage>) =>
+      item.kind === "voiceChat" ? item.key : outgoing.keyOf(item.message.id),
+    [outgoing],
+  );
   const messagesById = useMemo(
     () => new Map((snap?.messages ?? []).map((message) => [message.id, message])),
     [snap?.messages],
@@ -2127,10 +2167,12 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
         ? (snap?.activeRuns?.find((run) => run.botId === activityBotId)?.status ??
           (snap?.run?.botId === activityBotId ? snap.run.status : currentBotStatus))
         : undefined;
+      const pending = outgoing.pendingIds.has(message.id);
       return (
         <MessageRow
-          key={message.id}
+          key={outgoing.keyOf(message.id)}
           message={message}
+          pending={pending}
           actions={rowActions}
           botId={botId}
           bubbleBotId={botId ?? snap?.members?.[0]?.botId ?? ""}
@@ -2138,7 +2180,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
           botName={displayName}
           bots={mentionBots}
           members={snap?.members}
-          readOnly={readOnly}
+          readOnly={readOnly || pending}
           onCall={onCall}
           canAnswer={!readOnly && message.id === answerableAskMessageId}
           highlighted={highlightedMessageId === message.id}
@@ -2158,6 +2200,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
     },
     [
       messagesById,
+      outgoing,
       snap?.members,
       snap?.activeRuns,
       snap?.run,
@@ -2272,11 +2315,8 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
       </Pressable>
     ) : null;
 
-  // Hide a local bubble in the same render its server copy appears, so it never shows twice.
-  const failedSendBubbles = withoutEchoedSends(
-    feedback.unsentSends,
-    snap && (snap.groupId ?? snap.botId) === threadKey ? snap.messages : undefined,
-  ).map((attempt) => (
+  // Failed, offline or attachment sends; text sends in flight are rows of the list itself.
+  const failedSendBubbles = outgoing.separate.map((attempt) => (
     <FailedSendBubble
       key={attempt.clientNonce}
       attempt={attempt}
@@ -2353,9 +2393,10 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
             onMomentumScrollEnd={updatePinnedScroll}
           >
             {loadEarlierControl}
-            {threadWindowMessages(visibleMessages, pinnedNewerCursor).map((message, index) =>
-              renderMessageRow(message, { enableJump: true, index }),
-            )}
+            {threadWindowMessages(
+              pinnedNewerCursor === null ? threadMessages : visibleMessages,
+              pinnedNewerCursor,
+            ).map((message, index) => renderMessageRow(message, { enableJump: true, index }))}
             {pinnedNewerCursor === null ? failedSendBubbles : null}
             {pinnedNewerCursor === null ? (
               workingFooter
@@ -2369,7 +2410,7 @@ function Thread({ sessionEpoch }: { sessionEpoch: number }) {
             ref={scroll}
             data={liveItems}
             inverted
-            keyExtractor={threadItemKey}
+            keyExtractor={liveItemKey}
             // This callback tracks every row input, including reply, reaction and highlight state.
             extraData={renderMessageRow}
             style={messageListStyles.list}
@@ -2822,8 +2863,17 @@ const messageListStyles = StyleSheet.create({
   list: { flex: 1 },
   row: { marginTop: 12, width: "100%" },
 });
-function threadItemKey(item: ThreadItem<MobileMessage>) {
-  return item.kind === "voiceChat" ? item.key : item.message.id;
+/** The row a text send is drawn as until its server copy replaces it under the same key. */
+function outgoingStandIn(attempt: SendAttempt, id: string): MobileMessage {
+  const { payload } = attempt;
+  return {
+    id,
+    role: "user",
+    createdAt: payload.sentAt,
+    replyToMessageId: payload.reroutedToGroup ? undefined : payload.replyTargetId,
+    replyQuote: payload.reroutedToGroup ? undefined : (payload.replyQuote ?? undefined),
+    blocks: [{ kind: "text", text: payload.plan.trimmed }],
+  };
 }
 
 /** Share entries for each attachment of a message (Share stays separate from tap-to-open). */
@@ -2872,6 +2922,8 @@ type MessageRowActions = {
 
 type MessageRowProps = {
   message: MobileMessage;
+  /** A send on its way: same bubble as once delivered, plus a "Sending…" label that takes no space. */
+  pending?: boolean;
   actions: MessageRowActions;
   botId?: string;
   bubbleBotId: string;
@@ -2898,6 +2950,7 @@ type MessageRowProps = {
 
 const MessageRow = memo(function MessageRow({
   message,
+  pending,
   actions,
   botId,
   bubbleBotId,
@@ -3048,9 +3101,9 @@ const MessageRow = memo(function MessageRow({
       },
     };
   }, [message, actions, readOnly, onCall, colorScheme, t, locale, artifactTarget]);
+  // No key on this root: a server copy that inherits a send's row must update it in place.
   return (
     <View
-      key={message.id}
       onLayout={onLayout}
       style={{
         backgroundColor: highlighted ? tokens.muted : undefined,
@@ -3162,6 +3215,21 @@ const MessageRow = memo(function MessageRow({
                 </Text>
               ))}
             </View>
+          ) : null}
+          {pending ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{
+                position: "absolute",
+                right: 4,
+                bottom: -15,
+                color: tokens.mutedForeground,
+                fontSize: 11,
+                lineHeight: 13,
+              }}
+            >
+              {t("Sending…")}
+            </Text>
           ) : null}
         </View>
       </View>

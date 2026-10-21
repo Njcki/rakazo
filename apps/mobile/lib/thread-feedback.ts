@@ -35,6 +35,10 @@ export type SendPayload = {
   replyQuote: string | null;
   /** Highest message seq on screen when sent: a later user message with the same text is its echo. */
   echoAfterSeq?: number;
+  /** Ids of seq-less (live) user messages on screen when sent, never this send's echo. */
+  echoKnownIds?: string[];
+  /** When the send was made, for the stand-in row's time separator. */
+  sentAt?: string;
 };
 
 export type SendAttempt = {
@@ -43,6 +47,8 @@ export type SendAttempt = {
   artifactIds: Map<string, string>;
   state: "queued" | "pending" | "failed" | "refused";
   acceptedSeq?: number;
+  /** Run started by the accepted send; a live-feed copy of the message carries it but no seq. */
+  acceptedRunId?: string;
   apiBase: string;
   spaceId: string | null;
   userId: string;
@@ -91,7 +97,7 @@ export async function deliverSend(
     }
     artifactIds.push(id);
   }
-  const sent = await request<{ seq: number }>("threads/send", {
+  const sent = await request<{ seq: number; runId?: string }>("threads/send", {
     ...(groupTarget ? { groupId: groupTarget } : { botId: botTarget! }),
     clientNonce: attempt.clientNonce,
     text: plan.trimmed || undefined,
@@ -100,6 +106,7 @@ export async function deliverSend(
     replyToMessageId: reroutedToGroup ? undefined : payload.replyTargetId,
     replyQuote: reroutedToGroup ? undefined : (payload.replyQuote ?? undefined),
   });
+  if (sent.runId) attempt.acceptedRunId = sent.runId;
   return sent.seq;
 }
 
@@ -200,46 +207,6 @@ export function confirmEchoes(threadKey: string, seqs: Iterable<number>) {
     )
       remove(attempt);
   }
-}
-type EchoCandidate = {
-  role: string;
-  seq?: number;
-  blocks: ReadonlyArray<{ kind: string; text?: unknown }>;
-};
-function echoText(message: EchoCandidate) {
-  return message.blocks
-    .flatMap((block) =>
-      block.kind === "text" && typeof block.text === "string" ? [block.text] : [],
-    )
-    .join("\n")
-    .trim();
-}
-/**
- * Local "Sending…" bubbles minus those whose server copy is already in `messages`.
- * Filtering at render time keeps the bubble and its echo from ever showing together:
- * confirmEchoes only runs in an effect, one frame after the echo has been drawn.
- */
-export function withoutEchoedSends<T extends SendAttempt>(
-  attempts: T[],
-  messages: readonly EchoCandidate[] | undefined,
-): T[] {
-  if (!messages?.length || !attempts.length) return attempts;
-  const own = messages.filter((m) => m.role === "user" && m.seq !== undefined);
-  const seqs = new Set(own.map((m) => m.seq!));
-  const claimed = new Set<number>();
-  for (const attempt of attempts)
-    if (attempt.acceptedSeq !== undefined) claimed.add(attempt.acceptedSeq);
-  return attempts.filter((attempt) => {
-    if (attempt.acceptedSeq !== undefined) return !seqs.has(attempt.acceptedSeq);
-    // The live feed can deliver the echo before threads/send returns its seq.
-    const after = attempt.payload.echoAfterSeq;
-    const text = attempt.payload.plan.trimmed;
-    if (attempt.state !== "pending" || after === undefined || !text) return true;
-    const echo = own.find((m) => m.seq! > after && !claimed.has(m.seq!) && echoText(m) === text);
-    if (!echo) return true;
-    claimed.add(echo.seq!);
-    return false;
-  });
 }
 export function subscribeDelivered(listener: (attempt: SendAttempt) => void) {
   deliveredListeners.add(listener);

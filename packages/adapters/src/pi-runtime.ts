@@ -75,6 +75,11 @@ import {
 import type { PiSessionHandle, PiSessionRecorder } from "./pi-session.js";
 import { PiJsonlSessionRecorder } from "./pi-session.js";
 import { observedPiStream } from "./pi-usage.js";
+import {
+  ProgressCadenceTracker,
+  progressCadenceConfig,
+  progressNudgeContinuePrompt,
+} from "./progress-cadence.js";
 import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy, VERBATIM_TOOL_RESULTS } from "./runtime-context.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
@@ -343,6 +348,11 @@ export class PiAgentRuntime implements AgentRuntime {
         // update, not the end of the task.
         const steeringNote = steeringContinueNoteEnabled();
         let midRunSteeringPending = false;
+        // Patch 0028: nudge for a short visible update after long silent tool
+        // stretches. Not for routines/background runs, nor without message_user.
+        const cadence = new ProgressCadenceTracker(progressCadenceConfig(), Date.now());
+        const cadenceEnabled =
+          !request.allowSilentEmpty && tools.some((tool) => tool.name === "message_user");
         let activeStreamTarget = host.activeModel;
         const fallbackState: FallbackStreamState = {
           request,
@@ -454,9 +464,27 @@ export class PiAgentRuntime implements AgentRuntime {
             );
           },
           prepareNextTurnWithContext: async () => {
-            if (!request.claimSteering) return undefined;
-            const steering = await request.claimSteering([...seenSteeringIds]);
-            if (steering.length === 0) return undefined;
+            const steering = request.claimSteering
+              ? await request.claimSteering([...seenSteeringIds])
+              : [];
+            if (steering.length === 0) {
+              // Patch 0028: no user message waiting; ask for a progress line
+              // when the run has been silent for too long.
+              if (
+                cadenceEnabled &&
+                !budgetWrapUp &&
+                !host.pausePending &&
+                !host.toolCallBudget.exceeded &&
+                danglingNudges < maxDanglingNudges
+              ) {
+                const nudge = cadence.takeNudge(Date.now());
+                if (nudge) {
+                  agent.steer({ role: "user", content: nudge, timestamp: Date.now() });
+                }
+              }
+              return undefined;
+            }
+            cadence.onSteering(Date.now());
             seenSteeringIds.push(...steering.map((item) => item.id));
             if (steeringNote) midRunSteeringPending = true;
             for (const item of steering) {
@@ -511,6 +539,7 @@ export class PiAgentRuntime implements AgentRuntime {
           if (event.type === "tool_execution_start") {
             if (host.toolCallBudget.exceeded) return;
             toolCalls += 1;
+            cadence.onToolStart(event.toolName, Date.now());
             // Live activity feedback: without this the thread shows a bare
             // "working…" for the whole tool call with nothing actionable.
             toolActivityShowing = true;
@@ -544,6 +573,10 @@ export class PiAgentRuntime implements AgentRuntime {
               event.message.role === "assistant" ? assistantText(event.message) : "";
             const hasToolCalls = messageHasToolCall(event.message);
             const hasToolResults = event.toolResults.length > 0;
+            // Patch 0028: a text-only reply right after a cadence nudge is a status line.
+            const answeredCadenceNudge = cadence.pending && !hasToolCalls;
+            if (messageText.trim()) cadence.onVisibleText(Date.now());
+            else if (hasToolCalls) cadence.onToolTurnEnd();
             // The wrap-up call has no tools; a model that still emits one must not
             // start another tool loop after the budget is spent.
             if (budgetWrapUp && hasToolCalls) {
@@ -570,7 +603,9 @@ export class PiAgentRuntime implements AgentRuntime {
                 !host.toolCallBudget.exceeded &&
                 danglingNudges < maxDanglingNudges &&
                 !providerFailureText(event.message) &&
-                (answeredMidRunSteering || looksLikeDanglingNarration(candidateFinal))
+                (answeredMidRunSteering ||
+                  answeredCadenceNudge ||
+                  looksLikeDanglingNarration(candidateFinal))
               ) {
                 // The reply announces a step it never took, or only answers a
                 // message sent mid-run (patch 0027). Treat it like tool narration
@@ -582,7 +617,9 @@ export class PiAgentRuntime implements AgentRuntime {
                   role: "user",
                   content: answeredMidRunSteering
                     ? steeringContinuePrompt(request.allowSilentEmpty)
-                    : danglingNarrationPrompt(request.allowSilentEmpty),
+                    : answeredCadenceNudge
+                      ? progressNudgeContinuePrompt(request.allowSilentEmpty)
+                      : danglingNarrationPrompt(request.allowSilentEmpty),
                   timestamp: Date.now(),
                 });
               } else if (candidateFinal) {

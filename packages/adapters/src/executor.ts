@@ -292,6 +292,17 @@ import {
   serializeModelSecret,
   withModelCredentialLock,
 } from "./pi-oauth.js";
+import { loadAgentPlanContext } from "./plan-context.js";
+import {
+  addPlanStepFromTool,
+  cancelPlanFromTool,
+  completePlanFromTool,
+  createPlanFromTool,
+  getActivePlan,
+  planStaleReminder,
+  planStatusFromTool,
+  updatePlanStepFromTool,
+} from "./plan-tools.js";
 import type { PlotSpec } from "./plot-tool.js";
 import {
   assertPlotDataWithinLimits,
@@ -302,6 +313,12 @@ import {
   searchChartCatalog,
 } from "./plot-tool.js";
 import { actorMayUsePrivateEndpoint } from "./private-endpoint.js";
+import {
+  PLAN_CREATE_REMINDER,
+  planReminderConfig,
+  progressCadenceConfig,
+  shouldPromoteNarration,
+} from "./progress-cadence.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { assertSafeRemoteUrl } from "./remote-mcp.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
@@ -324,7 +341,6 @@ import {
   filterBuiltinToolsForThread,
   listSchedulesFromTool,
 } from "./schedule-tools.js";
-import { loadAgentPlanContext } from "./plan-context.js";
 import { loadAgentScratchpadContext } from "./scratchpad-context.js";
 import {
   addScratchpadItemFromTool,
@@ -333,16 +349,6 @@ import {
   removeScratchpadItemFromTool,
   updateScratchpadItemFromTool,
 } from "./scratchpad-tools.js";
-import {
-  addPlanStepFromTool,
-  cancelPlanFromTool,
-  completePlanFromTool,
-  createPlanFromTool,
-  getActivePlan,
-  planStatusFromTool,
-  planStaleReminder,
-  updatePlanStepFromTool,
-} from "./plan-tools.js";
 import { inferScript } from "./scripted-runtime.js";
 import {
   isRunningShellCommand,
@@ -3933,6 +3939,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
         let discardedMidTurnNarration = false;
         const midTurnUserTexts: string[] = [];
         let midTurnProgressCount = 0;
+        // Patch 0028: narration throttle and plan reminders are per run, not per tool call.
+        const narrationMinGapSeconds = progressCadenceConfig().narrationMinGapSeconds;
+        const planReminders = planReminderConfig();
+        let lastDurableProgressAt: number | undefined;
+        let steeringSinceDurableProgress = false;
+        let nonPlanToolsSincePlanUpdate = 0;
+        let planToolUsedThisRun = false;
+        let planCreateNudged = false;
+        const markDurableProgress = () => {
+          lastDurableProgressAt = Date.now();
+          steeringSinceDurableProgress = false;
+        };
         {
           const priorProgress = await deps.prisma.message.findMany({
             where: { runId: run.id, role: "bot" },
@@ -4014,6 +4032,19 @@ export function createRunExecutor(deps: ExecutorDeps) {
             discardedMidTurnNarration = true;
             return;
           }
+          // Patch 0028: narration right after the previous chat message stays a
+          // live progress line instead of one more chat bubble per tool call.
+          if (
+            !shouldPromoteNarration({
+              now: Date.now(),
+              lastDurableAt: lastDurableProgressAt,
+              minGapSeconds: narrationMinGapSeconds,
+              steeringSinceDurable: steeringSinceDurableProgress,
+            })
+          ) {
+            discardedMidTurnNarration = true;
+            return;
+          }
           await publishMessage(
             deps,
             run,
@@ -4024,6 +4055,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           );
           midTurnUserTexts.push(narration);
           publishedMidTurnUserMessage = true;
+          markDurableProgress();
         };
         const formatObservation = (
           observation: Awaited<ReturnType<SandboxProvider["observe"]>>,
@@ -4650,25 +4682,40 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   result,
                 )
               : Promise.resolve(true);
-          let nonPlanToolsSincePlanUpdate = 0;
+          // Patch 0028: the counter lives in run scope (it used to reset on every
+          // call, so the reminder never fired) and a run without an active plan
+          // gets one plan_create reminder.
           const finish = async (result: unknown) => {
             const persisted = (await persistEffectResult(result))
               ? result
               : uncertainEffectResult(name);
             if (String(name).startsWith("plan_")) {
               nonPlanToolsSincePlanUpdate = 0;
+              planToolUsedThisRun = true;
               return persisted;
             }
             nonPlanToolsSincePlanUpdate += 1;
-            if (nonPlanToolsSincePlanUpdate < 3 || nonPlanToolsSincePlanUpdate % 3 !== 0) {
-              return persisted;
-            }
+            const dueStale =
+              planReminders.every > 0 && nonPlanToolsSincePlanUpdate % planReminders.every === 0;
+            const dueCreate =
+              planReminders.createAfter > 0 &&
+              !messagingChannelRun &&
+              !planCreateNudged &&
+              !planToolUsedThisRun &&
+              nonPlanToolsSincePlanUpdate >= planReminders.createAfter;
+            if (!dueStale && !dueCreate) return persisted;
             try {
               const active = await getActivePlan(deps, {
                 spaceId: run.spaceId,
                 botId: bot.id,
               });
-              const reminder = planStaleReminder(active);
+              let reminder: string | undefined;
+              if (active) {
+                reminder = dueStale ? planStaleReminder(active) : undefined;
+              } else if (dueCreate) {
+                planCreateNudged = true;
+                reminder = PLAN_CREATE_REMINDER;
+              }
               if (!reminder) return persisted;
               if (persisted && typeof persisted === "object" && !Array.isArray(persisted)) {
                 return { ...(persisted as Record<string, unknown>), _planReminder: reminder };
@@ -5360,7 +5407,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
               summary: args.summary !== undefined ? String(args.summary) : undefined,
               replaceActive: Boolean(args.replaceActive),
               steps: stepsRaw.map((step: unknown) => {
-                const row = (step && typeof step === "object" ? step : {}) as Record<string, unknown>;
+                const row = (step && typeof step === "object" ? step : {}) as Record<
+                  string,
+                  unknown
+                >;
                 return {
                   title: String(row.title ?? ""),
                   blockedBy: Array.isArray(row.blockedBy) ? row.blockedBy.map(Number) : undefined,
@@ -6267,6 +6317,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             );
             midTurnUserTexts.push(text);
             publishedMidTurnUserMessage = true;
+            markDurableProgress();
             return finish(
               truncated
                 ? {
@@ -6741,6 +6792,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                       leaseFence: fence,
                       seenIds,
                     });
+                    // Patch 0028: the reply to a mid-run message is never throttled.
+                    if (steering.length > 0) steeringSinceDurableProgress = true;
                     return Promise.all(
                       steering.map(async (item) => {
                         const { images, files, unavailableInstruction } =
@@ -6912,6 +6965,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   );
                   midTurnUserTexts.push(narration);
                   publishedMidTurnUserMessage = true;
+                  markDurableProgress();
                 } else if (narration) {
                   discardedMidTurnNarration = true;
                 }
@@ -7823,7 +7877,7 @@ function planClause(disabled?: ReadonlySet<string>): string | undefined {
     builtinOffered(disabled, name),
   );
   if (tools.length === 0) return undefined;
-  return "For multi-step work (2+ distinct actions), call plan_create with ordered steps BEFORE starting, mark each step in_progress then done with plan_update_step as you go, and call plan_complete only when every step is done or skipped. Do not claim the overall task finished while plan steps remain open. Use plan_status if unsure. The user sees the plan in the sidebar.";
+  return "For multi-step work (2+ distinct actions, or anything likely to take more than 3 tool calls, including follow-up requests in the same thread), call plan_create with ordered steps BEFORE starting; a completed plan from an earlier request does not cover new work. Then mark each step in_progress then done with plan_update_step as you go, and call plan_complete only when every step is done or skipped. Do not claim the overall task finished while plan steps remain open. Use plan_status if unsure. The user sees the plan in the sidebar.";
 }
 
 function scratchpadClause(disabled?: ReadonlySet<string>): string | undefined {
@@ -8022,7 +8076,7 @@ export function mayOpenModelStream(
 export { isExactNoResponse, NO_RESPONSE, stripNoResponseReply };
 
 export const LONG_WORK_PROGRESS_GUIDANCE =
-  "During long work, send a few short progress updates with message_user so the user can see what you are doing. Keep them brief and high-signal (a sentence or two, not a dump). Do not narrate every tool call. Thinking stays private. message_user is capped at 500 characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.";
+  "During long work, keep the user informed at a steady pace: send one short progress update with message_user about every 5-8 tool calls or 2 minutes, and at each milestone (a plan step done, a key finding, a blocker). Never work through a long stretch with nothing visible, and do not narrate every tool call. If the user writes while you work, acknowledge it in one line, then continue. Keep updates brief and high-signal (a sentence or two, not a dump). Thinking stays private. message_user is capped at 500 characters and will be silently cut off if you exceed it \u2014 never put your final answer, a report, or any long-form deliverable in it. Always put the complete final answer in your normal reply, never split across message_user calls, and never assume a message_user update already delivered your content.";
 
 export const ROUTINE_SILENT_REPLY_GUIDANCE = `If this routine's prompt says to stay silent when there is nothing to report, the entire final assistant reply must be exactly ${NO_RESPONSE} — no surrounding prose, no variants, no progress updates, no all-clear, and no meta note that you are staying silent. Do not call message_user unless you have something to report.`;
 

@@ -357,6 +357,12 @@ app.get("/computers/:id", async (c) => {
   }
 });
 
+/** Patch 0029: idle keep-alive for streamed exec output (0 disables). */
+function sandboxExecHeartbeatMs(): number {
+  const raw = Number(process.env.SANDBOX_EXEC_HEARTBEAT_MS ?? 30_000);
+  return Number.isSafeInteger(raw) && raw >= 0 && raw <= 240_000 ? raw : 30_000;
+}
+
 app.post("/computers/:id/exec", async (c) => {
   const id = c.req.param("id");
   const body = z
@@ -400,6 +406,23 @@ app.post("/computers/:id/exec", async (c) => {
           closed = true;
         }
       };
+      // Patch 0029: a command that prints nothing for 5 minutes tripped the
+      // worker's fetch body timeout (undici default 300 s) and came back as
+      // "terminated" long before SANDBOX_COMMAND_TIMEOUT_MS. A bare newline is
+      // ignored by the NDJSON reader and keeps the stream alive.
+      const heartbeatMs = sandboxExecHeartbeatMs();
+      const heartbeat =
+        heartbeatMs > 0
+          ? setInterval(() => {
+              if (closed) return;
+              try {
+                controller.enqueue(encoder.encode("\n"));
+              } catch {
+                closed = true;
+              }
+            }, heartbeatMs)
+          : undefined;
+      heartbeat?.unref?.();
       try {
         let streamedStderr = "";
         const result = await runContainerCommand(
@@ -432,6 +455,7 @@ app.post("/computers/:id/exec", async (c) => {
         send({ type: "stderr", data: message });
         send({ type: "exit", code: 1 });
       } finally {
+        if (heartbeat) clearInterval(heartbeat);
         closed = true;
         try {
           controller.close();

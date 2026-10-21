@@ -83,6 +83,7 @@ Funzioni aggiunte rispetto a upstream:
 - Il proprio messaggio non compare più doppio per un istante all'invio (bolla locale nascosta nello stesso render in cui arriva la copia del server).
 - Fix completo: l'invio in corso è una riga della stessa lista che la copia del server sostituisce sul posto con la stessa chiave (anche per la copia live senza seq); sparisce solo l'etichetta «Invio…».
 - Tabelle larghe scorrevoli in orizzontale (colonne sempre a piena altezza, barra di scorrimento visibile) / Wide tables scroll horizontally (full-height columns, visible scrollbar).
+- Swipe orizzontale sulle tabelle che vince sulla lista della chat (vista nativa `rakazo-scroll-guard`) e sfumature solo dove c'è altro contenuto / Horizontal table swipes win over the chat list (native `rakazo-scroll-guard` view), fades only where more content is.
 - Chiamate in vivavoce con cancellazione dell'eco (modalità comunicazione + `VOICE_COMMUNICATION`/AEC), interruzione vocale invariata / Speakerphone calls with echo cancellation (communication mode + `VOICE_COMMUNICATION`/AEC), barge-in kept.
 
 Storico versioni: `apps/mobile/ANDROID-FORK-CHANGELOG.md`.

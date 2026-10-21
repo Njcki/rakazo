@@ -26,6 +26,8 @@ const tableEvents = vi.hoisted(() => ({
   onScroll: undefined as
     | ((event: { nativeEvent: { contentOffset: { x: number } } }) => void)
     | undefined,
+  onContentSizeChange: undefined as ((width: number, height: number) => void) | undefined,
+  fade: undefined as { start: number; end: number } | number | undefined,
 }));
 
 // react-native ships uncompiled Flow source that node cannot load, so tests mock
@@ -68,8 +70,14 @@ vi.mock("react-native", async () => {
         delete rest.onLoad;
         delete rest.onError;
       }
-      if (tag === "rn-scroll-view" && typeof rest.onScroll === "function") {
+      if (tag === "rn-scroll-view") {
         tableEvents.onScroll = rest.onScroll as typeof tableEvents.onScroll;
+        tableEvents.onContentSizeChange =
+          rest.onContentSizeChange as typeof tableEvents.onContentSizeChange;
+        tableEvents.fade = rest.fadingEdgeLength as typeof tableEvents.fade;
+        delete rest.onScroll;
+        delete rest.onContentSizeChange;
+        delete rest.fadingEdgeLength;
       }
       return createElement(
         tag,
@@ -174,6 +182,7 @@ import {
   MathBlockContext,
   RemoteImagesContext,
   RemoteMarkdownImage,
+  TableGestureGuardContext,
 } from "./markdown.native";
 
 const THREE_COLUMN_TABLE = `| Name | Status | Detail |
@@ -253,6 +262,34 @@ describe("native markdown tables", () => {
     expect(html).toContain('data-flex-shrink="0"');
   });
 
+  it("puts a wide table's scroller in the app's gesture guard, outside any Text", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const Guard = ({ enabled, children }: { enabled: boolean; children?: ReactNode }) =>
+      createElement("table-guard", { "data-enabled": String(enabled) }, children);
+    await act(async () => {
+      root.render(
+        <TableGestureGuardContext.Provider value={Guard}>
+          <ChatMarkdown>{CONTENT_SIZED_TABLE}</ChatMarkdown>
+        </TableGestureGuardContext.Provider>,
+      );
+    });
+    await act(async () => {
+      tableEvents.onLayout?.({ nativeEvent: { layout: { width: 70, height: 40 } } });
+    });
+    const scroller = container.querySelector("rn-scroll-view");
+    // A ScrollView nested in a Text never receives touches on Android.
+    expect(scroller?.closest("rn-text")).toBeNull();
+    expect(scroller?.parentElement?.tagName.toLowerCase()).toBe("table-guard");
+    expect(scroller?.parentElement?.getAttribute("data-enabled")).toBe("true");
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
   it("keeps every column at full height and scrolls only a table wider than the bubble", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
@@ -275,8 +312,24 @@ describe("native markdown tables", () => {
     expect(scrollView()?.getAttribute("data-persistent-scrollbar")).toBe("true");
     expect(scrollView()?.getAttribute("data-shows-horizontal-scroll-indicator")).toBe("true");
     expect(cellHeights().every((height) => height === null)).toBe(true);
-    // Swiping does not need a re-render, so nothing listens to scroll events.
-    expect(tableEvents.onScroll).toBeUndefined();
+    const html = container.innerHTML;
+
+    // At the start only the right side hides columns, so only it fades.
+    await act(async () => {
+      tableEvents.onContentSizeChange?.(300, 40);
+    });
+    expect(tableEvents.fade).toEqual({ start: 0, end: 24 });
+    // Mid-way both sides fade; at the end only the left one does.
+    await act(async () => {
+      tableEvents.onScroll?.({ nativeEvent: { contentOffset: { x: 100 } } });
+    });
+    expect(tableEvents.fade).toEqual({ start: 24, end: 24 });
+    await act(async () => {
+      tableEvents.onScroll?.({ nativeEvent: { contentOffset: { x: 230 } } });
+    });
+    expect(tableEvents.fade).toEqual({ start: 24, end: 0 });
+    // Scrolling only switches the fades: the table itself is not laid out again.
+    expect(container.innerHTML).toBe(html);
 
     // Wider than the table: the columns stretch to fill it and nothing scrolls.
     await act(async () => {
@@ -284,6 +337,7 @@ describe("native markdown tables", () => {
     });
     expect(scrollView()?.getAttribute("data-scroll-enabled")).toBeNull();
     expect(scrollView()?.getAttribute("data-persistent-scrollbar")).toBeNull();
+    expect(tableEvents.fade).toEqual({ start: 0, end: 0 });
     const [row] = tableRows(container.innerHTML);
     expect(row?.width).toBe(2000);
 

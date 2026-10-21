@@ -10,4 +10,10 @@ RUN apt-get update \
       tesseract-ocr tesseract-ocr-eng tesseract-ocr-fra tesseract-ocr-ita \
  && rm -rf /var/lib/apt/lists/*
 COPY page-text /usr/local/bin/page-text
+# nk29 (0029): headless-safe chromium wrapper. /usr/local/bin precedes /usr/bin, so
+# `chromium --headless …` drops the libnss_wrapper preload (headless Chromium
+# hangs forever with it), adds --no-sandbox (no userns / SUID helper here) and
+# a hard time limit (RAKAZO_HEADLESS_CHROMIUM_TIMEOUT, default 90 s) that also
+# reaps crashpad so `| head` pipelines end. Desktop launches pass through.
+COPY --chmod=755 chromium /usr/local/bin/chromium
 USER 1000

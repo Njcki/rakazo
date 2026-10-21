@@ -12,13 +12,7 @@ import Markdown, {
 } from "@ronradtke/react-native-markdown-display";
 import type { ReactNode } from "react";
 import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
-import type {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
-  StyleProp,
-  TextStyle,
-  ViewStyle,
-} from "react-native";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import {
   Alert,
   I18nManager,
@@ -533,59 +527,20 @@ function textStyleForParents(
 }
 
 const TABLE_FONT_SIZE = 15.5;
-const TABLE_LINE_HEIGHT = 23;
-const TABLE_CELL_PADDING = 5;
-const TABLE_SINGLE_LINE_HEIGHT = TABLE_LINE_HEIGHT + TABLE_CELL_PADDING * 2;
 const TABLE_CELL_GUTTER = 16;
 const TABLE_MIN_COLUMN_WIDTH = 64;
 const TABLE_MAX_COLUMN_WIDTH = 220;
-const TABLE_VISIBLE_EDGE = 8;
 
 type TableLayout = {
   widths: readonly number[];
-  viewportWidth: number;
-  scrollX: number;
 };
 
-const TableLayoutContext = createContext<TableLayout>({
-  widths: [],
-  viewportWidth: 0,
-  scrollX: 0,
-});
-
-function columnOffset(widths: readonly number[], index: number) {
-  let offset = 0;
-  for (let cursor = 0; cursor < index; cursor++) offset += widths[cursor] ?? 0;
-  return offset;
-}
-
-function columnContributesHeight(
-  index: number,
-  widths: readonly number[],
-  viewportWidth: number,
-  scrollX: number,
-) {
-  const start = columnOffset(widths, index);
-  const width = widths[index] ?? 0;
-  if (width <= 0) return false;
-  if (viewportWidth <= 0) return start === 0;
-  const overlap = Math.min(start + width, scrollX + viewportWidth) - Math.max(start, scrollX);
-  return overlap > TABLE_VISIBLE_EDGE;
-}
-
-function heightMask(widths: readonly number[], viewportWidth: number, scrollX: number) {
-  return widths
-    .map((_, index) => (columnContributesHeight(index, widths, viewportWidth, scrollX) ? "1" : "0"))
-    .join("");
-}
-
-const offscreenCell: ViewStyle = {
-  height: TABLE_SINGLE_LINE_HEIGHT,
-  overflow: "hidden",
-};
+const TableLayoutContext = createContext<TableLayout>({ widths: [] });
 
 function glyphEm(char: string) {
   if (char === " " || char === "\n" || char === "\t") return 0.33;
+  // Emoji, CJK and other wide symbols are about a full em wide or more.
+  if ((char.codePointAt(0) ?? 0) >= 0x2e80) return 1.15;
   if ("ilj.,'|:;!".includes(char)) return 0.35;
   if ("mwMW@#%&".includes(char)) return 0.95;
   if (char >= "A" && char <= "Z") return 0.72;
@@ -602,6 +557,8 @@ function estimateTextWidth(text: string, bold: boolean) {
 
 function cellPlainText(node: ASTNode): string {
   if (node.type === "text" || node.type === "code_inline") return node.content;
+  // Inline math is drawn as readable Unicode, so it takes room in the column too.
+  if (node.type === "math_inline") return texToUnicode(node.content);
   if (node.type === "softbreak" || node.type === "hardbreak") return " ";
   return node.children.map(cellPlainText).join("");
 }
@@ -684,14 +641,11 @@ function TableCell({
   baseStyle: StyleProp<ViewStyle>;
   children?: ReactNode;
 }) {
-  const { widths, viewportWidth, scrollX } = useContext(TableLayoutContext);
+  const { widths } = useContext(TableLayoutContext);
   const width = widths[columnIndex] ?? TABLE_MIN_COLUMN_WIDTH;
-  const contributes = columnContributesHeight(columnIndex, widths, viewportWidth, scrollX);
-  return (
-    <View style={[baseStyle, columnStyle(width), contributes ? null : offscreenCell]}>
-      {children}
-    </View>
-  );
+  // Every column keeps its full height: nothing is clipped while it is off to the side, and
+  // scrolling never re-lays out the table (or the chat list around it) mid-swipe.
+  return <View style={[baseStyle, columnStyle(width)]}>{children}</View>;
 }
 
 function TableRow({
@@ -728,21 +682,12 @@ function TableScrollView({
   style?: StyleProp<ViewStyle>;
 }) {
   const [viewportWidth, setViewportWidth] = useState(0);
-  const [scrollX, setScrollX] = useState(0);
   const widths = useMemo(() => fittedColumnWidths(table, viewportWidth), [table, viewportWidth]);
   const contentWidth = widths.reduce((total, width) => total + width, 0);
-  const tableLayout = useMemo(
-    () => ({ widths, viewportWidth, scrollX }),
-    [widths, viewportWidth, scrollX],
-  );
-  const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = event.nativeEvent.contentOffset.x;
-    setScrollX((current) =>
-      heightMask(widths, viewportWidth, current) === heightMask(widths, viewportWidth, next)
-        ? current
-        : next,
-    );
-  };
+  const tableLayout = useMemo(() => ({ widths }), [widths]);
+  // Only a table wider than the bubble is a scroll area; it then shows a persistent bar and
+  // faded edges so it reads as swipeable instead of cut off.
+  const overflows = viewportWidth > 0 && contentWidth > viewportWidth + 1;
   return (
     <View
       style={tableFrame}
@@ -756,8 +701,11 @@ function TableScrollView({
           horizontal
           nestedScrollEnabled
           directionalLockEnabled
-          scrollEventThrottle={16}
-          onScroll={onScroll}
+          scrollEnabled={overflows}
+          showsHorizontalScrollIndicator={overflows}
+          persistentScrollbar={overflows}
+          fadingEdgeLength={overflows ? 24 : 0}
+          showsVerticalScrollIndicator={false}
           style={[
             style,
             viewportWidth > 0 ? { width: viewportWidth } : { flexGrow: 1, flexShrink: 1 },

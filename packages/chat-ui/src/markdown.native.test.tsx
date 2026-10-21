@@ -119,7 +119,14 @@ vi.mock("react-native", async () => {
       "writingDirection",
       "width",
     ]),
-    ScrollView: mockComponent("rn-scroll-view", ["horizontal", "borderColor", "borderWidth"]),
+    ScrollView: mockComponent("rn-scroll-view", [
+      "horizontal",
+      "borderColor",
+      "borderWidth",
+      "scrollEnabled",
+      "persistentScrollbar",
+      "showsHorizontalScrollIndicator",
+    ]),
     Pressable: mockComponent("rn-pressable", [
       "accessibilityRole",
       "borderBottomWidth",
@@ -246,7 +253,7 @@ describe("native markdown tables", () => {
     expect(html).toContain('data-flex-shrink="0"');
   });
 
-  it("keeps an offscreen column from stretching the row, and lets it back in when scrolled", async () => {
+  it("keeps every column at full height and scrolls only a table wider than the bubble", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -254,31 +261,31 @@ describe("native markdown tables", () => {
     await act(async () => {
       root.render(<ChatMarkdown>{CONTENT_SIZED_TABLE}</ChatMarkdown>);
     });
+    const scrollView = () => container.querySelector("rn-scroll-view");
+    const cellHeights = () =>
+      [...container.querySelectorAll("rn-view[data-max-width]")].map((cell) =>
+        cell.getAttribute("data-height"),
+      );
+
+    // Narrower than the table: a scroll area with a persistent bar, no clipped columns.
     await act(async () => {
       tableEvents.onLayout?.({ nativeEvent: { layout: { width: 70, height: 40 } } });
     });
+    expect(scrollView()?.getAttribute("data-scroll-enabled")).toBe("true");
+    expect(scrollView()?.getAttribute("data-persistent-scrollbar")).toBe("true");
+    expect(scrollView()?.getAttribute("data-shows-horizontal-scroll-indicator")).toBe("true");
+    expect(cellHeights().every((height) => height === null)).toBe(true);
+    // Swiping does not need a re-render, so nothing listens to scroll events.
+    expect(tableEvents.onScroll).toBeUndefined();
 
-    const rows = () => tableRows(container.innerHTML);
-    const notesHeights = () =>
-      [
-        ...new DOMParser()
-          .parseFromString(container.innerHTML, "text/html")
-          .querySelectorAll("rn-view[data-border-bottom-width]"),
-      ].map(
-        (view) =>
-          view.querySelector("rn-view[data-max-width]:last-child")?.getAttribute("data-height") ??
-          null,
-      );
-    expect(rows()).toHaveLength(2);
-    expect(notesHeights()).toEqual(["33", "33"]);
-
-    const notesStart = (rows()[0]?.cells ?? [])
-      .slice(0, -1)
-      .reduce((total, width) => total + width, 0);
+    // Wider than the table: the columns stretch to fill it and nothing scrolls.
     await act(async () => {
-      tableEvents.onScroll?.({ nativeEvent: { contentOffset: { x: notesStart } } });
+      tableEvents.onLayout?.({ nativeEvent: { layout: { width: 2000, height: 40 } } });
     });
-    expect(notesHeights()).toEqual([null, null]);
+    expect(scrollView()?.getAttribute("data-scroll-enabled")).toBeNull();
+    expect(scrollView()?.getAttribute("data-persistent-scrollbar")).toBeNull();
+    const [row] = tableRows(container.innerHTML);
+    expect(row?.width).toBe(2000);
 
     await act(async () => {
       root.unmount();

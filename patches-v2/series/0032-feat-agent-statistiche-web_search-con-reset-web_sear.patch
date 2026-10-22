@@ -1,0 +1,828 @@
+From 945ff4b026353e9cf99ca9b2c218028d65699ba0 Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Thu, 22 Oct 2026 02:52:34 +0200
+Subject: [PATCH] feat(agent): statistiche web_search con reset / web_search
+ statistics with reset
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: le statistiche mostrano, per ogni servizio di ricerca, quante ricerche web ha
+risposto (il tier della catena SearXNG → Tavily → Exa → Serper → DuckDuckGo che ha
+restituito risultati).
+- Schema: tabella `search_stats` (servizio unico, contatore, ultimo aggiornamento).
+- Esecuzione: ogni provider web notifica il servizio che ha risposto; l'executor
+  incrementa il contatore (best-effort: un errore di statistiche non rompe la ricerca).
+- RPC: `stats/searches` (elenco ordinato per conteggio) e `stats/resetSearches`
+  (pulsante Azzera).
+- Web: nuova sezione "Statistics" nelle impostazioni (conto per servizio + Reset).
+
+EN: the statistics show, per search service, how many web searches it answered (the
+tier of the SearXNG → Tavily → Exa → Serper → DuckDuckGo chain that returned results).
+- Schema: `search_stats` table (unique service, counter, last update).
+- Execution: each web provider reports the service that answered; the executor
+  increments the counter (best-effort: a stats error must not break the search).
+- RPC: `stats/searches` (list ordered by count) and `stats/resetSearches` (Reset button).
+- Web: new "Statistics" settings section (per-service counts + Reset).
+---
+ apps/api/src/router.test.ts                   | 24 +++++-
+ apps/api/src/router.ts                        | 12 +++
+ apps/web/src/pages/AccountSettingsOverlay.tsx | 81 ++++++++++++++++++-
+ apps/web/src/pages/SettingsOverlay.tsx        |  5 ++
+ packages/adapters/src/api-search-tier.ts      |  9 ++-
+ packages/adapters/src/exa-serper-web.test.ts  | 47 ++++++++++-
+ packages/adapters/src/executor.ts             | 24 +++++-
+ .../adapters/src/keyless-http-web.test.ts     | 13 +++
+ packages/adapters/src/keyless-http-web.ts     |  8 +-
+ packages/adapters/src/searxng-web.test.ts     | 18 ++++-
+ packages/adapters/src/searxng-web.ts          |  9 ++-
+ packages/adapters/src/tavily-web.test.ts      | 20 ++++-
+ packages/adapters/src/tavily-web.ts           |  9 ++-
+ packages/adapters/src/web-provider-factory.ts | 26 +++++-
+ packages/contracts/src/domain.ts              |  9 +++
+ packages/contracts/src/rpc.ts                 |  6 ++
+ .../20261022000001_search_stats/migration.sql | 11 +++
+ packages/db/prisma/schema.prisma              | 10 +++
+ 18 files changed, 323 insertions(+), 18 deletions(-)
+ create mode 100644 packages/db/prisma/migrations/20261022000001_search_stats/migration.sql
+
+diff --git a/apps/api/src/router.test.ts b/apps/api/src/router.test.ts
+index 8ddc9d77..fb6aa7e0 100644
+--- a/apps/api/src/router.test.ts
++++ b/apps/api/src/router.test.ts
+@@ -161,7 +161,7 @@ describe("account preferences", () => {
+   });
+ });
+ 
+-describe("voice call thinking", () => {
++describe("voice call thinking and search stats", () => {
+   const actor = {
+     spaceId: "workspace-1",
+     userId: "user-1",
+@@ -169,11 +169,17 @@ describe("voice call thinking", () => {
+     isDeploymentOwner: true,
+   } satisfies Actor;
+ 
+-  function voiceThinkingDeps() {
++  function statsDeps() {
+     const findUnique = vi.fn(async () => ({ voiceCallThinkingLevel: "minimal" }));
+     const update = vi.fn(async () => ({ id: "user-1" }));
++    const findMany = vi.fn(async () => [
++      { service: "Tavily", count: 3 },
++      { service: "DuckDuckGo", count: 1 },
++    ]);
++    const deleteMany = vi.fn(async () => ({ count: 2 }));
+     const prisma = {
+       user: { findUnique, update },
++      searchStat: { findMany, deleteMany },
+     } as unknown as PrismaClient;
+     const client = createRouterClient(
+       createRouter({
+@@ -183,11 +189,11 @@ describe("voice call thinking", () => {
+       } as unknown as RouterDeps),
+       { context: { actor } as never },
+     );
+-    return { client, update };
++    return { client, findUnique, update, findMany, deleteMany };
+   }
+ 
+   it("reads and writes the per-user voice-call thinking level", async () => {
+-    const { client, update } = voiceThinkingDeps();
++    const { client, update } = statsDeps();
+     await expect(client.voice.callThinking()).resolves.toEqual({ thinkingLevel: "minimal" });
+     await expect(client.voice.setCallThinking({ thinkingLevel: "high" })).resolves.toEqual({
+       thinkingLevel: "high",
+@@ -200,6 +206,16 @@ describe("voice call thinking", () => {
+       data: { voiceCallThinkingLevel: null },
+     });
+   });
++
++  it("lists search stats by count and resets them", async () => {
++    const { client, deleteMany } = statsDeps();
++    await expect(client.stats.searches()).resolves.toEqual([
++      { service: "Tavily", count: 3 },
++      { service: "DuckDuckGo", count: 1 },
++    ]);
++    await expect(client.stats.resetSearches({})).resolves.toEqual({ ok: true });
++    expect(deleteMany).toHaveBeenCalledWith({});
++  });
+ });
+ 
+ describe("billing", () => {
+diff --git a/apps/api/src/router.ts b/apps/api/src/router.ts
+index abecfb6f..39e9fa1c 100644
+--- a/apps/api/src/router.ts
++++ b/apps/api/src/router.ts
+@@ -6164,6 +6164,18 @@ export function createRouter(deps: RouterDeps) {
+         return { thinkingLevel: input.thinkingLevel };
+       }),
+     },
++    stats: {
++      searches: authed.stats.searches.handler(async () => {
++        const rows = await deps.prisma.searchStat.findMany({
++          orderBy: [{ count: "desc" }, { service: "asc" }],
++        });
++        return rows.map((row) => ({ service: row.service, count: row.count }));
++      }),
++      resetSearches: authed.stats.resetSearches.handler(async () => {
++        await deps.prisma.searchStat.deleteMany({});
++        return { ok: true as const };
++      }),
++    },
+   });
+ }
+ 
+diff --git a/apps/web/src/pages/AccountSettingsOverlay.tsx b/apps/web/src/pages/AccountSettingsOverlay.tsx
+index 31a65b18..5f3bc16f 100644
+--- a/apps/web/src/pages/AccountSettingsOverlay.tsx
++++ b/apps/web/src/pages/AccountSettingsOverlay.tsx
+@@ -1,5 +1,5 @@
+ import { Trans, useLingui } from "@lingui/react/macro";
+-import type { AccountSecurity, AvatarStyle } from "@rakazo/contracts";
++import type { AccountSecurity, AvatarStyle, SearchStat } from "@rakazo/contracts";
+ import { BotAvatar, Button, Field, FieldLabel, Input, Label, Switch, Toggle } from "@rakazo/ui-web";
+ import { ChevronDown } from "lucide-react";
+ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
+@@ -34,7 +34,8 @@ import type { AppearancePreference } from "../lib/ui-appearance";
+ import { getUiAppearancePreference, setUiAppearance } from "../lib/ui-appearance";
+ import type { UiLocale } from "../lib/ui-locale";
+ import { UI_LOCALE_LABELS, UI_LOCALES } from "../lib/ui-locale";
+-import { authErrorText } from "../lib/user-error";
++import { rpc } from "../lib/rpc";
++import { authErrorText, errorText } from "../lib/user-error";
+ 
+ export type SettingsGeneralProps = {
+   email?: string | null;
+@@ -327,6 +328,82 @@ export function UsageSettingsPanel({
+   );
+ }
+ 
++export function StatsSettingsPanel() {
++  const { t } = useLingui();
++  const [stats, setStats] = useState<SearchStat[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++  const [notice, setNotice] = useState<string | null>(null);
++
++  useEffect(() => {
++    void rpc.stats
++      .searches()
++      .then(setStats)
++      .catch((err: unknown) => setError(errorText(err, t`Could not load statistics`)))
++      .finally(() => setLoading(false));
++  }, []);
++
++  async function resetSearches() {
++    setBusy(true);
++    setError(null);
++    setNotice(null);
++    try {
++      await rpc.stats.resetSearches({});
++      setStats([]);
++      setNotice(t`Search statistics reset.`);
++    } catch (err) {
++      setError(errorText(err, t`Could not reset the statistics`));
++    } finally {
++      setBusy(false);
++    }
++  }
++
++  return (
++    <div data-testid="stats-settings" className="rounded-xl border border-border px-4 py-4">
++      <div className="flex items-center justify-between gap-3">
++        <h3 className="text-[15px] font-medium text-foreground">
++          <Trans>Statistics</Trans>
++        </h3>
++        <Button
++          variant="outline"
++          size="sm"
++          disabled={busy || stats.length === 0}
++          onClick={() => void resetSearches()}
++        >
++          {busy ? <Trans>Resetting…</Trans> : <Trans>Reset</Trans>}
++        </Button>
++      </div>
++      <p className="mt-3 text-[12.5px] text-muted-foreground/80">
++        <Trans>Web searches answered by each service.</Trans>
++      </p>
++      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
++      {notice ? <p className="mt-3 text-sm text-success">{notice}</p> : null}
++      {loading ? (
++        <p className="mt-3 text-[14px] text-muted-foreground">
++          <Trans>Loading…</Trans>
++        </p>
++      ) : stats.length === 0 ? (
++        <p className="mt-3 text-[14px] text-muted-foreground">
++          <Trans>No searches recorded yet.</Trans>
++        </p>
++      ) : (
++        <ul className="mt-3 space-y-1.5">
++          {stats.map((entry) => (
++            <li
++              key={entry.service}
++              className="flex items-center justify-between text-[14px] text-foreground/85"
++            >
++              <span>{entry.service}</span>
++              <span className="tabular-nums text-muted-foreground">{entry.count}</span>
++            </li>
++          ))}
++        </ul>
++      )}
++    </div>
++  );
++}
++
+ export function ComputerSettingsPanel({
+   sandboxProvider,
+   onSandboxProviderChange,
+diff --git a/apps/web/src/pages/SettingsOverlay.tsx b/apps/web/src/pages/SettingsOverlay.tsx
+index fc6467b4..c9a7311b 100644
+--- a/apps/web/src/pages/SettingsOverlay.tsx
++++ b/apps/web/src/pages/SettingsOverlay.tsx
+@@ -2,6 +2,7 @@ import { useLingui } from "@lingui/react/macro";
+ import type { AvatarStyle, SpaceMemoryConfig } from "@rakazo/contracts";
+ import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
+ import {
++  BarChart3,
+   Brain,
+   CloudDownload,
+   Cpu,
+@@ -18,6 +19,7 @@ import { computersAreUnavailable } from "../components/ComputersUnavailableHint"
+ import {
+   ComputerSettingsPanel,
+   GeneralSettingsPanels,
++  StatsSettingsPanel,
+   UpdatesSettingsPanel,
+   UsageSettingsPanel,
+ } from "./AccountSettingsOverlay";
+@@ -32,6 +34,7 @@ export type SettingsSection =
+   | "memory"
+   | "voice"
+   | "usage"
++  | "stats"
+   | "computer"
+   | "billing"
+   | "updates";
+@@ -139,6 +142,7 @@ export function SettingsOverlay({
+     { id: "memory", label: t`Memory`, icon: Brain },
+     { id: "voice", label: t`Voice`, icon: Volume2 },
+     { id: "usage", label: t`Usage`, icon: Gauge },
++    { id: "stats", label: t`Statistics`, icon: BarChart3 },
+     ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
+     ...(billingEnabled ? [{ id: "billing" as const, label: t`Billing`, icon: CreditCard }] : []),
+     { id: "updates", label: t`Updates`, icon: CloudDownload },
+@@ -265,6 +269,7 @@ export function SettingsOverlay({
+               {section === "usage" ? (
+                 <UsageSettingsPanel usage={usage} panelRef={usageRef} />
+               ) : null}
++              {section === "stats" ? <StatsSettingsPanel /> : null}
+               {section === "computer" && showComputer ? (
+                 <ComputerSettingsPanel
+                   sandboxProvider={sandboxProvider}
+diff --git a/packages/adapters/src/api-search-tier.ts b/packages/adapters/src/api-search-tier.ts
+index d1605b2d..1d5993a3 100644
+--- a/packages/adapters/src/api-search-tier.ts
++++ b/packages/adapters/src/api-search-tier.ts
+@@ -35,6 +35,8 @@ export type ApiSearchTierOptions = {
+   onUsage?: (usage: ApiSearchUsage) => void;
+   /** Called when a search falls back. Default: a `warn` log line. */
+   onFallback?: (reason: string) => void;
++  /** Called when this tier answers a search with results (patch 0032 stats). */
++  onResults?: () => void;
+ };
+ 
+ export type ApiSearchRequestInit = { headers: Record<string, string>; body: unknown };
+@@ -55,6 +57,7 @@ export abstract class ApiSearchTier implements WebProvider {
+   private readonly fallback: WebProvider;
+   private readonly onUsageOption?: (usage: ApiSearchUsage) => void;
+   private readonly onFallbackOption?: (reason: string) => void;
++  private readonly onResultsOption?: () => void;
+ 
+   constructor(options: ApiSearchTierOptions, keyName: string) {
+     const apiKey = options.apiKey.trim();
+@@ -67,6 +70,7 @@ export abstract class ApiSearchTier implements WebProvider {
+     this.fallback = options.fallback ?? new KeylessHttpWebProvider();
+     this.onUsageOption = options.onUsage;
+     this.onFallbackOption = options.onFallback;
++    this.onResultsOption = options.onResults;
+   }
+ 
+   protected abstract buildRequest(query: string, maxResults: number): ApiSearchRequestInit;
+@@ -105,7 +109,10 @@ export abstract class ApiSearchTier implements WebProvider {
+         durationMs: Date.now() - started,
+         ...(costUsd === undefined ? {} : { costUsd }),
+       });
+-      if (hits.length > 0) return hits;
++      if (hits.length > 0) {
++        this.onResultsOption?.();
++        return hits;
++      }
+       reason = "no results";
+     } catch (error) {
+       reason = error instanceof Error ? error.message : String(error);
+diff --git a/packages/adapters/src/exa-serper-web.test.ts b/packages/adapters/src/exa-serper-web.test.ts
+index 64831732..d28c13f0 100644
+--- a/packages/adapters/src/exa-serper-web.test.ts
++++ b/packages/adapters/src/exa-serper-web.test.ts
+@@ -1,5 +1,5 @@
+ import type { AdapterContext } from "@rakazo/adapter-kit";
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it, vi } from "vitest";
+ import type { ApiSearchUsage } from "./api-search-tier.js";
+ import { EXA_SEARCH_ENDPOINT, ExaWebProvider, parseExaResults } from "./exa-web.js";
+ import { FakeWebProvider } from "./fake-web.js";
+@@ -243,4 +243,49 @@ describe("full chain SearXNG → Tavily → Exa → Serper → DuckDuckGo", () =
+     expect(createWebProvider("serper", undefined, env).describe().id).toBe("serper");
+     expect(() => createWebProvider("serper", undefined, {})).toThrow(/SERPER_API_KEY/);
+   });
++
++  it("factory reports the tier that answered a search", async () => {
++    const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
++    const html = `<div class="result"><a class="result__a" href="https://example.test/a">Alpha</a></div>`;
++    let fetchImpl: typeof fetch = async () => new Response("no", { status: 500 });
++    const stub = (searxng: Response, tavily: Response) => {
++      fetchImpl = async (input) => {
++        const url = String(input);
++        if (url.startsWith("http://sx.test")) return searxng;
++        if (url.startsWith("https://api.tavily.com")) return tavily;
++        return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
++      };
++      vi.stubGlobal("fetch", fetchImpl);
++    };
++    const make = (reported: string[]) =>
++      createWebProvider(
++        "searxng",
++        // A distinct wrapper: the keyless tier pairs the global fetch with its
++        // own dispatcher, so the stub must reach it through options instead.
++        { fetch: (input, init) => fetchImpl(input, init), resolveHostname: publicResolver },
++        { SEARXNG_URL: "http://sx.test:8080", TAVILY_API_KEY: "k" },
++        (service) => reported.push(service),
++      );
++    try {
++      let reported: string[] = [];
++      stub(
++        jsonResponse({ results: [{ title: "S", url: "https://s.test/", content: "" }] }),
++        jsonResponse({ results: [] }),
++      );
++      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("S");
++      expect(reported).toEqual(["SearXNG"]);
++
++      reported = [];
++      stub(new Response("down", { status: 503 }), jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "" }] }));
++      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("T");
++      expect(reported).toEqual(["Tavily"]);
++
++      reported = [];
++      stub(new Response("down", { status: 503 }), jsonResponse({ results: [] }));
++      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("Alpha");
++      expect(reported).toEqual(["DuckDuckGo"]);
++    } finally {
++      vi.unstubAllGlobals();
++    }
++  });
+ });
+diff --git a/packages/adapters/src/executor.ts b/packages/adapters/src/executor.ts
+index a8070b57..f33c2a48 100644
+--- a/packages/adapters/src/executor.ts
++++ b/packages/adapters/src/executor.ts
+@@ -2999,9 +2999,31 @@ export function isTerminalModelSetupError(error: unknown): boolean {
+   );
+ }
+ 
++/** Patch 0032: increment the global web-search counter for the service that answered. */
++async function recordSearchStat(prisma: ExecutorDeps["prisma"], service: string): Promise<void> {
++  try {
++    await prisma.searchStat.upsert({
++      where: { service },
++      update: { count: { increment: 1 } },
++      create: { service, count: 1 },
++    });
++  } catch (error) {
++    // Stats are best-effort; a counter failure must not break the search.
++    getLogger().warn("web_search stat record failed", {
++      service,
++      error: error instanceof Error ? error.message : String(error),
++    });
++  }
++}
++
+ export function createRunExecutor(deps: ExecutorDeps) {
+   const contextStrategy = deps.contextStrategy ?? DEFAULT_CONTEXT_STRATEGY;
+-  const web = deps.web ?? createWebProvider();
++  // Patch 0032: count web searches by the service that answered.
++  const web =
++    deps.web ??
++    createWebProvider(undefined, undefined, process.env, (service) => {
++      void recordSearchStat(deps.prisma, service);
++    });
+   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
+   const cloudAgent = deps.cloudAgent;
+   const resolveConnectedModel = async (
+diff --git a/packages/adapters/src/keyless-http-web.test.ts b/packages/adapters/src/keyless-http-web.test.ts
+index 6e6f4213..ee02d49a 100644
+--- a/packages/adapters/src/keyless-http-web.test.ts
++++ b/packages/adapters/src/keyless-http-web.test.ts
+@@ -53,6 +53,19 @@ describe("keyless HTTP web provider", () => {
+     ]);
+   });
+ 
++  it("notifies onResults when the HTML backend answers", async () => {
++    let reported = 0;
++    const html = `<div class="result"><a class="result__a" href="https://example.test/a">Alpha</a></div>`;
++    const provider = new KeylessHttpWebProvider({
++      fetch: async () =>
++        new Response(html, { status: 200, headers: { "content-type": "text/html" } }),
++      resolveHostname: publicResolver,
++      onResults: () => reported++,
++    });
++    expect((await provider.search({ query: "alpha" }, ctx)).length).toBeGreaterThan(0);
++    expect(reported).toBe(1);
++  });
++
+   it("fetches readable page text with truncation", async () => {
+     const long = "word ".repeat(100);
+     const html = `<html><head><title>Doc</title></head><body><article><p>${long}</p></article></body></html>`;
+diff --git a/packages/adapters/src/keyless-http-web.ts b/packages/adapters/src/keyless-http-web.ts
+index 2834c15e..a7ea48f6 100644
+--- a/packages/adapters/src/keyless-http-web.ts
++++ b/packages/adapters/src/keyless-http-web.ts
+@@ -37,6 +37,8 @@ export type KeylessHttpWebOptions = {
+   fetchTimeoutMs?: number;
+   maxBufferBytes?: number;
+   userAgent?: string;
++  /** Called when this tier answers a search with results (patch 0032 stats). */
++  onResults?: () => void;
+ };
+ 
+ /** HTML search backend using DuckDuckGo’s public HTML form. One keyless option, not the interface. */
+@@ -59,6 +61,7 @@ export class KeylessHttpWebProvider implements WebProvider {
+   private readonly fetchTimeoutMs: number;
+   private readonly maxBufferBytes: number;
+   private readonly userAgent: string;
++  private readonly onResults?: () => void;
+ 
+   constructor(options: KeylessHttpWebOptions = {}) {
+     this.fetchImpl = options.fetch;
+@@ -69,6 +72,7 @@ export class KeylessHttpWebProvider implements WebProvider {
+     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
+     this.userAgent =
+       options.userAgent ?? "Rakazo/0.1 (+https://github.com/elie222/rakazo; web tools)";
++    this.onResults = options.onResults;
+   }
+ 
+   describe() {
+@@ -100,7 +104,9 @@ export class KeylessHttpWebProvider implements WebProvider {
+       userAgent: this.userAgent,
+       signal: request.signal ?? context.signal,
+     });
+-    return this.searchBackend.parse(body, maxResults);
++    const hits = this.searchBackend.parse(body, maxResults);
++    if (hits.length > 0) this.onResults?.();
++    return hits;
+   }
+ 
+   async fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {
+diff --git a/packages/adapters/src/searxng-web.test.ts b/packages/adapters/src/searxng-web.test.ts
+index daadf317..c9239ec5 100644
+--- a/packages/adapters/src/searxng-web.test.ts
++++ b/packages/adapters/src/searxng-web.test.ts
+@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
+   });
+ }
+ 
+-function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number } = {}) {
++function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number; onResults?: () => void } = {}) {
+   const fallback = new FakeWebProvider();
+   fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
+   const reasons: string[] = [];
+@@ -104,6 +104,22 @@ describe("SearXNG web provider", () => {
+     expect(reasons).toEqual(["HTTP 429"]);
+   });
+ 
++  it("notifies onResults only when SearXNG answers", async () => {
++    let reported = 0;
++    const { provider } = setup(
++      async () => jsonResponse({ results: [{ title: "One", url: "https://one.test/", content: "x" }] }),
++      { onResults: () => reported++ },
++    );
++    expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("One");
++    expect(reported).toBe(1);
++
++    const { provider: silent } = setup(async () => jsonResponse({ results: [] }), {
++      onResults: () => reported++,
++    });
++    expect((await silent.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
++    expect(reported).toBe(1);
++  });
++
+   it("falls back on network errors, non-JSON bodies and empty results", async () => {
+     for (const [impl, reason] of [
+       [
+diff --git a/packages/adapters/src/searxng-web.ts b/packages/adapters/src/searxng-web.ts
+index 432ab6cd..70e5f423 100644
+--- a/packages/adapters/src/searxng-web.ts
++++ b/packages/adapters/src/searxng-web.ts
+@@ -31,6 +31,8 @@ export type SearxngWebOptions = {
+   fallback?: WebProvider;
+   /** Called when a search falls back. Default: a `warn` log line. */
+   onFallback?: (reason: string) => void;
++  /** Called when this tier answers a search with results (patch 0032 stats). */
++  onResults?: () => void;
+ };
+ 
+ /**
+@@ -48,6 +50,7 @@ export class SearxngWebProvider implements WebProvider {
+   private readonly language?: string;
+   private readonly fallback: WebProvider;
+   private readonly onFallback: (reason: string) => void;
++  private readonly onResults?: () => void;
+ 
+   constructor(options: SearxngWebOptions) {
+     this.endpoint = searxngSearchEndpoint(options.baseUrl);
+@@ -60,6 +63,7 @@ export class SearxngWebProvider implements WebProvider {
+     this.onFallback =
+       options.onFallback ??
+       ((reason) => getLogger().warn("web_search SearXNG fallback", { reason }));
++    this.onResults = options.onResults;
+   }
+ 
+   describe() {
+@@ -85,7 +89,10 @@ export class SearxngWebProvider implements WebProvider {
+     let reason: string;
+     try {
+       const hits = await this.searchSearxng(query, maxResults, signal);
+-      if (hits.length > 0) return hits;
++      if (hits.length > 0) {
++        this.onResults?.();
++        return hits;
++      }
+       reason = "no results";
+     } catch (error) {
+       if (signal?.aborted) throw error;
+diff --git a/packages/adapters/src/tavily-web.test.ts b/packages/adapters/src/tavily-web.test.ts
+index b8faa422..5496c23e 100644
+--- a/packages/adapters/src/tavily-web.test.ts
++++ b/packages/adapters/src/tavily-web.test.ts
+@@ -25,7 +25,7 @@ function jsonResponse(body: unknown, status = 200): Response {
+   });
+ }
+ 
+-function setup(fetchImpl: typeof fetch, timeoutMs?: number) {
++function setup(fetchImpl: typeof fetch, timeoutMs?: number, onResults?: () => void) {
+   const fallback = new FakeWebProvider();
+   fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
+   const usage: TavilyUsage[] = [];
+@@ -37,6 +37,7 @@ function setup(fetchImpl: typeof fetch, timeoutMs?: number) {
+     timeoutMs,
+     onUsage: (u) => usage.push(u),
+     onFallback: (r) => reasons.push(r),
++    onResults,
+   });
+   return { provider, fallback, usage, reasons };
+ }
+@@ -120,6 +121,23 @@ describe("Tavily web provider", () => {
+     expect(fallback.lastSearch).toBeUndefined();
+   });
+ 
++  it("notifies onResults only when Tavily answers", async () => {
++    let reported = 0;
++    const { provider } = setup(
++      async () => jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "s" }] }),
++      undefined,
++      () => reported++,
++    );
++    expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("T");
++    expect(reported).toBe(1);
++
++    const { provider: silent } = setup(async () => jsonResponse({ results: [] }), undefined, () =>
++      reported++,
++    );
++    expect((await silent.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
++    expect(reported).toBe(1);
++  });
++
+   it("rejects an empty API key", () => {
+     expect(() => new TavilyWebProvider({ apiKey: "  " })).toThrow(/TAVILY_API_KEY/);
+   });
+diff --git a/packages/adapters/src/tavily-web.ts b/packages/adapters/src/tavily-web.ts
+index 5505bdb6..e0d31e5a 100644
+--- a/packages/adapters/src/tavily-web.ts
++++ b/packages/adapters/src/tavily-web.ts
+@@ -37,6 +37,8 @@ export type TavilyWebOptions = {
+   onUsage?: (usage: TavilyUsage) => void;
+   /** Called when a search falls back. Default: a `warn` log line. */
+   onFallback?: (reason: string) => void;
++  /** Called when this tier answers a search with results (patch 0032 stats). */
++  onResults?: () => void;
+ };
+ 
+ /**
+@@ -51,6 +53,7 @@ export class TavilyWebProvider implements WebProvider {
+   private readonly fallback: WebProvider;
+   private readonly onUsage: (usage: TavilyUsage) => void;
+   private readonly onFallback: (reason: string) => void;
++  private readonly onResults?: () => void;
+ 
+   constructor(options: TavilyWebOptions) {
+     const apiKey = options.apiKey.trim();
+@@ -67,6 +70,7 @@ export class TavilyWebProvider implements WebProvider {
+     this.onFallback =
+       options.onFallback ??
+       ((reason) => getLogger().warn("web_search Tavily fallback", { reason }));
++    this.onResults = options.onResults;
+   }
+ 
+   describe() {
+@@ -98,7 +102,10 @@ export class TavilyWebProvider implements WebProvider {
+         results: hits.length,
+         durationMs: Date.now() - started,
+       });
+-      if (hits.length > 0) return hits;
++      if (hits.length > 0) {
++        this.onResults?.();
++        return hits;
++      }
+       reason = "no results";
+     } catch (error) {
+       reason = error instanceof Error ? error.message : String(error);
+diff --git a/packages/adapters/src/web-provider-factory.ts b/packages/adapters/src/web-provider-factory.ts
+index ffef741b..15ec56c1 100644
+--- a/packages/adapters/src/web-provider-factory.ts
++++ b/packages/adapters/src/web-provider-factory.ts
+@@ -34,18 +34,24 @@ export function resolveWebProviderKind(source: NodeJS.ProcessEnv = process.env):
+   return raw;
+ }
+ 
++/**
++ * Create the deployment web provider. `onResults` (patch 0032) is called with the
++ * friendly name of the tier that answered a search with results.
++ */
+ export function createWebProvider(
+   kind: string = resolveWebProviderKind(),
+   options?: ConstructorParameters<typeof KeylessHttpWebProvider>[0],
+   source: NodeJS.ProcessEnv = process.env,
++  onResults?: (service: string) => void,
+ ): WebProvider {
++  const notify = (service: string) => (onResults ? () => onResults(service) : undefined);
+   switch (kind) {
+     case "fake":
+       return new FakeWebProvider();
+     case "keyless-http":
+     case "keyless":
+     case "":
+-      return new KeylessHttpWebProvider(options);
++      return new KeylessHttpWebProvider({ ...options, onResults: notify("DuckDuckGo") });
+     case "searxng": {
+       const baseUrl = source.SEARXNG_URL?.trim();
+       if (!baseUrl) throw new Error("WEB_PROVIDER=searxng requires SEARXNG_URL");
+@@ -54,7 +60,8 @@ export function createWebProvider(
+         timeoutMs: positiveNumber(source.SEARXNG_TIMEOUT_MS),
+         categories: source.SEARXNG_CATEGORIES,
+         language: source.SEARXNG_LANGUAGE,
+-        fallback: fallbackChain(source, options, "tavily"),
++        onResults: notify("SearXNG"),
++        fallback: fallbackChain(source, options, "tavily", onResults),
+       });
+     }
+     case "tavily":
+@@ -62,7 +69,7 @@ export function createWebProvider(
+     case "serper": {
+       const keyName = `${kind.toUpperCase()}_API_KEY`;
+       if (!source[keyName]?.trim()) throw new Error(`WEB_PROVIDER=${kind} requires ${keyName}`);
+-      return fallbackChain(source, options, kind);
++      return fallbackChain(source, options, kind, onResults);
+     }
+     default:
+       throw new Error(`Unknown web provider "${kind}"`);
+@@ -71,13 +78,21 @@ export function createWebProvider(
+ 
+ const PAID_TIERS = ["tavily", "exa", "serper"] as const;
+ 
++const TIER_SERVICE_NAMES: Record<(typeof PAID_TIERS)[number], string> = {
++  tavily: "Tavily",
++  exa: "Exa",
++  serper: "Serper",
++};
++
+ /** Paid tiers from `from` onward whose key is set, ending in keyless DuckDuckGo. */
+ function fallbackChain(
+   source: NodeJS.ProcessEnv,
+   options: ConstructorParameters<typeof KeylessHttpWebProvider>[0],
+   from: (typeof PAID_TIERS)[number],
++  onResults?: (service: string) => void,
+ ): WebProvider {
+-  let next: WebProvider = new KeylessHttpWebProvider(options);
++  const notify = (service: string) => (onResults ? () => onResults(service) : undefined);
++  let next: WebProvider = new KeylessHttpWebProvider({ ...options, onResults: notify("DuckDuckGo") });
+   for (const tier of PAID_TIERS.slice(PAID_TIERS.indexOf(from)).reverse()) {
+     const apiKey = source[`${tier.toUpperCase()}_API_KEY`]?.trim();
+     if (!apiKey) continue;
+@@ -87,6 +102,7 @@ function fallbackChain(
+         timeoutMs: positiveNumber(source.SERPER_TIMEOUT_MS),
+         country: source.SERPER_GL,
+         language: source.SERPER_HL,
++        onResults: notify(TIER_SERVICE_NAMES[tier]),
+         fallback: next,
+       });
+     } else if (tier === "exa") {
+@@ -94,12 +110,14 @@ function fallbackChain(
+         apiKey,
+         timeoutMs: positiveNumber(source.EXA_TIMEOUT_MS),
+         searchType: source.EXA_SEARCH_TYPE,
++        onResults: notify(TIER_SERVICE_NAMES[tier]),
+         fallback: next,
+       });
+     } else {
+       next = new TavilyWebProvider({
+         apiKey,
+         timeoutMs: positiveNumber(source.TAVILY_TIMEOUT_MS),
++        onResults: notify(TIER_SERVICE_NAMES[tier]),
+         fallback: next,
+       });
+     }
+diff --git a/packages/contracts/src/domain.ts b/packages/contracts/src/domain.ts
+index 01535391..03b0aa75 100644
+--- a/packages/contracts/src/domain.ts
++++ b/packages/contracts/src/domain.ts
+@@ -38,6 +38,15 @@ export const VoiceCallThinkingSchema = z.object({
+ });
+ export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
+ 
++/** A web search counter for one service that answered. */
++export const SearchStatSchema = z.object({
++  service: z.string(),
++  count: z.number().int().min(0),
++});
++export const SearchStatListSchema = z.array(SearchStatSchema);
++export type SearchStat = z.infer<typeof SearchStatSchema>;
++export type SearchStatList = z.infer<typeof SearchStatListSchema>;
++
+ export { AGENT_SECRET_NAME_PATTERN };
+ 
+ export const AgentSecretSchema = z.object({
+diff --git a/packages/contracts/src/rpc.ts b/packages/contracts/src/rpc.ts
+index f35dfad3..f221ad4a 100644
+--- a/packages/contracts/src/rpc.ts
++++ b/packages/contracts/src/rpc.ts
+@@ -77,6 +77,7 @@ import {
+   AgentPlanSchema,
+   ScratchpadItemSchema,
+   ScratchpadItemStatusSchema,
++  SearchStatListSchema,
+   ServerUpdateCheckSchema,
+   ServerUpdateRequestSchema,
+   ServerUpdateRunSchema,
+@@ -951,6 +952,11 @@ export const appContract = {
+       .input(z.object({ thinkingLevel: ThinkingLevelSchema.nullable() }))
+       .output(VoiceCallThinkingSchema),
+   },
++  stats: {
++    /** Web searches by the service that answered (self-host patch 0032). */
++    searches: oc.output(SearchStatListSchema),
++    resetSearches: oc.input(z.object({})).output(z.object({ ok: z.literal(true) })),
++  },
+   externalConversations: {
+     updatePolicy: oc
+       .input(UpdateExternalConversationPolicyInput)
+diff --git a/packages/db/prisma/migrations/20261022000001_search_stats/migration.sql b/packages/db/prisma/migrations/20261022000001_search_stats/migration.sql
+new file mode 100644
+index 00000000..1b2a5436
+--- /dev/null
++++ b/packages/db/prisma/migrations/20261022000001_search_stats/migration.sql
+@@ -0,0 +1,11 @@
++-- Global counters of web searches by the service that answered (patch 0032).
++CREATE TABLE "search_stats" (
++    "id" TEXT NOT NULL,
++    "service" TEXT NOT NULL,
++    "count" INTEGER NOT NULL DEFAULT 0,
++    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
++
++    CONSTRAINT "search_stats_pkey" PRIMARY KEY ("id")
++);
++
++CREATE UNIQUE INDEX "search_stats_service_key" ON "search_stats"("service");
+diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
+index 5d0b0748..d0e9a656 100644
+--- a/packages/db/prisma/schema.prisma
++++ b/packages/db/prisma/schema.prisma
+@@ -392,6 +392,16 @@ model SpaceVoicePreference {
+   @@map("space_voice_preferences")
+ }
+ 
++// Global counters of web searches by the service that answered (self-host patch 0032).
++model SearchStat {
++  id        String   @id @default(cuid())
++  service   String   @unique
++  count     Int      @default(0)
++  updatedAt DateTime @default(now()) @updatedAt
++
++  @@map("search_stats")
++}
++
+ model Bot {
+   screenGeneration Int @default(0)
+   id                String            @id @default(cuid())
+-- 
+2.55.0.windows.5
+

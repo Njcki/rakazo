@@ -239,6 +239,7 @@ export function BotSettings({
     modelProvider?: string | null;
     modelId?: string | null;
     thinkingLevel?: ThinkingLevel | null;
+    voiceThinkingLevel?: ThinkingLevel | null;
     disabledBuiltinTools?: string[];
   }) => Promise<void>;
   onExport: () => Promise<void>;
@@ -266,6 +267,7 @@ export function BotSettings({
     bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
+  const [voiceThinkingLevel, setVoiceThinkingLevel] = useState(bot.voiceThinkingLevel ?? "");
   const [disabledBuiltinTools, setDisabledBuiltinTools] = useState<string[]>(
     bot.disabledBuiltinTools ?? [],
   );
@@ -395,6 +397,9 @@ export function BotSettings({
           ? {
               thinkingLevel: thinkingOptions.length
                 ? ((thinkingLevel || null) as ThinkingLevel | null)
+                : null,
+              voiceThinkingLevel: thinkingOptions.length
+                ? ((voiceThinkingLevel || null) as ThinkingLevel | null)
                 : null,
             }
           : {}),
@@ -654,6 +659,26 @@ export function BotSettings({
             >
               <NativeSelectOption value="">
                 {t`Default (${thinkingLevelLabel(defaultThinkingLevel)})`}
+              </NativeSelectOption>
+              {thinkingOptions.map((level) => (
+                <NativeSelectOption key={level} value={level}>
+                  {thinkingLevelLabel(level)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+        ) : null}
+        {thinkingOptions.length ? (
+          <label htmlFor={`${ids}-voice-thinking`} className={fieldLabelClass}>
+            <Trans>Thinking in calls</Trans>
+            <NativeSelect
+              id={`${ids}-voice-thinking`}
+              className="mt-2 w-full"
+              value={voiceThinkingLevel}
+              onChange={(event) => setVoiceThinkingLevel(event.target.value)}
+            >
+              <NativeSelectOption value="">
+                {t`Default (user setting)`}
               </NativeSelectOption>
               {thinkingOptions.map((level) => (
                 <NativeSelectOption key={level} value={level}>

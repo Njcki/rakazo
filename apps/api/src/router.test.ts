@@ -161,6 +161,47 @@ describe("account preferences", () => {
   });
 });
 
+describe("voice call thinking", () => {
+  const actor = {
+    spaceId: "workspace-1",
+    userId: "user-1",
+    email: "user@rakazo.test",
+    isDeploymentOwner: true,
+  } satisfies Actor;
+
+  function voiceThinkingDeps() {
+    const findUnique = vi.fn(async () => ({ voiceCallThinkingLevel: "minimal" }));
+    const update = vi.fn(async () => ({ id: "user-1" }));
+    const prisma = {
+      user: { findUnique, update },
+    } as unknown as PrismaClient;
+    const client = createRouterClient(
+      createRouter({
+        prisma,
+        env: { webOrigin: "http://127.0.0.1:5173" },
+        dataDir: "/tmp/rakazo-router-test",
+      } as unknown as RouterDeps),
+      { context: { actor } as never },
+    );
+    return { client, update };
+  }
+
+  it("reads and writes the per-user voice-call thinking level", async () => {
+    const { client, update } = voiceThinkingDeps();
+    await expect(client.voice.callThinking()).resolves.toEqual({ thinkingLevel: "minimal" });
+    await expect(client.voice.setCallThinking({ thinkingLevel: "high" })).resolves.toEqual({
+      thinkingLevel: "high",
+    });
+    await expect(client.voice.setCallThinking({ thinkingLevel: null })).resolves.toEqual({
+      thinkingLevel: null,
+    });
+    expect(update).toHaveBeenLastCalledWith({
+      where: { id: "user-1" },
+      data: { voiceCallThinkingLevel: null },
+    });
+  });
+});
+
 describe("billing", () => {
   function billingDeps(isDeploymentOwner: boolean, billing?: RouterDeps["billing"]) {
     const prisma = {

@@ -95,6 +95,7 @@ import {
   UpdateExternalConversationPolicyInput,
   UpdateGroupInput,
   UsageRecordSchema,
+  VoiceCallThinkingSchema,
   VoiceCatalogEntrySchema,
   VoiceCredentialSchema,
   VoiceInfoSchema,
@@ -944,6 +945,11 @@ export const appContract = {
         }),
       )
       .output(z.object({ ready: z.boolean(), utterances: z.array(z.string()) })),
+    /** Per-user default reasoning level for voice calls (null = deployment default "low"). */
+    callThinking: oc.output(VoiceCallThinkingSchema),
+    setCallThinking: oc
+      .input(z.object({ thinkingLevel: ThinkingLevelSchema.nullable() }))
+      .output(VoiceCallThinkingSchema),
   },
   externalConversations: {
     updatePolicy: oc

@@ -32,6 +32,12 @@ export const ThinkingLevelSchema = z.enum([
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
 
+/** Per-user default reasoning level for voice calls (null = deployment default "low"). */
+export const VoiceCallThinkingSchema = z.object({
+  thinkingLevel: ThinkingLevelSchema.nullable(),
+});
+export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
+
 export { AGENT_SECRET_NAME_PATTERN };
 
 export const AgentSecretSchema = z.object({
@@ -75,6 +81,8 @@ export const BotSchema = z.object({
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
+  /** Per-bot override of the voice-call reasoning level (null = use the user's setting). */
+  voiceThinkingLevel: ThinkingLevelSchema.nullable(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   disabledBuiltinTools: z.array(z.string()).default([]),
@@ -343,6 +351,7 @@ export const UpdateBotInput = z
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
+    voiceThinkingLevel: ThinkingLevelSchema.nullable().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
     disabledBuiltinTools: DisabledBuiltinToolsSchema.optional(),

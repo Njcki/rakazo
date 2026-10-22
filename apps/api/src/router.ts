@@ -139,6 +139,7 @@ import type {
   ProductEvent,
   Routine,
   SpaceNavigation,
+  ThinkingLevel,
 } from "@rakazo/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
@@ -1765,6 +1766,9 @@ export function createRouter(deps: RouterDeps) {
               ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
               : {}),
             ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
+            ...(input.voiceThinkingLevel !== undefined
+              ? { voiceThinkingLevel: input.voiceThinkingLevel }
+              : {}),
             ...(input.teamChatAmbientEnabled !== undefined
               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }
               : {}),
@@ -6144,6 +6148,21 @@ export function createRouter(deps: RouterDeps) {
       prepare: authed.voice.prepare.handler(async ({ context, input }) =>
         prepareVoice(deps, context.actor, input),
       ),
+      callThinking: authed.voice.callThinking.handler(async ({ context }) => {
+        const user = await deps.prisma.user.findUnique({
+          where: { id: context.actor.userId },
+          select: { voiceCallThinkingLevel: true },
+        });
+        // The stored value is only written via setCallThinking (validated against the enum).
+        return { thinkingLevel: (user?.voiceCallThinkingLevel ?? null) as ThinkingLevel | null };
+      }),
+      setCallThinking: authed.voice.setCallThinking.handler(async ({ context, input }) => {
+        await deps.prisma.user.update({
+          where: { id: context.actor.userId },
+          data: { voiceCallThinkingLevel: input.thinkingLevel },
+        });
+        return { thinkingLevel: input.thinkingLevel };
+      }),
     },
   });
 }

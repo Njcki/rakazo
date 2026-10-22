@@ -724,4 +724,11 @@ export const IT_MESSAGES: Record<string, string> = {
   "Artifacts: files and documents created by your bots": "Artefatti: file e documenti creati dai tuoi bot",
   "Move up": "Sposta su",
   "Move down": "Sposta giù",
+  "Thinking in calls": "Ragionamento nelle chiamate",
+  "Default (low)": "Predefinito (basso)",
+  "Default (user setting)": "Predefinito (impostazione dell'utente)",
+  "Could not save the call thinking level": "Impossibile salvare il ragionamento delle chiamate",
+  Statistics: "Statistiche",
+  "Could not reset the statistics": "Impossibile azzerare le statistiche",
+  Off: "Spento",
 };

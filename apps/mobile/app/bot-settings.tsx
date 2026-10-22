@@ -55,6 +55,7 @@ export default function BotSettingsScreen() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [modelKey, setModelKey] = useState("");
   const [thinkingLevel, setThinkingLevel] = useState("");
+  const [voiceThinkingLevel, setVoiceThinkingLevel] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
@@ -86,6 +87,7 @@ export default function BotSettingsScreen() {
             : "",
         );
         setThinkingLevel(next.thinkingLevel ?? "");
+        setVoiceThinkingLevel(next.voiceThinkingLevel ?? "");
         setAutoSpeak(next.autoSpeak);
       })
       .catch((err) => setError(errorText(err, t("Could not load bot"))));
@@ -216,6 +218,17 @@ export default function BotSettingsScreen() {
     [t, thinkingOptions],
   );
 
+  const voiceThinkingChoices: MenuPickerChoice[] = useMemo(
+    () => [
+      { key: "", label: t("Default (user setting)") },
+      ...thinkingOptions.map((level) => ({
+        key: level,
+        label: thinkingLevelLabel(level, t),
+      })),
+    ],
+    [t, thinkingOptions],
+  );
+
   function selectModel(key: string) {
     if (key === selectedModelKey) return;
     setModelKey(key);
@@ -329,6 +342,7 @@ export default function BotSettingsScreen() {
         modelProvider?: string | null;
         modelId?: string | null;
         thinkingLevel?: ThinkingLevel | null;
+        voiceThinkingLevel?: ThinkingLevel | null;
         autoSpeak?: boolean;
       } = { botId };
       if (profile.name !== bot.name) input.name = profile.name;
@@ -343,13 +357,18 @@ export default function BotSettingsScreen() {
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null);
       const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
+      const voiceThinkingChanged =
+        (voiceThinkingLevel || null) !== (bot.voiceThinkingLevel ?? null);
       if (modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
       }
-      if (modelMetaReady && (modelChanged || thinkingChanged)) {
+      if (modelMetaReady && (modelChanged || thinkingChanged || voiceThinkingChanged)) {
         input.thinkingLevel = thinkingOptions.length
           ? ((thinkingLevel || null) as ThinkingLevel | null)
+          : null;
+        input.voiceThinkingLevel = thinkingOptions.length
+          ? ((voiceThinkingLevel || null) as ThinkingLevel | null)
           : null;
       }
       if (autoSpeak !== bot.autoSpeak) input.autoSpeak = autoSpeak;
@@ -590,6 +609,15 @@ export default function BotSettingsScreen() {
                   label={t("Thinking")}
                   onChange={setThinkingLevel}
                   value={thinkingLevel}
+                />
+              ) : null}
+              {thinkingOptions.length ? (
+                <MenuPicker
+                  choices={voiceThinkingChoices}
+                  divider
+                  label={t("Thinking in calls")}
+                  onChange={setVoiceThinkingLevel}
+                  value={voiceThinkingLevel}
                 />
               ) : null}
             </View>

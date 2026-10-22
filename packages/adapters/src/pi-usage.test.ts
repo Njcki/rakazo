@@ -225,6 +225,21 @@ describe("Pi usage accounting", () => {
     expect((await next).value).toMatchObject({ type: "error" });
     expect(afterCall).toHaveBeenCalledWith("reservation", null);
   });
+  it("derives a total from measured input and output when cache was only a Pi zero", () => {
+    expect(
+      normalizePiUsage(
+        { input: 10, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 999 },
+        model,
+      ),
+    ).toMatchObject({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      totalTokens: 12,
+      usageSource: "pi-normalized",
+    });
+  });
   it("does not derive an unsafe integer total from valid component counts", () => {
     expect(
       normalizePiUsage(

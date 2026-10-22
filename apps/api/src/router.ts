@@ -5957,12 +5957,13 @@ export function createRouter(deps: RouterDeps) {
         ]);
         const runs = new Set(runGroups.map((row) => row.parentRunId ?? row.runId).filter(Boolean))
           .size;
-        const completeSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
-          result._count[field] === result._count._all ? (result._sum[field] ?? 0) : null;
+        // Calls that never reported a field stay out of that sum. They must not hide the rest.
+        const measuredSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
+          result._count[field] > 0 || result._count._all === 0 ? (result._sum[field] ?? 0) : null;
         return {
-          inputTokens: completeSum("inputTokens"),
-          outputTokens: completeSum("outputTokens"),
-          totalTokens: completeSum("totalTokens"),
+          inputTokens: measuredSum("inputTokens"),
+          outputTokens: measuredSum("outputTokens"),
+          totalTokens: measuredSum("totalTokens"),
           modelCalls: result._count._all,
           runs,
         };

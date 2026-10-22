@@ -31,6 +31,8 @@ export type SearxngWebOptions = {
   fallback?: WebProvider;
   /** Called when a search falls back. Default: a `warn` log line. */
   onFallback?: (reason: string) => void;
+  /** Called when this tier answers a search with results (patch 0032 stats). */
+  onResults?: () => void;
 };
 
 /**
@@ -48,6 +50,7 @@ export class SearxngWebProvider implements WebProvider {
   private readonly language?: string;
   private readonly fallback: WebProvider;
   private readonly onFallback: (reason: string) => void;
+  private readonly onResults?: () => void;
 
   constructor(options: SearxngWebOptions) {
     this.endpoint = searxngSearchEndpoint(options.baseUrl);
@@ -60,6 +63,7 @@ export class SearxngWebProvider implements WebProvider {
     this.onFallback =
       options.onFallback ??
       ((reason) => getLogger().warn("web_search SearXNG fallback", { reason }));
+    this.onResults = options.onResults;
   }
 
   describe() {
@@ -85,7 +89,10 @@ export class SearxngWebProvider implements WebProvider {
     let reason: string;
     try {
       const hits = await this.searchSearxng(query, maxResults, signal);
-      if (hits.length > 0) return hits;
+      if (hits.length > 0) {
+        this.onResults?.();
+        return hits;
+      }
       reason = "no results";
     } catch (error) {
       if (signal?.aborted) throw error;

@@ -35,6 +35,8 @@ export type ApiSearchTierOptions = {
   onUsage?: (usage: ApiSearchUsage) => void;
   /** Called when a search falls back. Default: a `warn` log line. */
   onFallback?: (reason: string) => void;
+  /** Called when this tier answers a search with results (patch 0032 stats). */
+  onResults?: () => void;
 };
 
 export type ApiSearchRequestInit = { headers: Record<string, string>; body: unknown };
@@ -55,6 +57,7 @@ export abstract class ApiSearchTier implements WebProvider {
   private readonly fallback: WebProvider;
   private readonly onUsageOption?: (usage: ApiSearchUsage) => void;
   private readonly onFallbackOption?: (reason: string) => void;
+  private readonly onResultsOption?: () => void;
 
   constructor(options: ApiSearchTierOptions, keyName: string) {
     const apiKey = options.apiKey.trim();
@@ -67,6 +70,7 @@ export abstract class ApiSearchTier implements WebProvider {
     this.fallback = options.fallback ?? new KeylessHttpWebProvider();
     this.onUsageOption = options.onUsage;
     this.onFallbackOption = options.onFallback;
+    this.onResultsOption = options.onResults;
   }
 
   protected abstract buildRequest(query: string, maxResults: number): ApiSearchRequestInit;
@@ -105,7 +109,10 @@ export abstract class ApiSearchTier implements WebProvider {
         durationMs: Date.now() - started,
         ...(costUsd === undefined ? {} : { costUsd }),
       });
-      if (hits.length > 0) return hits;
+      if (hits.length > 0) {
+        this.onResultsOption?.();
+        return hits;
+      }
       reason = "no results";
     } catch (error) {
       reason = error instanceof Error ? error.message : String(error);

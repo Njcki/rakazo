@@ -1,5 +1,5 @@
 import type { AdapterContext } from "@rakazo/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ApiSearchUsage } from "./api-search-tier.js";
 import { EXA_SEARCH_ENDPOINT, ExaWebProvider, parseExaResults } from "./exa-web.js";
 import { FakeWebProvider } from "./fake-web.js";
@@ -242,5 +242,50 @@ describe("full chain SearXNG → Tavily → Exa → Serper → DuckDuckGo", () =
     expect(createWebProvider("exa", undefined, env).describe().id).toBe("exa");
     expect(createWebProvider("serper", undefined, env).describe().id).toBe("serper");
     expect(() => createWebProvider("serper", undefined, {})).toThrow(/SERPER_API_KEY/);
+  });
+
+  it("factory reports the tier that answered a search", async () => {
+    const publicResolver = async () => [{ address: "203.0.113.10", family: 4 as const }];
+    const html = `<div class="result"><a class="result__a" href="https://example.test/a">Alpha</a></div>`;
+    let fetchImpl: typeof fetch = async () => new Response("no", { status: 500 });
+    const stub = (searxng: Response, tavily: Response) => {
+      fetchImpl = async (input) => {
+        const url = String(input);
+        if (url.startsWith("http://sx.test")) return searxng;
+        if (url.startsWith("https://api.tavily.com")) return tavily;
+        return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+      };
+      vi.stubGlobal("fetch", fetchImpl);
+    };
+    const make = (reported: string[]) =>
+      createWebProvider(
+        "searxng",
+        // A distinct wrapper: the keyless tier pairs the global fetch with its
+        // own dispatcher, so the stub must reach it through options instead.
+        { fetch: (input, init) => fetchImpl(input, init), resolveHostname: publicResolver },
+        { SEARXNG_URL: "http://sx.test:8080", TAVILY_API_KEY: "k" },
+        (service) => reported.push(service),
+      );
+    try {
+      let reported: string[] = [];
+      stub(
+        jsonResponse({ results: [{ title: "S", url: "https://s.test/", content: "" }] }),
+        jsonResponse({ results: [] }),
+      );
+      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("S");
+      expect(reported).toEqual(["SearXNG"]);
+
+      reported = [];
+      stub(new Response("down", { status: 503 }), jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "" }] }));
+      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("T");
+      expect(reported).toEqual(["Tavily"]);
+
+      reported = [];
+      stub(new Response("down", { status: 503 }), jsonResponse({ results: [] }));
+      expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("Alpha");
+      expect(reported).toEqual(["DuckDuckGo"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

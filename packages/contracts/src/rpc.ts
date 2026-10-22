@@ -77,6 +77,7 @@ import {
   AgentPlanSchema,
   ScratchpadItemSchema,
   ScratchpadItemStatusSchema,
+  SearchStatListSchema,
   ServerUpdateCheckSchema,
   ServerUpdateRequestSchema,
   ServerUpdateRunSchema,
@@ -950,6 +951,11 @@ export const appContract = {
     setCallThinking: oc
       .input(z.object({ thinkingLevel: ThinkingLevelSchema.nullable() }))
       .output(VoiceCallThinkingSchema),
+  },
+  stats: {
+    /** Web searches by the service that answered (self-host patch 0032). */
+    searches: oc.output(SearchStatListSchema),
+    resetSearches: oc.input(z.object({})).output(z.object({ ok: z.literal(true) })),
   },
   externalConversations: {
     updatePolicy: oc

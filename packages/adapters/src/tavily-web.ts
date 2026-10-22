@@ -37,6 +37,8 @@ export type TavilyWebOptions = {
   onUsage?: (usage: TavilyUsage) => void;
   /** Called when a search falls back. Default: a `warn` log line. */
   onFallback?: (reason: string) => void;
+  /** Called when this tier answers a search with results (patch 0032 stats). */
+  onResults?: () => void;
 };
 
 /**
@@ -51,6 +53,7 @@ export class TavilyWebProvider implements WebProvider {
   private readonly fallback: WebProvider;
   private readonly onUsage: (usage: TavilyUsage) => void;
   private readonly onFallback: (reason: string) => void;
+  private readonly onResults?: () => void;
 
   constructor(options: TavilyWebOptions) {
     const apiKey = options.apiKey.trim();
@@ -67,6 +70,7 @@ export class TavilyWebProvider implements WebProvider {
     this.onFallback =
       options.onFallback ??
       ((reason) => getLogger().warn("web_search Tavily fallback", { reason }));
+    this.onResults = options.onResults;
   }
 
   describe() {
@@ -98,7 +102,10 @@ export class TavilyWebProvider implements WebProvider {
         results: hits.length,
         durationMs: Date.now() - started,
       });
-      if (hits.length > 0) return hits;
+      if (hits.length > 0) {
+        this.onResults?.();
+        return hits;
+      }
       reason = "no results";
     } catch (error) {
       reason = error instanceof Error ? error.message : String(error);

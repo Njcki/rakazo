@@ -161,7 +161,7 @@ describe("account preferences", () => {
   });
 });
 
-describe("voice call thinking", () => {
+describe("voice call thinking and search stats", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
@@ -169,11 +169,17 @@ describe("voice call thinking", () => {
     isDeploymentOwner: true,
   } satisfies Actor;
 
-  function voiceThinkingDeps() {
+  function statsDeps() {
     const findUnique = vi.fn(async () => ({ voiceCallThinkingLevel: "minimal" }));
     const update = vi.fn(async () => ({ id: "user-1" }));
+    const findMany = vi.fn(async () => [
+      { service: "Tavily", count: 3 },
+      { service: "DuckDuckGo", count: 1 },
+    ]);
+    const deleteMany = vi.fn(async () => ({ count: 2 }));
     const prisma = {
       user: { findUnique, update },
+      searchStat: { findMany, deleteMany },
     } as unknown as PrismaClient;
     const client = createRouterClient(
       createRouter({
@@ -183,11 +189,11 @@ describe("voice call thinking", () => {
       } as unknown as RouterDeps),
       { context: { actor } as never },
     );
-    return { client, update };
+    return { client, findUnique, update, findMany, deleteMany };
   }
 
   it("reads and writes the per-user voice-call thinking level", async () => {
-    const { client, update } = voiceThinkingDeps();
+    const { client, update } = statsDeps();
     await expect(client.voice.callThinking()).resolves.toEqual({ thinkingLevel: "minimal" });
     await expect(client.voice.setCallThinking({ thinkingLevel: "high" })).resolves.toEqual({
       thinkingLevel: "high",
@@ -199,6 +205,16 @@ describe("voice call thinking", () => {
       where: { id: "user-1" },
       data: { voiceCallThinkingLevel: null },
     });
+  });
+
+  it("lists search stats by count and resets them", async () => {
+    const { client, deleteMany } = statsDeps();
+    await expect(client.stats.searches()).resolves.toEqual([
+      { service: "Tavily", count: 3 },
+      { service: "DuckDuckGo", count: 1 },
+    ]);
+    await expect(client.stats.resetSearches({})).resolves.toEqual({ ok: true });
+    expect(deleteMany).toHaveBeenCalledWith({});
   });
 });
 

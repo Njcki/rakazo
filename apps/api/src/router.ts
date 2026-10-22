@@ -6164,6 +6164,18 @@ export function createRouter(deps: RouterDeps) {
         return { thinkingLevel: input.thinkingLevel };
       }),
     },
+    stats: {
+      searches: authed.stats.searches.handler(async () => {
+        const rows = await deps.prisma.searchStat.findMany({
+          orderBy: [{ count: "desc" }, { service: "asc" }],
+        });
+        return rows.map((row) => ({ service: row.service, count: row.count }));
+      }),
+      resetSearches: authed.stats.resetSearches.handler(async () => {
+        await deps.prisma.searchStat.deleteMany({});
+        return { ok: true as const };
+      }),
+    },
   });
 }
 

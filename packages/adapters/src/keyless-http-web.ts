@@ -37,6 +37,8 @@ export type KeylessHttpWebOptions = {
   fetchTimeoutMs?: number;
   maxBufferBytes?: number;
   userAgent?: string;
+  /** Called when this tier answers a search with results (patch 0032 stats). */
+  onResults?: () => void;
 };
 
 /** HTML search backend using DuckDuckGo’s public HTML form. One keyless option, not the interface. */
@@ -59,6 +61,7 @@ export class KeylessHttpWebProvider implements WebProvider {
   private readonly fetchTimeoutMs: number;
   private readonly maxBufferBytes: number;
   private readonly userAgent: string;
+  private readonly onResults?: () => void;
 
   constructor(options: KeylessHttpWebOptions = {}) {
     this.fetchImpl = options.fetch;
@@ -69,6 +72,7 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
     this.userAgent =
       options.userAgent ?? "Rakazo/0.1 (+https://github.com/elie222/rakazo; web tools)";
+    this.onResults = options.onResults;
   }
 
   describe() {
@@ -100,7 +104,9 @@ export class KeylessHttpWebProvider implements WebProvider {
       userAgent: this.userAgent,
       signal: request.signal ?? context.signal,
     });
-    return this.searchBackend.parse(body, maxResults);
+    const hits = this.searchBackend.parse(body, maxResults);
+    if (hits.length > 0) this.onResults?.();
+    return hits;
   }
 
   async fetch(request: WebFetchRequest, context: AdapterContext): Promise<WebFetchResult> {

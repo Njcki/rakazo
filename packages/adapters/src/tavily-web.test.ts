@@ -25,7 +25,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function setup(fetchImpl: typeof fetch, timeoutMs?: number) {
+function setup(fetchImpl: typeof fetch, timeoutMs?: number, onResults?: () => void) {
   const fallback = new FakeWebProvider();
   fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
   const usage: TavilyUsage[] = [];
@@ -37,6 +37,7 @@ function setup(fetchImpl: typeof fetch, timeoutMs?: number) {
     timeoutMs,
     onUsage: (u) => usage.push(u),
     onFallback: (r) => reasons.push(r),
+    onResults,
   });
   return { provider, fallback, usage, reasons };
 }
@@ -118,6 +119,23 @@ describe("Tavily web provider", () => {
     controller.abort();
     await expect(pending).rejects.toThrow("aborted");
     expect(fallback.lastSearch).toBeUndefined();
+  });
+
+  it("notifies onResults only when Tavily answers", async () => {
+    let reported = 0;
+    const { provider } = setup(
+      async () => jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "s" }] }),
+      undefined,
+      () => reported++,
+    );
+    expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("T");
+    expect(reported).toBe(1);
+
+    const { provider: silent } = setup(async () => jsonResponse({ results: [] }), undefined, () =>
+      reported++,
+    );
+    expect((await silent.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
+    expect(reported).toBe(1);
   });
 
   it("rejects an empty API key", () => {

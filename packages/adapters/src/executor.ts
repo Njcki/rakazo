@@ -2999,9 +2999,31 @@ export function isTerminalModelSetupError(error: unknown): boolean {
   );
 }
 
+/** Patch 0032: increment the global web-search counter for the service that answered. */
+async function recordSearchStat(prisma: ExecutorDeps["prisma"], service: string): Promise<void> {
+  try {
+    await prisma.searchStat.upsert({
+      where: { service },
+      update: { count: { increment: 1 } },
+      create: { service, count: 1 },
+    });
+  } catch (error) {
+    // Stats are best-effort; a counter failure must not break the search.
+    getLogger().warn("web_search stat record failed", {
+      service,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export function createRunExecutor(deps: ExecutorDeps) {
   const contextStrategy = deps.contextStrategy ?? DEFAULT_CONTEXT_STRATEGY;
-  const web = deps.web ?? createWebProvider();
+  // Patch 0032: count web searches by the service that answered.
+  const web =
+    deps.web ??
+    createWebProvider(undefined, undefined, process.env, (service) => {
+      void recordSearchStat(deps.prisma, service);
+    });
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
   const cloudAgent = deps.cloudAgent;
   const resolveConnectedModel = async (

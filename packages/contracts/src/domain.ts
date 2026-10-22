@@ -38,6 +38,15 @@ export const VoiceCallThinkingSchema = z.object({
 });
 export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
 
+/** A web search counter for one service that answered. */
+export const SearchStatSchema = z.object({
+  service: z.string(),
+  count: z.number().int().min(0),
+});
+export const SearchStatListSchema = z.array(SearchStatSchema);
+export type SearchStat = z.infer<typeof SearchStatSchema>;
+export type SearchStatList = z.infer<typeof SearchStatListSchema>;
+
 export { AGENT_SECRET_NAME_PATTERN };
 
 export const AgentSecretSchema = z.object({

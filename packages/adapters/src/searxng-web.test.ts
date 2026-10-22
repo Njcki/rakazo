@@ -21,7 +21,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number } = {}) {
+function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number; onResults?: () => void } = {}) {
   const fallback = new FakeWebProvider();
   fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
   const reasons: string[] = [];
@@ -102,6 +102,22 @@ describe("SearXNG web provider", () => {
     expect(hits[0]?.title).toBe("DDG");
     expect(fallback.lastSearch).toMatchObject({ query: "q", maxResults: 3 });
     expect(reasons).toEqual(["HTTP 429"]);
+  });
+
+  it("notifies onResults only when SearXNG answers", async () => {
+    let reported = 0;
+    const { provider } = setup(
+      async () => jsonResponse({ results: [{ title: "One", url: "https://one.test/", content: "x" }] }),
+      { onResults: () => reported++ },
+    );
+    expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("One");
+    expect(reported).toBe(1);
+
+    const { provider: silent } = setup(async () => jsonResponse({ results: [] }), {
+      onResults: () => reported++,
+    });
+    expect((await silent.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
+    expect(reported).toBe(1);
   });
 
   it("falls back on network errors, non-JSON bodies and empty results", async () => {

@@ -392,6 +392,16 @@ model SpaceVoicePreference {
   @@map("space_voice_preferences")
 }
 
+// Global counters of web searches by the service that answered (self-host patch 0032).
+model SearchStat {
+  id        String   @id @default(cuid())
+  service   String   @unique
+  count     Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("search_stats")
+}
+
 model Bot {
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())

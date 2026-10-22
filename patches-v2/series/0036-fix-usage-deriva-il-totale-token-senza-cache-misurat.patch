@@ -1,0 +1,112 @@
+From 56fc7fd9daacc2972797540ca782a6313bf1b9d7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 17:58:13 +0200
+Subject: [PATCH] fix(usage): deriva il totale token senza cache misurata /
+ derive the token total without a measured cache
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: Pi azzera la cache non misurata e quel valore bloccava il totale, quindi molte chiamate salvavano input e output con totalTokens null. Il totale ora è input+output più la cache davvero presente. Il sommario somma i token misurati. Una migrazione riempie le righe vecchie.
+
+EN: Pi zero-fills unmeasured cache and that blocked the total, so many calls stored input and output with a null totalTokens. The total is now input+output plus cache that was actually measured. The summary sums measured tokens. A migration fills the old rows.
+---
+ apps/api/src/router.ts                            | 11 ++++++-----
+ packages/adapters/src/pi-usage.test.ts            | 15 +++++++++++++++
+ packages/adapters/src/pi-usage.ts                 | 12 ++++++------
+ .../migration.sql                                 | 11 +++++++++++
+ 4 files changed, 38 insertions(+), 11 deletions(-)
+ create mode 100644 packages/db/prisma/migrations/20261022180000_backfill_usage_totals/migration.sql
+
+diff --git a/apps/api/src/router.ts b/apps/api/src/router.ts
+index 39e9fa1c..114e4b77 100644
+--- a/apps/api/src/router.ts
++++ b/apps/api/src/router.ts
+@@ -5957,12 +5957,13 @@ export function createRouter(deps: RouterDeps) {
+         ]);
+         const runs = new Set(runGroups.map((row) => row.parentRunId ?? row.runId).filter(Boolean))
+           .size;
+-        const completeSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
+-          result._count[field] === result._count._all ? (result._sum[field] ?? 0) : null;
++        // Calls that never reported a field stay out of that sum. They must not hide the rest.
++        const measuredSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
++          result._count[field] > 0 || result._count._all === 0 ? (result._sum[field] ?? 0) : null;
+         return {
+-          inputTokens: completeSum("inputTokens"),
+-          outputTokens: completeSum("outputTokens"),
+-          totalTokens: completeSum("totalTokens"),
++          inputTokens: measuredSum("inputTokens"),
++          outputTokens: measuredSum("outputTokens"),
++          totalTokens: measuredSum("totalTokens"),
+           modelCalls: result._count._all,
+           runs,
+         };
+diff --git a/packages/adapters/src/pi-usage.test.ts b/packages/adapters/src/pi-usage.test.ts
+index f4627e34..2ed0d281 100644
+--- a/packages/adapters/src/pi-usage.test.ts
++++ b/packages/adapters/src/pi-usage.test.ts
+@@ -225,6 +225,21 @@ describe("Pi usage accounting", () => {
+     expect((await next).value).toMatchObject({ type: "error" });
+     expect(afterCall).toHaveBeenCalledWith("reservation", null);
+   });
++  it("derives a total from measured input and output when cache was only a Pi zero", () => {
++    expect(
++      normalizePiUsage(
++        { input: 10, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 999 },
++        model,
++      ),
++    ).toMatchObject({
++      inputTokens: 10,
++      outputTokens: 2,
++      cacheReadTokens: null,
++      cacheWriteTokens: null,
++      totalTokens: 12,
++      usageSource: "pi-normalized",
++    });
++  });
+   it("does not derive an unsafe integer total from valid component counts", () => {
+     expect(
+       normalizePiUsage(
+diff --git a/packages/adapters/src/pi-usage.ts b/packages/adapters/src/pi-usage.ts
+index 53427077..d8cd3f83 100644
+--- a/packages/adapters/src/pi-usage.ts
++++ b/packages/adapters/src/pi-usage.ts
+@@ -40,12 +40,12 @@ export function normalizePiUsage(
+   const cacheReadTokens = token(usage?.cacheRead, "cacheReadTokens");
+   const cacheWriteTokens = token(usage?.cacheWrite, "cacheWriteTokens");
+   const rawTotal = reportedValues.get(reported)?.get("totalTokens");
+-  const buckets = [inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens];
+-  const derivedTotal = buckets.every((value) => value !== null)
+-    ? buckets.reduce<number>((sum, value) => sum + value!, 0)
+-    : null;
+-  // Pi synthesizes totals using zero placeholders for absent cache measurements.
+-  // Trust a reported total, or derive one only from a complete measured breakdown.
++  // Pi zero-fills cache fields it never measured. Those zeros are not a hole in the
++  // total: unreported cache counts as zero. A reported total_tokens still wins.
++  const derivedTotal =
++    inputTokens !== null && outputTokens !== null
++      ? inputTokens + outputTokens + (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
++      : null;
+   const totalTokens = reported.has("totalTokens")
+     ? token(rawTotal ?? usage?.totalTokens, "totalTokens")
+     : derivedTotal !== null && Number.isSafeInteger(derivedTotal)
+diff --git a/packages/db/prisma/migrations/20261022180000_backfill_usage_totals/migration.sql b/packages/db/prisma/migrations/20261022180000_backfill_usage_totals/migration.sql
+new file mode 100644
+index 00000000..55dbd0c7
+--- /dev/null
++++ b/packages/db/prisma/migrations/20261022180000_backfill_usage_totals/migration.sql
+@@ -0,0 +1,11 @@
++-- Rows written before the total was derived from measured input and output.
++-- Unreported cache is zero, matching normalizePiUsage. Calls with no token
++-- measurement stay null.
++UPDATE "usage_records"
++SET "totalTokens" =
++  "inputTokens" + "outputTokens"
++  + COALESCE("cacheReadTokens", 0)
++  + COALESCE("cacheWriteTokens", 0)
++WHERE "totalTokens" IS NULL
++  AND "inputTokens" IS NOT NULL
++  AND "outputTokens" IS NOT NULL;
+-- 
+2.55.0.windows.5
+

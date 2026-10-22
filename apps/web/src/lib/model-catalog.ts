@@ -14,6 +14,7 @@ export function connectedModelOptions(
 }
 
 export function thinkingLevelLabel(level: ThinkingLevel) {
+  if (level === "off") return i18n._({ id: "Off", message: "Off" });
   if (level === "xhigh") return i18n._({ id: "Extra high", message: "Extra high" });
   if (level === "low") return i18n._({ id: "Low", message: "Low" });
   if (level === "medium") return i18n._({ id: "Medium", message: "Medium" });

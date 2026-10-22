@@ -1,6 +1,6 @@
-From 0ec8082eb0a36e3a7e7453e572cbd8c30e912d2a Mon Sep 17 00:00:00 2001
+From 39eb0627483ef7a766450efe720d9bc5ef326448 Mon Sep 17 00:00:00 2001
 From: Rakazo patches <bot@local>
-Date: Thu, 22 Oct 2026 02:43:50 +0200
+Date: Thu, 22 Oct 2026 03:01:12 +0200
 Subject: [PATCH] feat(agent): thinking veloce nelle chiamate vocali, per
  utente e per bot / fast thinking in voice calls, per user and per bot
 MIME-Version: 1.0
@@ -500,7 +500,7 @@ index 21e1526f..f35dfad3 100644
      updatePolicy: oc
 diff --git a/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql b/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql
 new file mode 100644
-index 00000000..cbea4ad2
+index 00000000..a03fab77
 --- /dev/null
 +++ b/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql
 @@ -0,0 +1,5 @@
@@ -508,7 +508,7 @@ index 00000000..cbea4ad2
 +ALTER TABLE "user" ADD COLUMN "voiceCallThinkingLevel" TEXT;
 +
 +-- Per-bot override of the voice-call reasoning level (patch 0031).
-+ALTER TABLE "Bot" ADD COLUMN "voiceThinkingLevel" TEXT;
++ALTER TABLE "bots" ADD COLUMN "voiceThinkingLevel" TEXT;
 diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
 index e4825435..5d0b0748 100644
 --- a/packages/db/prisma/schema.prisma

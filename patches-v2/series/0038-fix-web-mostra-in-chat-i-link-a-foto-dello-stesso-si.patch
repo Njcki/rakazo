@@ -1,0 +1,221 @@
+From 298ad6b11f284833b91a3b2f6c3fa92a6406e730 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 01:53:32 +0200
+Subject: [PATCH] fix(web): mostra in chat i link a foto dello stesso sito /
+ show same-site photo links in the chat
+
+IT: il bot aveva messo i jpg come link da scaricare. Un link a png, jpg, gif o webp servito dallo stesso sito della pagina ora si vede nel messaggio. Un'immagine su un altro sito resta un tocco, non un download.
+
+EN: the bot had posted the jpgs as download links. A png, jpg, gif, or webp link served by the same site as the page now renders in the message. An image on another site stays a tap, not a download.
+---
+ packages/chat-ui/src/markdown.native.tsx   | 14 +++++++++++
+ packages/chat-ui/src/markdown.test.ts      | 22 +++++++++++++++++
+ packages/chat-ui/src/markdown.ts           | 28 ++++++++++++++++++++++
+ packages/chat-ui/src/markdown.web.test.tsx | 19 +++++++++++++++
+ packages/chat-ui/src/markdown.web.tsx      | 23 ++++++++++++++++++
+ 5 files changed, 106 insertions(+)
+
+diff --git a/packages/chat-ui/src/markdown.native.tsx b/packages/chat-ui/src/markdown.native.tsx
+index 661f14ba..496d97d0 100644
+--- a/packages/chat-ui/src/markdown.native.tsx
++++ b/packages/chat-ui/src/markdown.native.tsx
+@@ -36,6 +36,7 @@ import {
+   inlineMarkdownImageSrc,
+   LinkFaviconsContext,
+   LinkFaviconsPausedContext,
++  linkedImageFile,
+   linkFaviconOrigin,
+   linkifyExplicitUrls,
+   linkLabel,
+@@ -788,6 +789,19 @@ function renderMarkdownLink(
+   const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
+   if (!href) return <Text key={node.key}>{children}</Text>;
+   const image = soleRemoteImage(node);
++  const fileImage = !image && !astHasImage(node) ? linkedImageFile(href) : undefined;
++  if (fileImage) {
++    return (
++      <RemoteMarkdownImage
++        key={node.key}
++        image={fileImage}
++        alt={astText(node)}
++        rejectedLink={false}
++        labelStyle={styleMap.plain_text}
++        styleMap={styleMap}
++      />
++    );
++  }
+   if (image) {
+     return (
+       <LinkedRemoteImage
+diff --git a/packages/chat-ui/src/markdown.test.ts b/packages/chat-ui/src/markdown.test.ts
+index 3b226957..0c1d334e 100644
+--- a/packages/chat-ui/src/markdown.test.ts
++++ b/packages/chat-ui/src/markdown.test.ts
+@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
+ import {
+   closeUnterminatedFence,
+   inlineMarkdownImageSrc,
++  linkedImageFile,
+   linkFaviconOrigin,
+   linkifyExplicitUrls,
+   linkLabel,
+   markdownLinkDisplayParts,
+   markdownLinkRequiresConfirmation,
+   plainTextLinkParts,
++  sameDocumentOrigin,
+   sanitizeMarkdownImageUrl,
+   sanitizeMarkdownUrl,
+ } from "./markdown";
+@@ -203,6 +205,26 @@ describe("markdownLinkDisplayParts", () => {
+   });
+ });
+ 
++describe("linkedImageFile", () => {
++  it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
++    expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
++      href: "https://rakazo.example/download/foyer.jpg",
++      host: "rakazo.example",
++    });
++    expect(linkedImageFile("https://rakazo.example/a.PNG?x=1")?.href).toContain(".PNG");
++    expect(linkedImageFile("https://rakazo.example/a.svg")).toBeUndefined();
++    expect(linkedImageFile("https://rakazo.example/a.jpg.exe")).toBeUndefined();
++    expect(linkedImageFile("javascript:alert(1)")).toBeUndefined();
++  });
++
++  it("matches only the page that is already open", () => {
++    expect(
++      sameDocumentOrigin("https://rakazo.example/download/a.jpg", "https://rakazo.example"),
++    ).toBe(true);
++    expect(sameDocumentOrigin("https://cdn.example/a.jpg", "https://rakazo.example")).toBe(false);
++  });
++});
++
+ describe("sanitizeMarkdownImageUrl", () => {
+   it("allows absolute http(s) image sources", () => {
+     expect(sanitizeMarkdownImageUrl(" https://example.test/a.png ")).toBe(
+diff --git a/packages/chat-ui/src/markdown.ts b/packages/chat-ui/src/markdown.ts
+index d63c5bcf..24ff9b0f 100644
+--- a/packages/chat-ui/src/markdown.ts
++++ b/packages/chat-ui/src/markdown.ts
+@@ -197,6 +197,34 @@ export function inlineMarkdownImageSrc(url: string): string | undefined {
+     : undefined;
+ }
+ 
++const rasterImageExtension = /\.(?:png|jpe?g|gif|webp)$/i;
++
++/**
++ * A normal link whose target is a raster image. Markdown writers often use
++ * `[label](photo.jpg)` instead of an image. SVG is excluded: a same-origin SVG can run script.
++ */
++export function linkedImageFile(url: string): { href: string; host: string } | undefined {
++  const href = sanitizeMarkdownImageUrl(url);
++  if (!href) return undefined;
++  try {
++    const parsed = new URL(href);
++    if (!rasterImageExtension.test(parsed.pathname)) return undefined;
++    return { href, host: parsed.host };
++  } catch {
++    return undefined;
++  }
++}
++
++/** True when the image is served by the page the reader already has open. */
++export function sameDocumentOrigin(href: string, origin: string | undefined): boolean {
++  if (!origin) return false;
++  try {
++    return new URL(href).origin === origin;
++  } catch {
++    return false;
++  }
++}
++
+ /** A markdown image that may load on request, with the host its placeholder names. */
+ export function remoteMarkdownImage(url: string): { href: string; host: string } | undefined {
+   const href = sanitizeMarkdownImageUrl(url);
+diff --git a/packages/chat-ui/src/markdown.web.test.tsx b/packages/chat-ui/src/markdown.web.test.tsx
+index 107a65bb..dda38bb1 100644
+--- a/packages/chat-ui/src/markdown.web.test.tsx
++++ b/packages/chat-ui/src/markdown.web.test.tsx
+@@ -113,6 +113,25 @@ describe("web markdown remote images", () => {
+     container.remove();
+   });
+ 
++  it("shows a same-origin image link in the message", () => {
++    const origin = window.location.origin;
++    const html = renderToStaticMarkup(
++      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg)`}</ChatMarkdown>,
++    );
++    expect(html).toContain(`src="${origin}/download/foyer.jpg"`);
++    expect(html).toContain('alt="Foyer"');
++    expect(html).not.toContain("<a");
++  });
++
++  it("keeps an image link on another site behind a tap", () => {
++    const html = renderToStaticMarkup(
++      <ChatMarkdown>{"[Foto](https://cdn.example.test/a.jpg)"}</ChatMarkdown>,
++    );
++    expect(html).not.toContain("<img");
++    expect(html).toContain("cdn.example.test");
++    expect(html).toContain("<button");
++  });
++
+   it("keeps an image inside a rejected link as text when automatic loading is on", () => {
+     const html = renderToStaticMarkup(
+       <RemoteImagesContext.Provider value={true}>
+diff --git a/packages/chat-ui/src/markdown.web.tsx b/packages/chat-ui/src/markdown.web.tsx
+index dba3f611..ca879b08 100644
+--- a/packages/chat-ui/src/markdown.web.tsx
++++ b/packages/chat-ui/src/markdown.web.tsx
+@@ -25,6 +25,7 @@ import {
+   closeUnterminatedFence,
+   inlineMarkdownImageSrc,
+   LinkFaviconsPausedContext,
++  linkedImageFile,
+   linkFaviconOrigin,
+   linkLabel,
+   markdownLinkDisplayParts,
+@@ -34,6 +35,7 @@ import {
+   RemoteImagesContext,
+   remoteImageRenders,
+   remoteMarkdownImage,
++  sameDocumentOrigin,
+   sanitizeMarkdownUrl,
+   useLinkFavicon,
+ } from "./markdown";
+@@ -383,12 +385,33 @@ function WebsiteLink({
+   );
+ }
+ 
++function LinkedImageFile({ href, alt }: { href: string; alt?: string }) {
++  const loadRemote = useContext(RemoteImagesContext);
++  const [, setRevision] = useState(0);
++  const image = { href, host: new URL(href).host };
++  const pageOrigin = typeof window === "undefined" ? undefined : window.location.origin;
++  if (remoteImageRenders(href, loadRemote || sameDocumentOrigin(href, pageOrigin), false)) {
++    return <img src={href} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer" />;
++  }
++  return (
++    <RemoteImageButton
++      image={image}
++      alt={alt}
++      onLoad={() => setRevision((revision) => revision + 1)}
++    />
++  );
++}
++
+ function MarkdownAnchor({
+   node,
+   ...props
+ }: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast }) {
+   const loadRemote = useContext(RemoteImagesContext);
+   const href = typeof props.href === "string" ? props.href : "";
++  const linkedImage = href && !hastHasImage(node) ? linkedImageFile(href) : undefined;
++  if (linkedImage) {
++    return <LinkedImageFile href={linkedImage.href} alt={hastText(node)} />;
++  }
+   const image = href ? soleRemoteImage(node) : undefined;
+   if (image && !remoteImageRenders(image.href, loadRemote, false)) {
+     return <LinkedRemoteImage href={href} image={image} alt={image.alt} title={image.title} />;
+-- 
+2.55.0.windows.5
+

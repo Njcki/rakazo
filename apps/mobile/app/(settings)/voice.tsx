@@ -54,6 +54,7 @@ type VoiceInfo = { id: string; label: string; description?: string };
 const VOICE_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 function thinkingLevelLabel(level: string, t: (message: string) => string) {
+  if (level === "off") return t("Off");
   if (level === "xhigh") return t("Extra high");
   if (level === "low") return t("Low");
   if (level === "medium") return t("Medium");

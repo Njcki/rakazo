@@ -682,6 +682,7 @@ function catalogLabel(
 }
 
 function thinkingLevelLabel(level: ThinkingLevel, t: (message: string) => string) {
+  if (level === "off") return t("Off");
   if (level === "xhigh") return t("Extra high");
   if (level === "low") return t("Low");
   if (level === "medium") return t("Medium");

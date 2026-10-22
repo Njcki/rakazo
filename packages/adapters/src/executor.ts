@@ -8164,6 +8164,11 @@ function toolUsageLine(parts: {
   const clauses = [
     pageWorkClause(parts.pageBrowserAllowed, disabled),
     webLookupClause(disabled),
+    offeredBuiltinClause(
+      disabled,
+      "attach_file",
+      "When the user should see a picture or file you created or fetched, save it in the workspace if it is not already there and call attach_file. An attached image is shown in the chat. Do not paste a download link, a file path, or a markdown image instead.",
+    ),
     ...secretGuidance(disabled),
     builtinOffered(disabled, "remember") ? "Use remember for durable facts." : undefined,
     planClause(disabled),

@@ -113,6 +113,25 @@ describe("web markdown remote images", () => {
     container.remove();
   });
 
+  it("shows a same-origin image link in the message", () => {
+    const origin = window.location.origin;
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg)`}</ChatMarkdown>,
+    );
+    expect(html).toContain(`src="${origin}/download/foyer.jpg"`);
+    expect(html).toContain('alt="Foyer"');
+    expect(html).not.toContain("<a");
+  });
+
+  it("keeps an image link on another site behind a tap", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"[Foto](https://cdn.example.test/a.jpg)"}</ChatMarkdown>,
+    );
+    expect(html).not.toContain("<img");
+    expect(html).toContain("cdn.example.test");
+    expect(html).toContain("<button");
+  });
+
   it("keeps an image inside a rejected link as text when automatic loading is on", () => {
     const html = renderToStaticMarkup(
       <RemoteImagesContext.Provider value={true}>

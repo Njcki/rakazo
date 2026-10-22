@@ -4815,3 +4815,27 @@ msgstr "Completato"
 #: src/pages/PlanSection.tsx
 msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
 msgstr "Nessun piano ancora. Il bot ne crea uno per i lavori a più passi; i piani completati restano qui finché non vengono sostituiti."
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr "Impossibile caricare le statistiche"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr "Impossibile azzerare le statistiche"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
+msgstr "Nessuna ricerca registrata."
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr "Statistiche delle ricerche azzerate."
+
+#: src/pages/SettingsOverlay.tsx
+msgid "Statistics"
+msgstr "Statistiche"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr "Ricerche web risposte da ciascun servizio."

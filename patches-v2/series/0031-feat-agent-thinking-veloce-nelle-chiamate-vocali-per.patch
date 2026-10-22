@@ -1,0 +1,556 @@
+From 0ec8082eb0a36e3a7e7453e572cbd8c30e912d2a Mon Sep 17 00:00:00 2001
+From: Rakazo patches <bot@local>
+Date: Thu, 22 Oct 2026 02:43:50 +0200
+Subject: [PATCH] feat(agent): thinking veloce nelle chiamate vocali, per
+ utente e per bot / fast thinking in voice calls, per user and per bot
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: in modalità conversazione (chiamata vocale) la prima risposta parlata usava il
+ragionamento configurato sul modello, quindi poteva tardare.
+- Schema: `user.voiceCallThinkingLevel` (default per utente, null = "low") e
+  `bot.voiceThinkingLevel` (override per bot, null = usa l'impostazione dell'utente).
+- Esecuzione: per i run di chiamata vocale il livello effettivo è
+  `bot ?? utente ?? "low"`, applicato solo se il modello supporta il ragionamento
+  (livello salvato non valido → "low"). Helper puro `voiceCallThinkingLevel` testato.
+- RPC: `voice/callThinking` (lettura) e `voice/setCallThinking` (scrittura, null =
+  default).
+- Web: impostazioni voce → "Thinking in calls" (Default (low) + livelli);
+  impostazioni avanzate del bot → "Thinking in calls" (Default (user setting) +
+  livelli del modello), mostrata solo se il modello supporta il ragionamento.
+
+EN: in voice-call mode the first spoken reply used the model's configured reasoning,
+so it could be slow.
+- Schema: `user.voiceCallThinkingLevel` (per-user default, null = "low") and
+  `bot.voiceThinkingLevel` (per-bot override, null = use the user's setting).
+- Execution: for voice-call runs the effective level is `bot ?? user ?? "low"`,
+  applied only when the model supports reasoning (invalid stored level → "low").
+  The pure helper `voiceCallThinkingLevel` is unit-tested.
+- RPC: `voice/callThinking` (read) and `voice/setCallThinking` (write, null = default).
+- Web: voice settings → "Thinking in calls" (Default (low) + levels); bot advanced
+  settings → "Thinking in calls" (Default (user setting) + model levels), shown only
+  when the model supports reasoning.
+---
+ apps/api/src/router.test.ts                   | 41 ++++++++++++++
+ apps/api/src/router.ts                        | 19 +++++++
+ apps/web/src/pages/VoiceSettingsOverlay.tsx   | 53 ++++++++++++++++++-
+ apps/web/src/pages/shell/bot-panel.test.tsx   |  1 +
+ apps/web/src/pages/shell/bot-panel.tsx        | 25 +++++++++
+ packages/adapters/src/executor.test.ts        | 23 ++++++++
+ packages/adapters/src/executor.ts             | 44 ++++++++++++++-
+ packages/contracts/src/domain.ts              |  9 ++++
+ packages/contracts/src/rpc.ts                 |  6 +++
+ .../migration.sql                             |  5 ++
+ packages/db/prisma/schema.prisma              |  4 ++
+ packages/db/src/repos.ts                      |  2 +
+ 12 files changed, 229 insertions(+), 3 deletions(-)
+ create mode 100644 packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql
+
+diff --git a/apps/api/src/router.test.ts b/apps/api/src/router.test.ts
+index 6423ab7d..8ddc9d77 100644
+--- a/apps/api/src/router.test.ts
++++ b/apps/api/src/router.test.ts
+@@ -161,6 +161,47 @@ describe("account preferences", () => {
+   });
+ });
+ 
++describe("voice call thinking", () => {
++  const actor = {
++    spaceId: "workspace-1",
++    userId: "user-1",
++    email: "user@rakazo.test",
++    isDeploymentOwner: true,
++  } satisfies Actor;
++
++  function voiceThinkingDeps() {
++    const findUnique = vi.fn(async () => ({ voiceCallThinkingLevel: "minimal" }));
++    const update = vi.fn(async () => ({ id: "user-1" }));
++    const prisma = {
++      user: { findUnique, update },
++    } as unknown as PrismaClient;
++    const client = createRouterClient(
++      createRouter({
++        prisma,
++        env: { webOrigin: "http://127.0.0.1:5173" },
++        dataDir: "/tmp/rakazo-router-test",
++      } as unknown as RouterDeps),
++      { context: { actor } as never },
++    );
++    return { client, update };
++  }
++
++  it("reads and writes the per-user voice-call thinking level", async () => {
++    const { client, update } = voiceThinkingDeps();
++    await expect(client.voice.callThinking()).resolves.toEqual({ thinkingLevel: "minimal" });
++    await expect(client.voice.setCallThinking({ thinkingLevel: "high" })).resolves.toEqual({
++      thinkingLevel: "high",
++    });
++    await expect(client.voice.setCallThinking({ thinkingLevel: null })).resolves.toEqual({
++      thinkingLevel: null,
++    });
++    expect(update).toHaveBeenLastCalledWith({
++      where: { id: "user-1" },
++      data: { voiceCallThinkingLevel: null },
++    });
++  });
++});
++
+ describe("billing", () => {
+   function billingDeps(isDeploymentOwner: boolean, billing?: RouterDeps["billing"]) {
+     const prisma = {
+diff --git a/apps/api/src/router.ts b/apps/api/src/router.ts
+index 1108f787..abecfb6f 100644
+--- a/apps/api/src/router.ts
++++ b/apps/api/src/router.ts
+@@ -139,6 +139,7 @@ import type {
+   ProductEvent,
+   Routine,
+   SpaceNavigation,
++  ThinkingLevel,
+ } from "@rakazo/contracts";
+ import {
+   ATTACHMENT_MAX_BYTES,
+@@ -1765,6 +1766,9 @@ export function createRouter(deps: RouterDeps) {
+               ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
+               : {}),
+             ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
++            ...(input.voiceThinkingLevel !== undefined
++              ? { voiceThinkingLevel: input.voiceThinkingLevel }
++              : {}),
+             ...(input.teamChatAmbientEnabled !== undefined
+               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }
+               : {}),
+@@ -6144,6 +6148,21 @@ export function createRouter(deps: RouterDeps) {
+       prepare: authed.voice.prepare.handler(async ({ context, input }) =>
+         prepareVoice(deps, context.actor, input),
+       ),
++      callThinking: authed.voice.callThinking.handler(async ({ context }) => {
++        const user = await deps.prisma.user.findUnique({
++          where: { id: context.actor.userId },
++          select: { voiceCallThinkingLevel: true },
++        });
++        // The stored value is only written via setCallThinking (validated against the enum).
++        return { thinkingLevel: (user?.voiceCallThinkingLevel ?? null) as ThinkingLevel | null };
++      }),
++      setCallThinking: authed.voice.setCallThinking.handler(async ({ context, input }) => {
++        await deps.prisma.user.update({
++          where: { id: context.actor.userId },
++          data: { voiceCallThinkingLevel: input.thinkingLevel },
++        });
++        return { thinkingLevel: input.thinkingLevel };
++      }),
+     },
+   });
+ }
+diff --git a/apps/web/src/pages/VoiceSettingsOverlay.tsx b/apps/web/src/pages/VoiceSettingsOverlay.tsx
+index b236e8f4..8a05e92f 100644
+--- a/apps/web/src/pages/VoiceSettingsOverlay.tsx
++++ b/apps/web/src/pages/VoiceSettingsOverlay.tsx
+@@ -1,5 +1,11 @@
+ import { Trans, useLingui } from "@lingui/react/macro";
+-import type { VoiceCatalogEntry, VoiceCredential, VoiceInfo, VoiceStatus } from "@rakazo/contracts";
++import type {
++  ThinkingLevel,
++  VoiceCatalogEntry,
++  VoiceCredential,
++  VoiceInfo,
++  VoiceStatus,
++} from "@rakazo/contracts";
+ import {
+   Button,
+   Dialog,
+@@ -14,9 +20,13 @@ import {
+ } from "@rakazo/ui-web";
+ import { XIcon } from "lucide-react";
+ import { useEffect, useId, useMemo, useRef, useState } from "react";
++import { thinkingLevelLabel } from "../lib/model-catalog";
+ import { rpc } from "../lib/rpc";
+ import { errorText } from "../lib/user-error";
+ 
++/** Reasoning levels offered for voice calls (patch 0031). */
++const VOICE_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
++
+ export function VoiceSettingsOverlay({
+   onClose,
+   embedded = false,
+@@ -31,6 +41,7 @@ export function VoiceSettingsOverlay({
+   const apiKeyId = useId();
+   const voiceSelectId = useId();
+   const speechModelId = useId();
++  const callThinkingId = useId();
+   const [catalog, setCatalog] = useState<VoiceCatalogEntry[]>([]);
+   const [credentials, setCredentials] = useState<VoiceCredential[]>([]);
+   const [status, setStatus] = useState<VoiceStatus | null>(null);
+@@ -41,6 +52,8 @@ export function VoiceSettingsOverlay({
+   const [speechModel, setSpeechModel] = useState("");
+   const speechModelSave = useRef<string | null>(null);
+   const [loading, setLoading] = useState(true);
++  const [callThinking, setCallThinking] = useState("");
++  const [callThinkingBusy, setCallThinkingBusy] = useState(false);
+   const [pending, setPending] = useState<"connect" | "disconnect" | "voice" | "test" | null>(null);
+   const [error, setError] = useState<string | null>(null);
+   const [notice, setNotice] = useState<string | null>(null);
+@@ -57,11 +70,13 @@ export function VoiceSettingsOverlay({
+   }
+ 
+   async function refresh(nextProvider?: string) {
+-    const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
++    const [nextCatalog, nextCredentials, nextStatus, nextCallThinking] = await Promise.all([
+       rpc.voice.catalog(),
+       rpc.voice.credentials(),
+       rpc.voice.status(),
++      rpc.voice.callThinking(),
+     ]);
++    setCallThinking(nextCallThinking.thinkingLevel ?? "");
+     const selected = nextProvider || provider || nextStatus.provider || nextCatalog[0]?.id || "";
+     setCatalog(nextCatalog);
+     setCredentials(nextCredentials);
+@@ -146,6 +161,19 @@ export function VoiceSettingsOverlay({
+     }
+   }
+ 
++  async function chooseCallThinking(next: string) {
++    setCallThinking(next);
++    setCallThinkingBusy(true);
++    setError(null);
++    try {
++      await rpc.voice.setCallThinking({ thinkingLevel: (next || null) as ThinkingLevel | null });
++    } catch (err) {
++      setError(errorText(err, t`Could not save the call thinking level`));
++    } finally {
++      setCallThinkingBusy(false);
++    }
++  }
++
+   async function saveSpeechModel() {
+     if (!credential || selected?.id !== "fish-audio") return;
+     const next = speechModel.trim();
+@@ -252,6 +280,27 @@ export function VoiceSettingsOverlay({
+               );
+             })}
+           </div>
++          <Field className="mt-4">
++            <FieldLabel htmlFor={callThinkingId}>
++              <Trans>Thinking in calls</Trans>
++            </FieldLabel>
++            <NativeSelect
++              id={callThinkingId}
++              className="mt-2 w-full"
++              value={callThinking}
++              disabled={busy || callThinkingBusy}
++              onChange={(event) => void chooseCallThinking(event.target.value)}
++            >
++              <NativeSelectOption value="">
++                {t`Default (low)`}
++              </NativeSelectOption>
++              {VOICE_THINKING_LEVELS.map((level) => (
++                <NativeSelectOption key={level} value={level}>
++                  {thinkingLevelLabel(level)}
++                </NativeSelectOption>
++              ))}
++            </NativeSelect>
++          </Field>
+         </div>
+ 
+         <div className="rk-scroll min-h-0 min-w-0 flex-1 overflow-y-auto">
+diff --git a/apps/web/src/pages/shell/bot-panel.test.tsx b/apps/web/src/pages/shell/bot-panel.test.tsx
+index e9d4d882..9312171d 100644
+--- a/apps/web/src/pages/shell/bot-panel.test.tsx
++++ b/apps/web/src/pages/shell/bot-panel.test.tsx
+@@ -97,6 +97,7 @@ function bot(description = "Billing"): Bot {
+     modelProvider: null,
+     modelId: null,
+     thinkingLevel: null,
++    voiceThinkingLevel: null,
+     teamChatAmbientEnabled: false,
+     teamChatRules: "",
+     disabledBuiltinTools: [],
+diff --git a/apps/web/src/pages/shell/bot-panel.tsx b/apps/web/src/pages/shell/bot-panel.tsx
+index d65617b8..8d7d1447 100644
+--- a/apps/web/src/pages/shell/bot-panel.tsx
++++ b/apps/web/src/pages/shell/bot-panel.tsx
+@@ -239,6 +239,7 @@ export function BotSettings({
+     modelProvider?: string | null;
+     modelId?: string | null;
+     thinkingLevel?: ThinkingLevel | null;
++    voiceThinkingLevel?: ThinkingLevel | null;
+     disabledBuiltinTools?: string[];
+   }) => Promise<void>;
+   onExport: () => Promise<void>;
+@@ -266,6 +267,7 @@ export function BotSettings({
+     bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
+   );
+   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
++  const [voiceThinkingLevel, setVoiceThinkingLevel] = useState(bot.voiceThinkingLevel ?? "");
+   const [disabledBuiltinTools, setDisabledBuiltinTools] = useState<string[]>(
+     bot.disabledBuiltinTools ?? [],
+   );
+@@ -396,6 +398,9 @@ export function BotSettings({
+               thinkingLevel: thinkingOptions.length
+                 ? ((thinkingLevel || null) as ThinkingLevel | null)
+                 : null,
++              voiceThinkingLevel: thinkingOptions.length
++                ? ((voiceThinkingLevel || null) as ThinkingLevel | null)
++                : null,
+             }
+           : {}),
+       };
+@@ -663,6 +668,26 @@ export function BotSettings({
+             </NativeSelect>
+           </label>
+         ) : null}
++        {thinkingOptions.length ? (
++          <label htmlFor={`${ids}-voice-thinking`} className={fieldLabelClass}>
++            <Trans>Thinking in calls</Trans>
++            <NativeSelect
++              id={`${ids}-voice-thinking`}
++              className="mt-2 w-full"
++              value={voiceThinkingLevel}
++              onChange={(event) => setVoiceThinkingLevel(event.target.value)}
++            >
++              <NativeSelectOption value="">
++                {t`Default (user setting)`}
++              </NativeSelectOption>
++              {thinkingOptions.map((level) => (
++                <NativeSelectOption key={level} value={level}>
++                  {thinkingLevelLabel(level)}
++                </NativeSelectOption>
++              ))}
++            </NativeSelect>
++          </label>
++        ) : null}
+         </div>
+         {memoryProviderConfigured ? (
+           <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-memory">
+diff --git a/packages/adapters/src/executor.test.ts b/packages/adapters/src/executor.test.ts
+index 6f4a1469..3b9be8fc 100644
+--- a/packages/adapters/src/executor.test.ts
++++ b/packages/adapters/src/executor.test.ts
+@@ -22,6 +22,7 @@ import {
+   userTurnInstructions,
+   VOICE_CALL_INSTRUCTION,
+   voiceCallInstruction,
++  voiceCallThinkingLevel,
+   withRecentTurnImages,
+ } from "./executor.js";
+ import { UnavailableModelForAuthError } from "./model-selection.js";
+@@ -1347,6 +1348,28 @@ describe("voiceCallInstruction", () => {
+   });
+ });
+ 
++describe("voiceCallThinkingLevel", () => {
++  it("prefers the bot override over the user setting", () => {
++    expect(voiceCallThinkingLevel("high", "minimal", true)).toBe("high");
++    expect(voiceCallThinkingLevel(null, "minimal", true)).toBe("minimal");
++  });
++
++  it("falls back to low when neither is set", () => {
++    expect(voiceCallThinkingLevel(null, null, true)).toBe("low");
++    expect(voiceCallThinkingLevel(undefined, undefined, true)).toBe("low");
++  });
++
++  it("ignores the override when the model has no reasoning", () => {
++    expect(voiceCallThinkingLevel("high", "minimal", false)).toBeNull();
++    expect(voiceCallThinkingLevel(null, null, false)).toBeNull();
++  });
++
++  it("drops an invalid stored level back to low", () => {
++    expect(voiceCallThinkingLevel("turbo", null, true)).toBe("low");
++    expect(voiceCallThinkingLevel(null, "turbo", true)).toBe("low");
++  });
++});
++
+ describe("persistentComputerInstruction", () => {
+   it("preserves the default sandbox guidance byte for byte", () => {
+     expect(
+diff --git a/packages/adapters/src/executor.ts b/packages/adapters/src/executor.ts
+index 2e7314bb..a8070b57 100644
+--- a/packages/adapters/src/executor.ts
++++ b/packages/adapters/src/executor.ts
+@@ -442,6 +442,31 @@ export function voiceCallInstruction(disabled?: ReadonlySet<string>): string {
+     ? VOICE_CALL_INSTRUCTION
+     : VOICE_CALL_BASE_INSTRUCTION;
+ }
++
++/** Valid reasoning levels for the voice-call override (patch 0031). */
++export const VOICE_THINKING_LEVELS: readonly string[] = [
++  "off",
++  "minimal",
++  "low",
++  "medium",
++  "high",
++  "xhigh",
++  "max",
++];
++
++/**
++ * Effective reasoning level for a voice call (patch 0031): the bot override wins,
++ * then the user's setting, then "low". Models without reasoning get no level.
++ */
++export function voiceCallThinkingLevel(
++  botLevel: string | null | undefined,
++  userLevel: string | null | undefined,
++  modelSupportsReasoning: boolean,
++): AgentRunRequest["model"]["thinkingLevel"] | null {
++  if (!modelSupportsReasoning) return null;
++  const raw = botLevel ?? userLevel ?? "low";
++  return (VOICE_THINKING_LEVELS.includes(raw) ? raw : "low") as AgentRunRequest["model"]["thinkingLevel"];
++}
+ const MAX_MODEL_FILE_BYTES = 250_000;
+ const TURN_ATTACHMENT_UNAVAILABLE =
+   "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
+@@ -3847,6 +3872,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
+         const callEndRun = run.trigger === "call_end";
+         const callClientNonceForRun = callEndRun ? run.clientNonce : sourceClientNonce;
+         const voiceCall = callEndRun || isCallClientNonce(sourceClientNonce);
++        // Patch 0031: only voice calls read the user's voice-call thinking level.
++        const userVoiceThinking = voiceCall
++          ? await deps.prisma.user.findUnique({
++              where: { id: run.userId },
++              select: { voiceCallThinkingLevel: true },
++            })
++          : undefined;
+         const graphicalToolsAllowed = graphical && acceptsImages && !heldForTakeover;
+         const pageBrowserAllowed =
+           graphical && browser.describe().capabilities.page && !heldForTakeover;
+@@ -6655,6 +6687,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
+             .map((candidate) => JSON.stringify([candidate.provider, candidate.modelId])),
+         );
+ 
++        // Patch 0031: voice calls use a fast reasoning level (bot override, else the
++        // user's setting, else "low") so the spoken first reply comes back quickly.
++        const voiceThinkingLevel = voiceCall
++          ? voiceCallThinkingLevel(
++              bot.voiceThinkingLevel,
++              userVoiceThinking?.voiceCallThinkingLevel,
++              Boolean(resolved.reasoning),
++            )
++          : undefined;
++
+         const runModel: AgentRunRequest["model"] = {
+           provider: runModelProvider,
+           id: runModelId,
+@@ -6668,7 +6710,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
+           maxTokens: resolved.maxTokens,
+           acceptsImages: resolved.acceptsImages,
+           maxImagesPerPrompt: resolved.maxImagesPerPrompt,
+-          thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
++          thinkingLevel: voiceCall ? voiceThinkingLevel : (thinkingLevel ?? resolved.thinkingLevel ?? null),
+           oauth: resolved.oauth
+             ? {
+                 credential: resolved.oauth,
+diff --git a/packages/contracts/src/domain.ts b/packages/contracts/src/domain.ts
+index 4e9f1240..01535391 100644
+--- a/packages/contracts/src/domain.ts
++++ b/packages/contracts/src/domain.ts
+@@ -32,6 +32,12 @@ export const ThinkingLevelSchema = z.enum([
+ ]);
+ export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+ 
++/** Per-user default reasoning level for voice calls (null = deployment default "low"). */
++export const VoiceCallThinkingSchema = z.object({
++  thinkingLevel: ThinkingLevelSchema.nullable(),
++});
++export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
++
+ export { AGENT_SECRET_NAME_PATTERN };
+ 
+ export const AgentSecretSchema = z.object({
+@@ -75,6 +81,8 @@ export const BotSchema = z.object({
+   modelProvider: z.string().nullable(),
+   modelId: z.string().nullable(),
+   thinkingLevel: ThinkingLevelSchema.nullable(),
++  /** Per-bot override of the voice-call reasoning level (null = use the user's setting). */
++  voiceThinkingLevel: ThinkingLevelSchema.nullable(),
+   teamChatAmbientEnabled: z.boolean(),
+   teamChatRules: z.string(),
+   disabledBuiltinTools: z.array(z.string()).default([]),
+@@ -343,6 +351,7 @@ export const UpdateBotInput = z
+     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
+     modelId: z.string().trim().min(1).max(200).nullable().optional(),
+     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
++    voiceThinkingLevel: ThinkingLevelSchema.nullable().optional(),
+     teamChatAmbientEnabled: z.boolean().optional(),
+     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
+     disabledBuiltinTools: DisabledBuiltinToolsSchema.optional(),
+diff --git a/packages/contracts/src/rpc.ts b/packages/contracts/src/rpc.ts
+index 21e1526f..f35dfad3 100644
+--- a/packages/contracts/src/rpc.ts
++++ b/packages/contracts/src/rpc.ts
+@@ -95,6 +95,7 @@ import {
+   UpdateExternalConversationPolicyInput,
+   UpdateGroupInput,
+   UsageRecordSchema,
++  VoiceCallThinkingSchema,
+   VoiceCatalogEntrySchema,
+   VoiceCredentialSchema,
+   VoiceInfoSchema,
+@@ -944,6 +945,11 @@ export const appContract = {
+         }),
+       )
+       .output(z.object({ ready: z.boolean(), utterances: z.array(z.string()) })),
++    /** Per-user default reasoning level for voice calls (null = deployment default "low"). */
++    callThinking: oc.output(VoiceCallThinkingSchema),
++    setCallThinking: oc
++      .input(z.object({ thinkingLevel: ThinkingLevelSchema.nullable() }))
++      .output(VoiceCallThinkingSchema),
+   },
+   externalConversations: {
+     updatePolicy: oc
+diff --git a/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql b/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql
+new file mode 100644
+index 00000000..cbea4ad2
+--- /dev/null
++++ b/packages/db/prisma/migrations/20261022000000_voice_call_thinking/migration.sql
+@@ -0,0 +1,5 @@
++-- Per-user default reasoning level for voice calls (patch 0031).
++ALTER TABLE "user" ADD COLUMN "voiceCallThinkingLevel" TEXT;
++
++-- Per-bot override of the voice-call reasoning level (patch 0031).
++ALTER TABLE "Bot" ADD COLUMN "voiceThinkingLevel" TEXT;
+diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
+index e4825435..5d0b0748 100644
+--- a/packages/db/prisma/schema.prisma
++++ b/packages/db/prisma/schema.prisma
+@@ -31,6 +31,8 @@ model User {
+   createdAt                   DateTime                     @default(now())
+   updatedAt                   DateTime                     @updatedAt
+   avatarStyle                 String                       @default("robot")
++  // Per-user default reasoning level for voice calls (null = deployment default "low").
++  voiceCallThinkingLevel      String?
+   sessions                    Session[]
+   accounts                    Account[]
+   members                     Member[]
+@@ -423,6 +425,8 @@ model Bot {
+   modelProvider     String?
+   modelId           String?
+   thinkingLevel     String?
++  // Per-bot override of the voice-call reasoning level (null = use the user's setting).
++  voiceThinkingLevel String?
+   disabledBuiltinTools String[] @default([])
+   webhookSecretId   String?
+   teamChatAmbientEnabled Boolean @default(false)
+diff --git a/packages/db/src/repos.ts b/packages/db/src/repos.ts
+index d50dcf9f..004f0a9d 100644
+--- a/packages/db/src/repos.ts
++++ b/packages/db/src/repos.ts
+@@ -63,6 +63,7 @@ function mapBot(
+     modelProvider?: string | null;
+     modelId?: string | null;
+     thinkingLevel?: string | null;
++    voiceThinkingLevel?: string | null;
+     teamChatAmbientEnabled?: boolean;
+     teamChatRules?: string;
+     disabledBuiltinTools?: string[];
+@@ -103,6 +104,7 @@ function mapBot(
+     modelProvider: bot.modelProvider ?? null,
+     modelId: bot.modelId ?? null,
+     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,
++    voiceThinkingLevel: (bot.voiceThinkingLevel as Bot["voiceThinkingLevel"]) ?? null,
+     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
+     teamChatRules: bot.teamChatRules ?? "",
+     disabledBuiltinTools: bot.disabledBuiltinTools ?? [],
+-- 
+2.55.0.windows.5
+

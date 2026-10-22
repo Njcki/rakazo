@@ -36,6 +36,7 @@ import {
   inlineMarkdownImageSrc,
   LinkFaviconsContext,
   LinkFaviconsPausedContext,
+  linkedImageFile,
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
@@ -788,6 +789,19 @@ function renderMarkdownLink(
   const href = sanitizeMarkdownUrl(node.attributes.href ?? "");
   if (!href) return <Text key={node.key}>{children}</Text>;
   const image = soleRemoteImage(node);
+  const fileImage = !image && !astHasImage(node) ? linkedImageFile(href) : undefined;
+  if (fileImage) {
+    return (
+      <RemoteMarkdownImage
+        key={node.key}
+        image={fileImage}
+        alt={astText(node)}
+        rejectedLink={false}
+        labelStyle={styleMap.plain_text}
+        styleMap={styleMap}
+      />
+    );
+  }
   if (image) {
     return (
       <LinkedRemoteImage

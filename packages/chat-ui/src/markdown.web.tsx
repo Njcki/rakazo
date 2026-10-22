@@ -25,6 +25,7 @@ import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
   LinkFaviconsPausedContext,
+  linkedImageFile,
   linkFaviconOrigin,
   linkLabel,
   markdownLinkDisplayParts,
@@ -34,6 +35,7 @@ import {
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
+  sameDocumentOrigin,
   sanitizeMarkdownUrl,
   useLinkFavicon,
 } from "./markdown";
@@ -383,12 +385,33 @@ function WebsiteLink({
   );
 }
 
+function LinkedImageFile({ href, alt }: { href: string; alt?: string }) {
+  const loadRemote = useContext(RemoteImagesContext);
+  const [, setRevision] = useState(0);
+  const image = { href, host: new URL(href).host };
+  const pageOrigin = typeof window === "undefined" ? undefined : window.location.origin;
+  if (remoteImageRenders(href, loadRemote || sameDocumentOrigin(href, pageOrigin), false)) {
+    return <img src={href} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer" />;
+  }
+  return (
+    <RemoteImageButton
+      image={image}
+      alt={alt}
+      onLoad={() => setRevision((revision) => revision + 1)}
+    />
+  );
+}
+
 function MarkdownAnchor({
   node,
   ...props
 }: React.ComponentPropsWithoutRef<"a"> & { node?: MarkdownHast }) {
   const loadRemote = useContext(RemoteImagesContext);
   const href = typeof props.href === "string" ? props.href : "";
+  const linkedImage = href && !hastHasImage(node) ? linkedImageFile(href) : undefined;
+  if (linkedImage) {
+    return <LinkedImageFile href={linkedImage.href} alt={hastText(node)} />;
+  }
   const image = href ? soleRemoteImage(node) : undefined;
   if (image && !remoteImageRenders(image.href, loadRemote, false)) {
     return <LinkedRemoteImage href={href} image={image} alt={image.alt} title={image.title} />;

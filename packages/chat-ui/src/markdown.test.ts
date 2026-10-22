@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
+  linkedImageFile,
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
   plainTextLinkParts,
+  sameDocumentOrigin,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
 } from "./markdown";
@@ -200,6 +202,26 @@ describe("markdownLinkDisplayParts", () => {
   it("returns nothing for addresses that are not web links", () => {
     expect(markdownLinkDisplayParts("mailto:hello@example.test")).toBeUndefined();
     expect(markdownLinkDisplayParts("/threads/1")).toBeUndefined();
+  });
+});
+
+describe("linkedImageFile", () => {
+  it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
+    expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
+      href: "https://rakazo.example/download/foyer.jpg",
+      host: "rakazo.example",
+    });
+    expect(linkedImageFile("https://rakazo.example/a.PNG?x=1")?.href).toContain(".PNG");
+    expect(linkedImageFile("https://rakazo.example/a.svg")).toBeUndefined();
+    expect(linkedImageFile("https://rakazo.example/a.jpg.exe")).toBeUndefined();
+    expect(linkedImageFile("javascript:alert(1)")).toBeUndefined();
+  });
+
+  it("matches only the page that is already open", () => {
+    expect(
+      sameDocumentOrigin("https://rakazo.example/download/a.jpg", "https://rakazo.example"),
+    ).toBe(true);
+    expect(sameDocumentOrigin("https://cdn.example/a.jpg", "https://rakazo.example")).toBe(false);
   });
 });
 

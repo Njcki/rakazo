@@ -197,6 +197,34 @@ export function inlineMarkdownImageSrc(url: string): string | undefined {
     : undefined;
 }
 
+const rasterImageExtension = /\.(?:png|jpe?g|gif|webp)$/i;
+
+/**
+ * A normal link whose target is a raster image. Markdown writers often use
+ * `[label](photo.jpg)` instead of an image. SVG is excluded: a same-origin SVG can run script.
+ */
+export function linkedImageFile(url: string): { href: string; host: string } | undefined {
+  const href = sanitizeMarkdownImageUrl(url);
+  if (!href) return undefined;
+  try {
+    const parsed = new URL(href);
+    if (!rasterImageExtension.test(parsed.pathname)) return undefined;
+    return { href, host: parsed.host };
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when the image is served by the page the reader already has open. */
+export function sameDocumentOrigin(href: string, origin: string | undefined): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(href).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 /** A markdown image that may load on request, with the host its placeholder names. */
 export function remoteMarkdownImage(url: string): { href: string; host: string } | undefined {
   const href = sanitizeMarkdownImageUrl(url);

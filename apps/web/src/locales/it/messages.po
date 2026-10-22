@@ -4839,3 +4839,24 @@ msgstr "Statistiche"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Web searches answered by each service."
 msgstr "Ricerche web risposte da ciascun servizio."
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr "Impossibile salvare il ragionamento delle chiamate"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr "Predefinito (basso)"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Default (user setting)"
+msgstr "Predefinito (impostazione dell'utente)"
+
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr "Spento"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Thinking in calls"
+msgstr "Ragionamento nelle chiamate"

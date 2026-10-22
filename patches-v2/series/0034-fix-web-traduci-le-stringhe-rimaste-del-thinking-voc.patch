@@ -1,0 +1,58 @@
+From 0e14a1389739f58032169d6e7303f459cbd3e869 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 04:20:33 +0200
+Subject: [PATCH] fix(web): traduci le stringhe rimaste del thinking vocale /
+ translate the remaining voice-thinking strings
+
+IT: nel catalogo italiano mancavano le 4 stringhe del ragionamento in chiamata (etichetta, predefiniti, errore di salvataggio), quindi la UI mostrava gli ID Lingui. Aggiunte le traduzioni, e "Off" diventa "Spento".
+
+EN: the Italian catalog was missing the 4 voice-call thinking strings (label, defaults, save error), so the UI showed Lingui message IDs. Added the translations, and "Off" becomes "Spento".
+---
+ apps/web/src/lib/model-catalog.ts   |  1 +
+ apps/web/src/locales/it/messages.po | 21 +++++++++++++++++++++
+ 2 files changed, 22 insertions(+)
+
+diff --git a/apps/web/src/lib/model-catalog.ts b/apps/web/src/lib/model-catalog.ts
+index 1426f5cd..7cf2cd06 100644
+--- a/apps/web/src/lib/model-catalog.ts
++++ b/apps/web/src/lib/model-catalog.ts
+@@ -14,6 +14,7 @@ export function connectedModelOptions(
+ }
+ 
+ export function thinkingLevelLabel(level: ThinkingLevel) {
++  if (level === "off") return i18n._({ id: "Off", message: "Off" });
+   if (level === "xhigh") return i18n._({ id: "Extra high", message: "Extra high" });
+   if (level === "low") return i18n._({ id: "Low", message: "Low" });
+   if (level === "medium") return i18n._({ id: "Medium", message: "Medium" });
+diff --git a/apps/web/src/locales/it/messages.po b/apps/web/src/locales/it/messages.po
+index e9829c32..fea98178 100644
+--- a/apps/web/src/locales/it/messages.po
++++ b/apps/web/src/locales/it/messages.po
+@@ -4839,3 +4839,24 @@ msgstr "Statistiche"
+ #: src/pages/AccountSettingsOverlay.tsx
+ msgid "Web searches answered by each service."
+ msgstr "Ricerche web risposte da ciascun servizio."
++
++#: src/pages/VoiceSettingsOverlay.tsx
++msgid "Could not save the call thinking level"
++msgstr "Impossibile salvare il ragionamento delle chiamate"
++
++#: src/pages/VoiceSettingsOverlay.tsx
++msgid "Default (low)"
++msgstr "Predefinito (basso)"
++
++#: src/pages/shell/bot-panel.tsx
++msgid "Default (user setting)"
++msgstr "Predefinito (impostazione dell'utente)"
++
++#: src/lib/model-catalog.ts
++msgid "Off"
++msgstr "Spento"
++
++#: src/pages/VoiceSettingsOverlay.tsx
++#: src/pages/shell/bot-panel.tsx
++msgid "Thinking in calls"
++msgstr "Ragionamento nelle chiamate"
+-- 
+2.55.0.windows.5
+

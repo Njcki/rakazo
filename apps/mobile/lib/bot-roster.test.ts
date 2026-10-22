@@ -24,6 +24,7 @@ function bot(id = "bot-1"): Bot {
     modelProvider: null,
     modelId: null,
     thinkingLevel: null,
+    voiceThinkingLevel: null,
     autoSpeak: false,
     spaceId: "space-1",
     description: "",

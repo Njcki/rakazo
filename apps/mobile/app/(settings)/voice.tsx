@@ -10,6 +10,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MenuPicker } from "../../components/menu-picker";
+import type { MenuPickerChoice } from "../../components/menu-picker";
 import { NativeActionButton } from "../../components/native-action-button";
 import { NativeSwitch } from "../../components/native-switch";
 import { Checkmark } from "../../components/row-accessories";
@@ -48,6 +50,19 @@ type VoiceStatus = {
 };
 type VoiceInfo = { id: string; label: string; description?: string };
 
+/** Reasoning levels offered for voice calls (patch 0031). */
+const VOICE_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+function thinkingLevelLabel(level: string, t: (message: string) => string) {
+  if (level === "xhigh") return t("Extra high");
+  if (level === "low") return t("Low");
+  if (level === "medium") return t("Medium");
+  if (level === "high") return t("High");
+  if (level === "minimal") return t("Minimal");
+  if (level === "max") return t("Max");
+  return `${level.slice(0, 1).toUpperCase()}${level.slice(1)}`;
+}
+
 export default function VoiceSettings() {
   const styles = useThemedStyles(createVoiceStyles);
   const { t } = useI18n();
@@ -62,6 +77,7 @@ export default function VoiceSettings() {
   const speechModelSave = useRef<string | null>(null);
   const [deviceVoice, setDeviceVoice] = useState(false);
   const [deviceVoiceReady, setDeviceVoiceReady] = useState(false);
+  const [callThinking, setCallThinking] = useState("");
   const [callSounds, setCallSounds] = useState<boolean | null>(null);
   const [waitSound, setWaitSound] = useState<boolean | null>(null);
   // Prevent stale reads from overwriting a saved preference.
@@ -76,11 +92,13 @@ export default function VoiceSettings() {
   const deviceVoiceSaveInFlight = useRef(false);
 
   const load = useCallback(async (nextProvider?: string) => {
-    const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
+    const [nextCatalog, nextCredentials, nextStatus, nextCallThinking] = await Promise.all([
       rpc<VoiceCatalogEntry[]>("voice/catalog"),
       rpc<VoiceCredential[]>("voice/credentials"),
       rpc<VoiceStatus>("voice/status"),
+      rpc<{ thinkingLevel: string | null }>("voice/callThinking"),
     ]);
+    setCallThinking(nextCallThinking.thinkingLevel ?? "");
     const selected = nextProvider || nextStatus.provider || nextCatalog[0]?.id || "";
     setCatalog(nextCatalog);
     setCredentials(nextCredentials);
@@ -237,6 +255,14 @@ export default function VoiceSettings() {
   const selected = catalog.find((entry) => entry.id === provider);
   const credential = credentials.find((entry) => entry.provider === provider);
 
+  const callThinkingChoices: MenuPickerChoice[] = [
+    { key: "", label: t("Default (low)") },
+    ...VOICE_THINKING_LEVELS.map((level) => ({
+      key: level,
+      label: thinkingLevelLabel(level, t),
+    })),
+  ];
+
   async function connect() {
     if (!selected || apiKey.trim().length < 8) return;
     setPending("connect");
@@ -305,6 +331,20 @@ export default function VoiceSettings() {
       await load(selected?.id);
     } catch (err) {
       setError(errorText(err, t("Could not save that voice")));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function chooseCallThinking(next: string) {
+    if (pending !== null) return;
+    setCallThinking(next);
+    setPending("voice");
+    setError(null);
+    try {
+      await rpc("voice/setCallThinking", { thinkingLevel: next || null });
+    } catch (err) {
+      setError(errorText(err, t("Could not save the call thinking level")));
     } finally {
       setPending(null);
     }
@@ -465,6 +505,21 @@ export default function VoiceSettings() {
             onPress={() => void testVoice()}
           />
         ) : null}
+        <View
+          style={{
+            borderRadius: 14,
+            backgroundColor: native.fill,
+            overflow: "hidden",
+          }}
+        >
+          <MenuPicker
+            choices={callThinkingChoices}
+            disabled={pending !== null}
+            label={t("Thinking in calls")}
+            onChange={(next) => void chooseCallThinking(next)}
+            value={callThinking}
+          />
+        </View>
         <View style={styles.group}>
           <View style={styles.groupRow}>
             <View style={styles.rowCopy}>

@@ -112,6 +112,9 @@ export default function Account() {
     outputTokens: number | null;
     totalTokens?: number | null;
   } | null>(null);
+  const [searchStats, setSearchStats] = useState<{ service: string; count: number }[]>([]);
+  const [statsBusy, setStatsBusy] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const { avatarStyle, updateAvatarStyle } = useAvatarStyle();
   const appearance = getCachedAppearancePreference();
   const streamReplies = useSyncExternalStore(
@@ -143,6 +146,9 @@ export default function Account() {
       totalTokens?: number | null;
     }>("usage/summary")
       .then(setUsage)
+      .catch(() => undefined);
+    void rpc<{ service: string; count: number }[]>("stats/searches")
+      .then(setSearchStats)
       .catch(() => undefined);
     if (Platform.OS === "android") {
       void getLiveNotificationSettings()
@@ -191,6 +197,20 @@ export default function Account() {
       setAvatarError(t("Couldn't update avatars"));
     } finally {
       setAvatarPending(false);
+    }
+  }
+
+  async function resetSearchStats() {
+    if (statsBusy) return;
+    setStatsBusy(true);
+    setStatsError(null);
+    try {
+      await rpc("stats/resetSearches", {});
+      setSearchStats([]);
+    } catch (err) {
+      setStatsError(errorText(err, t("Could not reset the statistics")));
+    } finally {
+      setStatsBusy(false);
     }
   }
 
@@ -534,6 +554,20 @@ export default function Account() {
               title={t("Server integrations")}
             />
           ) : null}
+        </SettingsGroup>
+
+        <SettingsGroup label={t("Statistics")}>
+          {searchStats.map((entry) => (
+            <SettingsRow key={entry.service} title={entry.service} value={String(entry.count)} />
+          ))}
+          {statsError ? <Text style={styles.error}>{statsError}</Text> : null}
+          <SettingsRow
+            accessibilityRole="button"
+            destructive
+            disabled={statsBusy || searchStats.length === 0}
+            onPress={() => void resetSearchStats()}
+            title={t("Reset")}
+          />
         </SettingsGroup>
 
         <SettingsGroup>

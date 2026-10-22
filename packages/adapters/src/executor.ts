@@ -3000,7 +3000,10 @@ export function isTerminalModelSetupError(error: unknown): boolean {
 }
 
 /** Patch 0032: increment the global web-search counter for the service that answered. */
-async function recordSearchStat(prisma: ExecutorDeps["prisma"], service: string): Promise<void> {
+export async function recordSearchStat(
+  prisma: ExecutorDeps["prisma"],
+  service: string,
+): Promise<void> {
   try {
     await prisma.searchStat.upsert({
       where: { service },
@@ -3016,14 +3019,21 @@ async function recordSearchStat(prisma: ExecutorDeps["prisma"], service: string)
   }
 }
 
+/**
+ * Deployment web provider that records which tier answered.
+ * The worker and the API must pass this: a plain `createWebProvider()` has no counter,
+ * and it replaces the fallback below.
+ */
+export function createCountingWebProvider(prisma: ExecutorDeps["prisma"]) {
+  return createWebProvider(undefined, undefined, process.env, (service) => {
+    void recordSearchStat(prisma, service);
+  });
+}
+
 export function createRunExecutor(deps: ExecutorDeps) {
   const contextStrategy = deps.contextStrategy ?? DEFAULT_CONTEXT_STRATEGY;
   // Patch 0032: count web searches by the service that answered.
-  const web =
-    deps.web ??
-    createWebProvider(undefined, undefined, process.env, (service) => {
-      void recordSearchStat(deps.prisma, service);
-    });
+  const web = deps.web ?? createCountingWebProvider(deps.prisma);
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
   const cloudAgent = deps.cloudAgent;
   const resolveConnectedModel = async (

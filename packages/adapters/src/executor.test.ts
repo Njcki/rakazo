@@ -22,6 +22,7 @@ import {
   userTurnInstructions,
   VOICE_CALL_INSTRUCTION,
   voiceCallInstruction,
+  voiceCallThinkingLevel,
   withRecentTurnImages,
 } from "./executor.js";
 import { UnavailableModelForAuthError } from "./model-selection.js";
@@ -1344,6 +1345,28 @@ describe("voiceCallInstruction", () => {
     const instruction = voiceCallInstruction(new Set(["end_call"]));
     expect(instruction).toContain("Reply in one to three short spoken sentences.");
     expect(instruction).not.toContain("end_call");
+  });
+});
+
+describe("voiceCallThinkingLevel", () => {
+  it("prefers the bot override over the user setting", () => {
+    expect(voiceCallThinkingLevel("high", "minimal", true)).toBe("high");
+    expect(voiceCallThinkingLevel(null, "minimal", true)).toBe("minimal");
+  });
+
+  it("falls back to low when neither is set", () => {
+    expect(voiceCallThinkingLevel(null, null, true)).toBe("low");
+    expect(voiceCallThinkingLevel(undefined, undefined, true)).toBe("low");
+  });
+
+  it("ignores the override when the model has no reasoning", () => {
+    expect(voiceCallThinkingLevel("high", "minimal", false)).toBeNull();
+    expect(voiceCallThinkingLevel(null, null, false)).toBeNull();
+  });
+
+  it("drops an invalid stored level back to low", () => {
+    expect(voiceCallThinkingLevel("turbo", null, true)).toBe("low");
+    expect(voiceCallThinkingLevel(null, "turbo", true)).toBe("low");
   });
 });
 

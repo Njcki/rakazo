@@ -31,6 +31,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  // Per-user default reasoning level for voice calls (null = deployment default "low").
+  voiceCallThinkingLevel      String?
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -423,6 +425,8 @@ model Bot {
   modelProvider     String?
   modelId           String?
   thinkingLevel     String?
+  // Per-bot override of the voice-call reasoning level (null = use the user's setting).
+  voiceThinkingLevel String?
   disabledBuiltinTools String[] @default([])
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)

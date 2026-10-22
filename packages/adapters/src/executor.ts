@@ -442,6 +442,31 @@ export function voiceCallInstruction(disabled?: ReadonlySet<string>): string {
     ? VOICE_CALL_INSTRUCTION
     : VOICE_CALL_BASE_INSTRUCTION;
 }
+
+/** Valid reasoning levels for the voice-call override (patch 0031). */
+export const VOICE_THINKING_LEVELS: readonly string[] = [
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
+/**
+ * Effective reasoning level for a voice call (patch 0031): the bot override wins,
+ * then the user's setting, then "low". Models without reasoning get no level.
+ */
+export function voiceCallThinkingLevel(
+  botLevel: string | null | undefined,
+  userLevel: string | null | undefined,
+  modelSupportsReasoning: boolean,
+): AgentRunRequest["model"]["thinkingLevel"] | null {
+  if (!modelSupportsReasoning) return null;
+  const raw = botLevel ?? userLevel ?? "low";
+  return (VOICE_THINKING_LEVELS.includes(raw) ? raw : "low") as AgentRunRequest["model"]["thinkingLevel"];
+}
 const MAX_MODEL_FILE_BYTES = 250_000;
 const TURN_ATTACHMENT_UNAVAILABLE =
   "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
@@ -3847,6 +3872,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const callEndRun = run.trigger === "call_end";
         const callClientNonceForRun = callEndRun ? run.clientNonce : sourceClientNonce;
         const voiceCall = callEndRun || isCallClientNonce(sourceClientNonce);
+        // Patch 0031: only voice calls read the user's voice-call thinking level.
+        const userVoiceThinking = voiceCall
+          ? await deps.prisma.user.findUnique({
+              where: { id: run.userId },
+              select: { voiceCallThinkingLevel: true },
+            })
+          : undefined;
         const graphicalToolsAllowed = graphical && acceptsImages && !heldForTakeover;
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
@@ -6655,6 +6687,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
             .map((candidate) => JSON.stringify([candidate.provider, candidate.modelId])),
         );
 
+        // Patch 0031: voice calls use a fast reasoning level (bot override, else the
+        // user's setting, else "low") so the spoken first reply comes back quickly.
+        const voiceThinkingLevel = voiceCall
+          ? voiceCallThinkingLevel(
+              bot.voiceThinkingLevel,
+              userVoiceThinking?.voiceCallThinkingLevel,
+              Boolean(resolved.reasoning),
+            )
+          : undefined;
+
         const runModel: AgentRunRequest["model"] = {
           provider: runModelProvider,
           id: runModelId,
@@ -6668,7 +6710,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           maxTokens: resolved.maxTokens,
           acceptsImages: resolved.acceptsImages,
           maxImagesPerPrompt: resolved.maxImagesPerPrompt,
-          thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
+          thinkingLevel: voiceCall ? voiceThinkingLevel : (thinkingLevel ?? resolved.thinkingLevel ?? null),
           oauth: resolved.oauth
             ? {
                 credential: resolved.oauth,

@@ -1,5 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { VoiceCatalogEntry, VoiceCredential, VoiceInfo, VoiceStatus } from "@rakazo/contracts";
+import type {
+  ThinkingLevel,
+  VoiceCatalogEntry,
+  VoiceCredential,
+  VoiceInfo,
+  VoiceStatus,
+} from "@rakazo/contracts";
 import {
   Button,
   Dialog,
@@ -14,8 +20,12 @@ import {
 } from "@rakazo/ui-web";
 import { XIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { thinkingLevelLabel } from "../lib/model-catalog";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
+
+/** Reasoning levels offered for voice calls (patch 0031). */
+const VOICE_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export function VoiceSettingsOverlay({
   onClose,
@@ -31,6 +41,7 @@ export function VoiceSettingsOverlay({
   const apiKeyId = useId();
   const voiceSelectId = useId();
   const speechModelId = useId();
+  const callThinkingId = useId();
   const [catalog, setCatalog] = useState<VoiceCatalogEntry[]>([]);
   const [credentials, setCredentials] = useState<VoiceCredential[]>([]);
   const [status, setStatus] = useState<VoiceStatus | null>(null);
@@ -41,6 +52,8 @@ export function VoiceSettingsOverlay({
   const [speechModel, setSpeechModel] = useState("");
   const speechModelSave = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [callThinking, setCallThinking] = useState("");
+  const [callThinkingBusy, setCallThinkingBusy] = useState(false);
   const [pending, setPending] = useState<"connect" | "disconnect" | "voice" | "test" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -57,11 +70,13 @@ export function VoiceSettingsOverlay({
   }
 
   async function refresh(nextProvider?: string) {
-    const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
+    const [nextCatalog, nextCredentials, nextStatus, nextCallThinking] = await Promise.all([
       rpc.voice.catalog(),
       rpc.voice.credentials(),
       rpc.voice.status(),
+      rpc.voice.callThinking(),
     ]);
+    setCallThinking(nextCallThinking.thinkingLevel ?? "");
     const selected = nextProvider || provider || nextStatus.provider || nextCatalog[0]?.id || "";
     setCatalog(nextCatalog);
     setCredentials(nextCredentials);
@@ -143,6 +158,19 @@ export function VoiceSettingsOverlay({
       setError(errorText(err, t`Could not save that voice`));
     } finally {
       markPending(null);
+    }
+  }
+
+  async function chooseCallThinking(next: string) {
+    setCallThinking(next);
+    setCallThinkingBusy(true);
+    setError(null);
+    try {
+      await rpc.voice.setCallThinking({ thinkingLevel: (next || null) as ThinkingLevel | null });
+    } catch (err) {
+      setError(errorText(err, t`Could not save the call thinking level`));
+    } finally {
+      setCallThinkingBusy(false);
     }
   }
 
@@ -252,6 +280,27 @@ export function VoiceSettingsOverlay({
               );
             })}
           </div>
+          <Field className="mt-4">
+            <FieldLabel htmlFor={callThinkingId}>
+              <Trans>Thinking in calls</Trans>
+            </FieldLabel>
+            <NativeSelect
+              id={callThinkingId}
+              className="mt-2 w-full"
+              value={callThinking}
+              disabled={busy || callThinkingBusy}
+              onChange={(event) => void chooseCallThinking(event.target.value)}
+            >
+              <NativeSelectOption value="">
+                {t`Default (low)`}
+              </NativeSelectOption>
+              {VOICE_THINKING_LEVELS.map((level) => (
+                <NativeSelectOption key={level} value={level}>
+                  {thinkingLevelLabel(level)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </Field>
         </div>
 
         <div className="rk-scroll min-h-0 min-w-0 flex-1 overflow-y-auto">

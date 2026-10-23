@@ -1,0 +1,310 @@
+From ce028e88e2d4652b0a0184123ba5fd3397633182 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 16:54:12 +0200
+Subject: [PATCH] fix(web): pagina di condivisione: token del link, layout e UX
+ del dialog / share page: link token, layout and dialog UX
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT:
+- Corretto il bug per cui aprendo il link di condivisione compariva "Questo link di condivisione non è disponibile": SharePage era renderizzata senza <Route>, quindi useParams() restituiva un token vuoto e la richiesta andava su /api/share/ (404). SharePage è ora dentro <Routes><Route path="/share/:token">.
+- La pagina di condivisione si adatta al contenuto: min-h-screen al posto di min-h-full (root e stato centrato), break-words sui blocchi di testo, max-w-full sulle immagini (le immagini larghe sbordavano la colonna da 720px).
+- Il link viene copiato automaticamente appena si conferma la condivisione.
+- La selezione dei messaggi avviene premendo ovunque sulla riga del messaggio (cursor pointer, hover accent); la checkbox non fa più doppio toggle (stopPropagation).
+- Nuovo pulsante "Copia link" accanto a Revoca nell'elenco delle condivisioni attive, per recuperare il link di quella specifica condivisione.
+- Nuova stringa i18n "Copy link" (IT: "Copia link") nei 11 cataloghi.
+
+EN:
+- Fixed the bug where opening a share link showed "This share link is not available": SharePage was rendered without a <Route>, so useParams() returned an empty token and the request went to /api/share/ (404). SharePage is now inside <Routes><Route path="/share/:token">.
+- The share page fits its content: min-h-screen instead of min-h-full (root and centered state), break-words on text blocks, max-w-full on images (wide images overflowed the 720px column).
+- The link is copied automatically as soon as the share is confirmed.
+- Messages are selected by clicking anywhere on the message row (pointer cursor, accent hover); the checkbox no longer double-toggles (stopPropagation).
+- New "Copy link" button next to Revoke in the active-shares list, to retrieve the link of that specific share.
+- New i18n string "Copy link" (IT: "Copia link") in the 11 catalogs.
+---
+ apps/web/src/App.tsx                           |  4 +++-
+ apps/web/src/locales/de/messages.po            |  4 ++++
+ apps/web/src/locales/en/messages.po            |  4 ++++
+ apps/web/src/locales/es/messages.po            |  4 ++++
+ apps/web/src/locales/fr/messages.po            |  4 ++++
+ apps/web/src/locales/hi/messages.po            |  4 ++++
+ apps/web/src/locales/it/messages.po            |  4 ++++
+ apps/web/src/locales/ko/messages.po            |  4 ++++
+ apps/web/src/locales/pt-BR/messages.po         |  4 ++++
+ apps/web/src/locales/ru/messages.po            |  4 ++++
+ apps/web/src/locales/tr/messages.po            |  4 ++++
+ apps/web/src/locales/zh-CN/messages.po         |  4 ++++
+ apps/web/src/pages/SharePage.tsx               |  8 ++++----
+ .../src/pages/shell/share-thread-dialog.tsx    | 18 +++++++++++++++++-
+ 14 files changed, 68 insertions(+), 6 deletions(-)
+
+diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
+index 90a80ddd..8d5ceb47 100644
+--- a/apps/web/src/App.tsx
++++ b/apps/web/src/App.tsx
+@@ -80,7 +80,9 @@ export function App() {
+           ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
+             <LocalSettingsPage />
+           ) : window.location.pathname.startsWith("/share/") ? (
+-            <SharePage />
++            <Routes>
++              <Route path="/share/:token" element={<SharePage />} />
++            </Routes>
+           ) : (
+             <SessionApp />
+           )}
+diff --git a/apps/web/src/locales/de/messages.po b/apps/web/src/locales/de/messages.po
+index 10563bd7..59686076 100644
+--- a/apps/web/src/locales/de/messages.po
++++ b/apps/web/src/locales/de/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Kopieren"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Hinzufügen fehlgeschlagen"
+diff --git a/apps/web/src/locales/en/messages.po b/apps/web/src/locales/en/messages.po
+index 042059ca..1d3deadf 100644
+--- a/apps/web/src/locales/en/messages.po
++++ b/apps/web/src/locales/en/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Copy"
+ msgid "Copy .env example"
+ msgstr "Copy .env example"
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr "Copy link"
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Could not add"
+diff --git a/apps/web/src/locales/es/messages.po b/apps/web/src/locales/es/messages.po
+index d18da627..11eb319f 100644
+--- a/apps/web/src/locales/es/messages.po
++++ b/apps/web/src/locales/es/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Copiar"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "No se pudo agregar"
+diff --git a/apps/web/src/locales/fr/messages.po b/apps/web/src/locales/fr/messages.po
+index ce9b7472..5bc9fc1b 100644
+--- a/apps/web/src/locales/fr/messages.po
++++ b/apps/web/src/locales/fr/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Copier"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Impossible d'ajouter"
+diff --git a/apps/web/src/locales/hi/messages.po b/apps/web/src/locales/hi/messages.po
+index bea666f5..0cb716b7 100644
+--- a/apps/web/src/locales/hi/messages.po
++++ b/apps/web/src/locales/hi/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "कॉपी करें"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "जोड़ा नहीं जा सका"
+diff --git a/apps/web/src/locales/it/messages.po b/apps/web/src/locales/it/messages.po
+index f4133fb6..42530ff8 100644
+--- a/apps/web/src/locales/it/messages.po
++++ b/apps/web/src/locales/it/messages.po
+@@ -1298,6 +1298,10 @@ msgstr "Copia"
+ msgid "Copy .env example"
+ msgstr "Copia esempio .env"
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr "Copia link"
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Impossibile aggiungere"
+diff --git a/apps/web/src/locales/ko/messages.po b/apps/web/src/locales/ko/messages.po
+index f20dddf9..f68038ea 100644
+--- a/apps/web/src/locales/ko/messages.po
++++ b/apps/web/src/locales/ko/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "복사"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "추가하지 못했습니다."
+diff --git a/apps/web/src/locales/pt-BR/messages.po b/apps/web/src/locales/pt-BR/messages.po
+index 7974dc30..55e8b98b 100644
+--- a/apps/web/src/locales/pt-BR/messages.po
++++ b/apps/web/src/locales/pt-BR/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Copiar"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Não foi possível adicionar."
+diff --git a/apps/web/src/locales/ru/messages.po b/apps/web/src/locales/ru/messages.po
+index e01ae039..86c46c9e 100644
+--- a/apps/web/src/locales/ru/messages.po
++++ b/apps/web/src/locales/ru/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Копировать"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Не удалось добавить"
+diff --git a/apps/web/src/locales/tr/messages.po b/apps/web/src/locales/tr/messages.po
+index c70eeecc..dd188986 100644
+--- a/apps/web/src/locales/tr/messages.po
++++ b/apps/web/src/locales/tr/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "Kopyala"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "Eklenemedi"
+diff --git a/apps/web/src/locales/zh-CN/messages.po b/apps/web/src/locales/zh-CN/messages.po
+index 0fe695d0..794556a9 100644
+--- a/apps/web/src/locales/zh-CN/messages.po
++++ b/apps/web/src/locales/zh-CN/messages.po
+@@ -1297,6 +1297,10 @@ msgstr "复制"
+ msgid "Copy .env example"
+ msgstr ""
+ 
++#: src/pages/shell/share-thread-dialog.tsx
++msgid "Copy link"
++msgstr ""
++
+ #: src/pages/ScratchpadSection.tsx
+ msgid "Could not add"
+ msgstr "无法添加"
+diff --git a/apps/web/src/pages/SharePage.tsx b/apps/web/src/pages/SharePage.tsx
+index 273670fe..93359bc8 100644
+--- a/apps/web/src/pages/SharePage.tsx
++++ b/apps/web/src/pages/SharePage.tsx
+@@ -81,7 +81,7 @@ export function SharePage() {
+ 
+   const { data } = state;
+   return (
+-    <div className="min-h-full bg-background">
++    <div className="min-h-screen bg-background">
+       <div className="mx-auto w-full max-w-[720px] px-4 py-10 md:px-6">
+         <header className="mb-6 border-b border-input pb-4">
+           <h1 className="text-[20px] font-semibold text-foreground">
+@@ -105,7 +105,7 @@ export function SharePage() {
+                   block.kind === "text" ? (
+                     <div
+                       key={blockIndex}
+-                      className="text-[14.5px] leading-relaxed text-foreground"
++                      className="break-words text-[14.5px] leading-relaxed text-foreground"
+                       dir="auto"
+                     >
+                       <ChatMarkdown>{block.text}</ChatMarkdown>
+@@ -116,7 +116,7 @@ export function SharePage() {
+                       src={shareImageUrl(token, block.artifactId)}
+                       alt={block.name}
+                       loading="lazy"
+-                      className="max-h-[420px] w-auto rounded-lg border border-input"
++                      className="max-h-[420px] max-w-full rounded-lg border border-input"
+                     />
+                   ),
+                 )}
+@@ -135,6 +135,6 @@ export function SharePage() {
+ 
+ function Centered({ children }: { children: React.ReactNode }) {
+   return (
+-    <div className="grid min-h-full place-items-center bg-background px-4">{children}</div>
++    <div className="grid min-h-screen place-items-center bg-background px-4">{children}</div>
+   );
+ }
+diff --git a/apps/web/src/pages/shell/share-thread-dialog.tsx b/apps/web/src/pages/shell/share-thread-dialog.tsx
+index c593b36f..37ec1928 100644
+--- a/apps/web/src/pages/shell/share-thread-dialog.tsx
++++ b/apps/web/src/pages/shell/share-thread-dialog.tsx
+@@ -146,6 +146,7 @@ export function ShareThreadDialog({
+         expiresInDays: expiry === "" ? undefined : Number(expiry),
+       });
+       setCreatedUrl(result.url);
++      void copy(result.url);
+       setShares(await rpc.threadShares.list({ botId }));
+     } catch (reason: unknown) {
+       setCreateError(errorText(reason, t`Could not create the share`));
+@@ -214,11 +215,16 @@ export function ShareThreadDialog({
+                 {selectable.map((message) => {
+                   const checked = selected.has(message.id);
+                   return (
+-                    <li key={message.id} className="flex items-start gap-3 px-3 py-2">
++                    <li
++                      key={message.id}
++                      className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-accent/40"
++                      onClick={() => toggle(message.id)}
++                    >
+                       <Checkbox
+                         aria-label={messagePreview(shareableBlocks(message.blocks)) || t`Message`}
+                         checked={checked}
+                         onCheckedChange={() => toggle(message.id)}
++                        onClick={(event) => event.stopPropagation()}
+                         className="mt-0.5"
+                       />
+                       <div className="min-w-0 flex-1">
+@@ -332,6 +338,16 @@ export function ShareThreadDialog({
+                       ) : null}
+                     </div>
+                   </div>
++                  <Button
++                    type="button"
++                    variant="ghost"
++                    size="sm"
++                    onClick={() => copy(`${window.location.origin}/share/${share.token}`)}
++                    className="shrink-0"
++                  >
++                    <Copy size={14} aria-hidden="true" />
++                    <Trans>Copy link</Trans>
++                  </Button>
+                   <Button
+                     type="button"
+                     variant="ghost"
+-- 
+2.55.0.windows.5
+

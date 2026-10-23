@@ -129,10 +129,10 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([{ kind: "progress", text: "Using browser", activity: true }]);
   });
 
-  it("keeps an unfinished sentence when a tool activity line replaces the live tail", () => {
+  it("keeps an unfinished sentence in one block when a tool activity line arrives", () => {
     const streamed = reduceLiveMessageBlocks([], {
       type: "progress",
-      payload: { text: "spec", streaming: true },
+      payload: { text: "Ispeziono le", streaming: true },
     });
     const running = reduceLiveMessageBlocks(streamed, {
       type: "progress",
@@ -144,13 +144,9 @@ describe("reduceLiveMessageBlocks", () => {
     });
     const continued = reduceLiveMessageBlocks(cleared, {
       type: "progress",
-      payload: { delta: "ifici lotti", streaming: true },
+      payload: { text: " prime righe", streaming: true },
     });
-    expect(
-      continued
-        .map((block) => (block.kind === "text" || block.kind === "progress" ? block.text : ""))
-        .join(""),
-    ).toBe("specifici lotti");
+    expect(continued).toEqual([{ kind: "text", text: "Ispeziono le prime righe" }]);
   });
 
   it("replaces punctuated activity text with its tool step", () => {

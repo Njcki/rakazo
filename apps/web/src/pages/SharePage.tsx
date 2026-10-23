@@ -81,8 +81,8 @@ export function SharePage() {
 
   const { data } = state;
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto w-full max-w-[720px] px-4 py-10 md:px-6">
+    <div className="min-h-screen overflow-x-clip bg-background">
+      <div className="mx-auto w-full min-w-0 max-w-[720px] px-4 py-10 md:px-6">
         <header className="mb-6 border-b border-input pb-4">
           <h1 className="text-[20px] font-semibold text-foreground">
             {data.title ?? data.botName}
@@ -96,30 +96,38 @@ export function SharePage() {
 
         <ol className="flex flex-col gap-4">
           {data.messages.map((message, index) => (
-            <li key={index} className="flex flex-col gap-1.5">
+            <li key={index} className="flex min-w-0 flex-col gap-1.5">
               <span className="text-[12px] font-medium text-muted-foreground">
                 {message.authorName}
               </span>
-              <div className="flex flex-col gap-2">
-                {message.blocks.map((block, blockIndex) =>
-                  block.kind === "text" ? (
-                    <div
-                      key={blockIndex}
-                      className="break-words text-[14.5px] leading-relaxed text-foreground"
-                      dir="auto"
-                    >
-                      <ChatMarkdown>{block.text}</ChatMarkdown>
-                    </div>
-                  ) : (
-                    <img
-                      key={blockIndex}
-                      src={shareImageUrl(token, block.artifactId)}
-                      alt={block.name}
-                      loading="lazy"
-                      className="max-h-[420px] max-w-full rounded-lg border border-input"
-                    />
-                  ),
-                )}
+              <div
+                className={
+                  message.role === "user"
+                    ? "min-w-0 rounded-[20px] bg-chat-user px-[18px] py-3 text-chat-user-foreground"
+                    : "min-w-0 rounded-[20px] bg-muted px-[18px] py-3 text-foreground/90"
+                }
+              >
+                <div className="flex flex-col gap-2">
+                  {message.blocks.map((block, blockIndex) =>
+                    block.kind === "text" ? (
+                      <div
+                        key={blockIndex}
+                        className="break-words text-[14.5px] leading-relaxed"
+                        dir="auto"
+                      >
+                        <ChatMarkdown>{block.text}</ChatMarkdown>
+                      </div>
+                    ) : (
+                      <img
+                        key={blockIndex}
+                        src={shareImageUrl(token, block.artifactId)}
+                        alt={block.name}
+                        loading="lazy"
+                        className="max-h-[420px] max-w-full rounded-lg border border-input"
+                      />
+                    ),
+                  )}
+                </div>
               </div>
             </li>
           ))}

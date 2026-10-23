@@ -112,6 +112,7 @@ import {
 import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
+import { loadPublicShare, loadPublicShareImage } from "./thread-shares.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
 import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
@@ -623,6 +624,29 @@ export async function createApp(
   }
   mountApiRequestBodyLimits(app);
   mountScreenTarget(app, prisma, env.screenProxySecret);
+  // Public, token-scoped share views: no session required. The token is the
+  // only credential, and the snapshot is frozen at share-creation time.
+  app.get("/api/share/:token", async (c) => {
+    const share = await loadPublicShare({ prisma }, c.req.param("token"));
+    if (!share) return c.json({ error: "Not found" }, 404);
+    return c.json(share);
+  });
+  app.get("/api/share/:token/image/:artifactId", async (c) => {
+    const image = await loadPublicShareImage(
+      { prisma, artifacts },
+      c.req.param("token"),
+      c.req.param("artifactId"),
+    );
+    if (!image) return c.json({ error: "Not found" }, 404);
+    // The store returns a generic Uint8Array; the DOM BodyInit wants a concrete buffer.
+    return new Response(image.bytes as BodyInit, {
+      status: 200,
+      headers: {
+        "content-type": image.mimeType,
+        "cache-control": "no-store",
+      },
+    });
+  });
   app.on(["GET", "POST"], "/api/auth/*", async (c) => {
     const path = new URL(c.req.url).pathname.replace("/api/auth", "");
     if (isBlockedAuthPath(path)) {

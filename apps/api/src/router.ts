@@ -264,6 +264,12 @@ import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
+import {
+  createThreadShare,
+  listThreadShares,
+  removeThreadShare,
+  revokeThreadShare,
+} from "./thread-shares.js";
 import type { UpdaterProxyConfig } from "./server-update.js";
 import {
   applyServerUpdate,
@@ -2483,6 +2489,20 @@ export function createRouter(deps: RouterDeps) {
         await setThreadUnreadState(deps.prisma, context.actor, target, true);
         return { ok: true as const };
       }),
+    },
+    threadShares: {
+      create: authed.threadShares.create.handler(async ({ context, input }) =>
+        createThreadShare({ ...deps, webOrigin: deps.env.webOrigin }, context.actor, input),
+      ),
+      list: authed.threadShares.list.handler(async ({ context, input }) =>
+        listThreadShares(deps, context.actor, input),
+      ),
+      revoke: authed.threadShares.revoke.handler(async ({ context, input }) =>
+        revokeThreadShare(deps, context.actor, input),
+      ),
+      remove: authed.threadShares.remove.handler(async ({ context, input }) =>
+        removeThreadShare(deps, context.actor, input),
+      ),
     },
     computer: {
       status: authed.computer.status.handler(async ({ context, input }) =>

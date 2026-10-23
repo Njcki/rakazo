@@ -273,9 +273,10 @@ export function reduceLiveMessageBlocks(
       },
     ];
   }
+  const lastSegment = segments.at(-1);
   const carriedSentence =
-    tail?.kind === "progress" && tail.activity && segments.at(-1)?.kind === "text"
-      ? segments.at(-1).text
+    tail?.kind === "progress" && tail.activity && lastSegment?.kind === "text"
+      ? lastSegment.text
       : "";
   const incoming =
     update.type === "progress"

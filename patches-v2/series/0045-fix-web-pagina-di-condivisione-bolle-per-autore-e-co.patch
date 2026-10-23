@@ -1,0 +1,178 @@
+From 9d65fd18c5ba2cb17169adc6d41053966f60a44d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 17:29:16 +0200
+Subject: [PATCH] fix(web): pagina di condivisione: bolle per autore e
+ contenimento; dialog: scadenza a pulsanti e no selezione testo / share page:
+ author bubbles and containment; dialog: expiry buttons and no text selection
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT:
+- Pagina di condivisione: i messaggi sono ora in bolle con colori leggermente diversi per autore (utente: bg-chat-user, bot: bg-muted), coerenti con la chat principale; il nome dell'autore resta sopra la bolla.
+- Contenimento orizzontale: overflow-x-clip sulla root della pagina e min-w-0 su colonna, messaggi e bolle, così il contenuto non può più sbordare in orizzontale dalla schermata.
+- Dialog di condivisione: la scadenza del link è ora un gruppo di 4 pulsanti (Nessuna scadenza / Dopo 7/30/90 giorni) con il valore selezionato evidenziato (sfondo accent + bordo + testo pieno), visibile a colpo d'occhio.
+- Le righe dei messaggi nel dialog hanno select-none: cliccando più volte velocemente sul testo non si seleziona più il testo del browser.
+
+EN:
+- Share page: messages are now in bubbles with slightly different colors per author (user: bg-chat-user, bot: bg-muted), consistent with the main chat; the author name stays above the bubble.
+- Horizontal containment: overflow-x-clip on the page root and min-w-0 on column, messages and bubbles, so content can no longer overflow the screen horizontally.
+- Share dialog: the link expiry is now a group of 4 buttons (No expiration / After 7/30/90 days) with the selected value highlighted (accent background + border + full text), visible at a glance.
+- Message rows in the dialog have select-none: clicking quickly on the text no longer selects browser text.
+---
+ apps/web/src/pages/SharePage.tsx              | 54 +++++++++++--------
+ .../src/pages/shell/share-thread-dialog.tsx   | 39 +++++++-------
+ 2 files changed, 52 insertions(+), 41 deletions(-)
+
+diff --git a/apps/web/src/pages/SharePage.tsx b/apps/web/src/pages/SharePage.tsx
+index 93359bc8..a536f53a 100644
+--- a/apps/web/src/pages/SharePage.tsx
++++ b/apps/web/src/pages/SharePage.tsx
+@@ -81,8 +81,8 @@ export function SharePage() {
+ 
+   const { data } = state;
+   return (
+-    <div className="min-h-screen bg-background">
+-      <div className="mx-auto w-full max-w-[720px] px-4 py-10 md:px-6">
++    <div className="min-h-screen overflow-x-clip bg-background">
++      <div className="mx-auto w-full min-w-0 max-w-[720px] px-4 py-10 md:px-6">
+         <header className="mb-6 border-b border-input pb-4">
+           <h1 className="text-[20px] font-semibold text-foreground">
+             {data.title ?? data.botName}
+@@ -96,30 +96,38 @@ export function SharePage() {
+ 
+         <ol className="flex flex-col gap-4">
+           {data.messages.map((message, index) => (
+-            <li key={index} className="flex flex-col gap-1.5">
++            <li key={index} className="flex min-w-0 flex-col gap-1.5">
+               <span className="text-[12px] font-medium text-muted-foreground">
+                 {message.authorName}
+               </span>
+-              <div className="flex flex-col gap-2">
+-                {message.blocks.map((block, blockIndex) =>
+-                  block.kind === "text" ? (
+-                    <div
+-                      key={blockIndex}
+-                      className="break-words text-[14.5px] leading-relaxed text-foreground"
+-                      dir="auto"
+-                    >
+-                      <ChatMarkdown>{block.text}</ChatMarkdown>
+-                    </div>
+-                  ) : (
+-                    <img
+-                      key={blockIndex}
+-                      src={shareImageUrl(token, block.artifactId)}
+-                      alt={block.name}
+-                      loading="lazy"
+-                      className="max-h-[420px] max-w-full rounded-lg border border-input"
+-                    />
+-                  ),
+-                )}
++              <div
++                className={
++                  message.role === "user"
++                    ? "min-w-0 rounded-[20px] bg-chat-user px-[18px] py-3 text-chat-user-foreground"
++                    : "min-w-0 rounded-[20px] bg-muted px-[18px] py-3 text-foreground/90"
++                }
++              >
++                <div className="flex flex-col gap-2">
++                  {message.blocks.map((block, blockIndex) =>
++                    block.kind === "text" ? (
++                      <div
++                        key={blockIndex}
++                        className="break-words text-[14.5px] leading-relaxed"
++                        dir="auto"
++                      >
++                        <ChatMarkdown>{block.text}</ChatMarkdown>
++                      </div>
++                    ) : (
++                      <img
++                        key={blockIndex}
++                        src={shareImageUrl(token, block.artifactId)}
++                        alt={block.name}
++                        loading="lazy"
++                        className="max-h-[420px] max-w-full rounded-lg border border-input"
++                      />
++                    ),
++                  )}
++                </div>
+               </div>
+             </li>
+           ))}
+diff --git a/apps/web/src/pages/shell/share-thread-dialog.tsx b/apps/web/src/pages/shell/share-thread-dialog.tsx
+index 37ec1928..e48ad719 100644
+--- a/apps/web/src/pages/shell/share-thread-dialog.tsx
++++ b/apps/web/src/pages/shell/share-thread-dialog.tsx
+@@ -12,11 +12,6 @@ import {
+   Input,
+   Label,
+   ScrollArea,
+-  Select,
+-  SelectContent,
+-  SelectItem,
+-  SelectTrigger,
+-  SelectValue,
+   Separator,
+   Spinner,
+ } from "@rakazo/ui-web";
+@@ -217,7 +212,7 @@ export function ShareThreadDialog({
+                   return (
+                     <li
+                       key={message.id}
+-                      className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-accent/40"
++                      className="flex cursor-pointer select-none items-start gap-3 px-3 py-2 hover:bg-accent/40"
+                       onClick={() => toggle(message.id)}
+                     >
+                       <Checkbox
+@@ -246,7 +241,7 @@ export function ShareThreadDialog({
+               </ul>
+             </ScrollArea>
+ 
+-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
++            <div className="grid gap-3">
+               <div className="grid gap-1.5">
+                 <Label htmlFor="share-title" className="text-[13px] text-muted-foreground">
+                   <Trans>Title (optional)</Trans>
+@@ -263,20 +258,28 @@ export function ShareThreadDialog({
+                 <Label className="text-[13px] text-muted-foreground">
+                   <Trans>Link expires</Trans>
+                 </Label>
+-                <Select value={expiry} onValueChange={(value) => setExpiry(String(value ?? ""))}>
+-                  <SelectTrigger className="w-full" aria-label={t`Link expires`}>
+-                    <SelectValue />
+-                  </SelectTrigger>
+-                  <SelectContent>
+-                    {EXPIRY_OPTIONS.map((option) => (
+-                      <SelectItem key={option.value} value={option.value}>
++                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
++                  {EXPIRY_OPTIONS.map((option) => {
++                    const active = expiry === option.value;
++                    return (
++                      <button
++                        key={option.value}
++                        type="button"
++                        aria-pressed={active}
++                        onClick={() => setExpiry(option.value)}
++                        className={
++                          active
++                            ? "rounded-lg border border-input bg-accent px-2 py-1.5 text-[13px] font-medium text-foreground"
++                            : "rounded-lg border border-transparent px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent/40 hover:text-foreground"
++                        }
++                      >
+                         {option.value === ""
+                           ? t`No expiration`
+                           : t`After ${option.value} days`}
+-                      </SelectItem>
+-                    ))}
+-                  </SelectContent>
+-                </Select>
++                      </button>
++                    );
++                  })}
++                </div>
+               </div>
+             </div>
+ 
+-- 
+2.55.0.windows.5
+

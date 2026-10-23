@@ -465,7 +465,9 @@ export function voiceCallThinkingLevel(
 ): AgentRunRequest["model"]["thinkingLevel"] | null {
   if (!modelSupportsReasoning) return null;
   const raw = botLevel ?? userLevel ?? "low";
-  return (VOICE_THINKING_LEVELS.includes(raw) ? raw : "low") as AgentRunRequest["model"]["thinkingLevel"];
+  return (
+    VOICE_THINKING_LEVELS.includes(raw) ? raw : "low"
+  ) as AgentRunRequest["model"]["thinkingLevel"];
 }
 const MAX_MODEL_FILE_BYTES = 250_000;
 const TURN_ATTACHMENT_UNAVAILABLE =
@@ -4094,18 +4096,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const publishMidTurnNarration = async () => {
           const extracted = extractNarrationText(messageSegments, currentTextSegment);
           const narration = clampMidTurnNarration(redactSecrets(extracted.text, runSecrets));
-          messageSegments = extracted.remaining;
-          currentTextSegment = "";
           if (!narration) return;
-          assembled = "";
-          hasStreamedText = false;
-          pendingProgress = "";
           if (!runPromotesMidTurnNarration(run.trigger)) {
             discardedMidTurnNarration = true;
             return;
           }
           // Patch 0028: narration right after the previous chat message stays a
           // live progress line instead of one more chat bubble per tool call.
+          // Leaving it there also keeps the sentence intact when a tool starts mid-word.
           if (
             !shouldPromoteNarration({
               now: Date.now(),
@@ -4117,6 +4115,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             discardedMidTurnNarration = true;
             return;
           }
+          messageSegments = extracted.remaining;
+          currentTextSegment = "";
+          assembled = "";
+          hasStreamedText = false;
+          pendingProgress = "";
           await publishMessage(
             deps,
             run,
@@ -6742,7 +6745,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
           maxTokens: resolved.maxTokens,
           acceptsImages: resolved.acceptsImages,
           maxImagesPerPrompt: resolved.maxImagesPerPrompt,
-          thinkingLevel: voiceCall ? voiceThinkingLevel : (thinkingLevel ?? resolved.thinkingLevel ?? null),
+          thinkingLevel: voiceCall
+            ? voiceThinkingLevel
+            : (thinkingLevel ?? resolved.thinkingLevel ?? null),
           oauth: resolved.oauth
             ? {
                 credential: resolved.oauth,

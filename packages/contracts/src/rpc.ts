@@ -90,6 +90,8 @@ import {
   TeachRecordingEventSchema,
   ThinkingLevelSchema,
   ThreadMessagePageSchema,
+  ThreadSharePublicSchema,
+  ThreadShareSchema,
   ThreadSnapshotSchema,
   UpdateAgentSkillInput,
   UpdateBotInput,
@@ -415,6 +417,21 @@ export const appContract = {
       .output(z.object({ ok: z.literal(true) })),
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
+  },
+  threadShares: {
+    create: oc
+      .input(
+        z.object({
+          botId: Id,
+          messageIds: z.array(Id).min(1).max(500),
+          title: z.string().trim().min(1).max(200).optional(),
+          expiresInDays: z.number().int().min(1).max(365).optional(),
+        }),
+      )
+      .output(z.object({ token: z.string(), url: z.string() })),
+    list: oc.input(z.object({ botId: Id })).output(z.array(ThreadShareSchema)),
+    revoke: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
+    remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },
   computer: {
     status: oc.input(botId).output(ComputerStatusSchema),

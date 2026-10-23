@@ -557,9 +557,32 @@ model Thread {
   tasks                       Task[]
   runs                        Run[]
   routines                    Routine[]
+  shares                      ThreadShare[]
 
   @@index([spaceId])
   @@map("threads")
+}
+
+// A read-only, link-shareable snapshot of the messages an owner picked from a
+// 1:1 bot thread. The token is the only credential; the snapshot is frozen at
+// creation time so later edits or deletes never change what the link shows.
+model ThreadShare {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  threadId   String
+  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  spaceId    String
+  userId     String
+  title      String?
+  messageIds Json
+  snapshot   Json
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  viewCount  Int       @default(0)
+
+  @@index([threadId])
+  @@map("thread_shares")
 }
 
 model Message {

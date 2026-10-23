@@ -31,6 +31,7 @@ import { completeSsoCallback, SSO_CALLBACK_PATH } from "./lib/sso-flow";
 import { IntegrationSetupPage } from "./pages/IntegrationSetup";
 import { LocalSettingsPage } from "./pages/LocalSettings";
 import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
+import { SharePage } from "./pages/SharePage";
 import { ShellPage } from "./pages/Shell";
 
 const AuthPage = lazy(() =>
@@ -78,6 +79,8 @@ export function App() {
             <SsoCallbackPage />
           ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
             <LocalSettingsPage />
+          ) : window.location.pathname.startsWith("/share/") ? (
+            <SharePage />
           ) : (
             <SessionApp />
           )}

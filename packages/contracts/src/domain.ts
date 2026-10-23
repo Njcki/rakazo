@@ -8,7 +8,7 @@ import {
   isCloudflareAiGatewayProvider,
 } from "./cloudflare-ai-gateway.js";
 import { ThreadMessageSchema } from "./events.js";
-import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { Id, IsoDate, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { RunTriggerSchema } from "./runs.js";
 
@@ -1005,6 +1005,44 @@ export const ThreadSnapshotSchema = z.object({
   computer: ComputerStatusSchema.optional(),
 });
 export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
+
+/** A share the owner created for a 1:1 bot thread, as the owner sees it. */
+export const ThreadShareSchema = z.object({
+  id: Id,
+  token: z.string(),
+  threadId: Id,
+  title: z.string().nullable(),
+  messageCount: z.number().int().nonnegative(),
+  createdAt: IsoDate,
+  expiresAt: IsoDate.nullable(),
+  revokedAt: IsoDate.nullable(),
+  viewCount: z.number().int().nonnegative(),
+});
+export type ThreadShare = z.infer<typeof ThreadShareSchema>;
+
+/** The only block kinds that leave the instance in a public share. */
+export const SharedMessageBlock = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({ kind: z.literal("image"), artifactId: Id, mimeType: z.string(), name: z.string() }),
+]);
+export type SharedMessageBlock = z.infer<typeof SharedMessageBlock>;
+
+export const SharedMessageSchema = z.object({
+  role: z.string(),
+  authorName: z.string(),
+  blocks: z.array(SharedMessageBlock),
+  createdAt: IsoDate,
+});
+export type SharedMessage = z.infer<typeof SharedMessageSchema>;
+
+/** What an unauthenticated viewer receives for a share token. */
+export const ThreadSharePublicSchema = z.object({
+  title: z.string().nullable(),
+  botName: z.string(),
+  sharedAt: IsoDate,
+  messages: z.array(SharedMessageSchema),
+});
+export type ThreadSharePublic = z.infer<typeof ThreadSharePublicSchema>;
 
 /** Default maximum number of completion tokens for an OpenAI-compatible connection. */
 export const DEFAULT_MODEL_MAX_TOKENS = 4_096;

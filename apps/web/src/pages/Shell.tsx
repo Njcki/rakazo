@@ -112,6 +112,7 @@ import {
   Reply,
   Search,
   Settings,
+  Share2,
   Smile,
   Square,
   SquareKanban,
@@ -292,6 +293,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { commitSpaceRename, sidebarGroupsForSpaces } from "./shell/space-sidebar";
+import { ShareThreadDialog } from "./shell/share-thread-dialog";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazyOverlay(() =>
@@ -567,6 +569,7 @@ export function ShellPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
   const [messagingProviders, setMessagingProviders] = useState<string[]>([]);
   const [memoryProviderConfig, setMemoryProviderConfig] = useState<
@@ -3654,22 +3657,33 @@ export function ShellPage() {
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (
-              <button
-                type="button"
-                title={t`Agent computer`}
-                onClick={() => {
-                  const next = panel === "computer" ? null : "computer";
-                  setPanel(next);
-                  if (next === "computer" && active) {
-                    // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                    void refreshThread(active.id).catch(() => undefined);
-                  }
-                }}
-                data-active={panel === "computer" ? "" : undefined}
-                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-              >
-                <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  title={t`Share conversation`}
+                  aria-label={t`Share conversation`}
+                  onClick={() => setShareDialogOpen(true)}
+                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent"
+                >
+                  <Share2 size={18} strokeWidth={1.6} className="text-foreground/75" />
+                </button>
+                <button
+                  type="button"
+                  title={t`Agent computer`}
+                  onClick={() => {
+                    const next = panel === "computer" ? null : "computer";
+                    setPanel(next);
+                    if (next === "computer" && active) {
+                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                      void refreshThread(active.id).catch(() => undefined);
+                    }
+                  }}
+                  data-active={panel === "computer" ? "" : undefined}
+                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
+                >
+                  <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
+                </button>
+              </>
             ) : null}
           </div>
         </div>
@@ -4683,6 +4697,14 @@ export function ShellPage() {
           />
         ) : null}
       </Suspense>
+
+      {shareDialogOpen && active ? (
+        <ShareThreadDialog
+          botId={active.id}
+          botName={active.name}
+          onClose={() => setShareDialogOpen(false)}
+        />
+      ) : null}
 
       {booting ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-background/95">

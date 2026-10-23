@@ -1,0 +1,165 @@
+From f098cbc37198312151dd4c2b50d1e8a82943245d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 04:24:47 +0200
+Subject: [PATCH] fix(chat): non tagliare la frase quando parte uno strumento /
+ don't cut a sentence when a tool starts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: la riga di attività del tool cancellava la frase a metà parola e il seguito ricominciava da lì. La frase resta, e il pezzo dopo si attacca.
+
+EN: the tool activity line erased a mid-word sentence and the rest came back as a new start. The sentence stays, and the following piece is appended.
+---
+ packages/adapters/src/executor.ts | 19 ++++++++++-------
+ packages/core/src/events.test.ts  | 24 +++++++++++++++++++++
+ packages/core/src/events.ts       | 35 ++++++++++++++++++++++++++++++-
+ 3 files changed, 70 insertions(+), 8 deletions(-)
+
+diff --git a/packages/adapters/src/executor.ts b/packages/adapters/src/executor.ts
+index bbc6128f..4b5faa0e 100644
+--- a/packages/adapters/src/executor.ts
++++ b/packages/adapters/src/executor.ts
+@@ -465,7 +465,9 @@ export function voiceCallThinkingLevel(
+ ): AgentRunRequest["model"]["thinkingLevel"] | null {
+   if (!modelSupportsReasoning) return null;
+   const raw = botLevel ?? userLevel ?? "low";
+-  return (VOICE_THINKING_LEVELS.includes(raw) ? raw : "low") as AgentRunRequest["model"]["thinkingLevel"];
++  return (
++    VOICE_THINKING_LEVELS.includes(raw) ? raw : "low"
++  ) as AgentRunRequest["model"]["thinkingLevel"];
+ }
+ const MAX_MODEL_FILE_BYTES = 250_000;
+ const TURN_ATTACHMENT_UNAVAILABLE =
+@@ -4094,18 +4096,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
+         const publishMidTurnNarration = async () => {
+           const extracted = extractNarrationText(messageSegments, currentTextSegment);
+           const narration = clampMidTurnNarration(redactSecrets(extracted.text, runSecrets));
+-          messageSegments = extracted.remaining;
+-          currentTextSegment = "";
+           if (!narration) return;
+-          assembled = "";
+-          hasStreamedText = false;
+-          pendingProgress = "";
+           if (!runPromotesMidTurnNarration(run.trigger)) {
+             discardedMidTurnNarration = true;
+             return;
+           }
+           // Patch 0028: narration right after the previous chat message stays a
+           // live progress line instead of one more chat bubble per tool call.
++          // Leaving it there also keeps the sentence intact when a tool starts mid-word.
+           if (
+             !shouldPromoteNarration({
+               now: Date.now(),
+@@ -4117,6 +4115,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
+             discardedMidTurnNarration = true;
+             return;
+           }
++          messageSegments = extracted.remaining;
++          currentTextSegment = "";
++          assembled = "";
++          hasStreamedText = false;
++          pendingProgress = "";
+           await publishMessage(
+             deps,
+             run,
+@@ -6742,7 +6745,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
+           maxTokens: resolved.maxTokens,
+           acceptsImages: resolved.acceptsImages,
+           maxImagesPerPrompt: resolved.maxImagesPerPrompt,
+-          thinkingLevel: voiceCall ? voiceThinkingLevel : (thinkingLevel ?? resolved.thinkingLevel ?? null),
++          thinkingLevel: voiceCall
++            ? voiceThinkingLevel
++            : (thinkingLevel ?? resolved.thinkingLevel ?? null),
+           oauth: resolved.oauth
+             ? {
+                 credential: resolved.oauth,
+diff --git a/packages/core/src/events.test.ts b/packages/core/src/events.test.ts
+index 46efc4f7..6c4da3aa 100644
+--- a/packages/core/src/events.test.ts
++++ b/packages/core/src/events.test.ts
+@@ -129,6 +129,30 @@ describe("reduceLiveMessageBlocks", () => {
+     ).toEqual([{ kind: "progress", text: "Using browser", activity: true }]);
+   });
+ 
++  it("keeps an unfinished sentence when a tool activity line replaces the live tail", () => {
++    const streamed = reduceLiveMessageBlocks([], {
++      type: "progress",
++      payload: { text: "spec", streaming: true },
++    });
++    const running = reduceLiveMessageBlocks(streamed, {
++      type: "progress",
++      payload: { text: "Running: python", activity: true },
++    });
++    const cleared = reduceLiveMessageBlocks(running, {
++      type: "progress",
++      payload: { text: "", activity: true },
++    });
++    const continued = reduceLiveMessageBlocks(cleared, {
++      type: "progress",
++      payload: { delta: "ifici lotti", streaming: true },
++    });
++    expect(
++      continued
++        .map((block) => (block.kind === "text" || block.kind === "progress" ? block.text : ""))
++        .join(""),
++    ).toBe("specifici lotti");
++  });
++
+   it("replaces punctuated activity text with its tool step", () => {
+     const activity = reduceLiveMessageBlocks([], {
+       type: "progress",
+diff --git a/packages/core/src/events.ts b/packages/core/src/events.ts
+index 561c4a3b..7729ca24 100644
+--- a/packages/core/src/events.ts
++++ b/packages/core/src/events.ts
+@@ -246,12 +246,45 @@ export function reduceLiveMessageBlocks(
+ ): MessageBlock[] {
+   const tail = blocks.at(-1);
+   const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
++  // An activity line ("Running: …") is a status, not the sentence the model was writing.
++  // Keep that unfinished sentence, or the next tokens resume it from the middle of a word.
++  if (
++    update.type === "progress" &&
++    update.payload?.activity === true &&
++    tail?.kind === "progress" &&
++    !tail.activity &&
++    tail.text
++  ) {
++    const pending = [...(tail.pendingToolNames ?? [])];
++    const kept = appendTextSegment(segments, tail.text);
++    const activityText = String(update.payload.text ?? "");
++    if (!activityText) {
++      return pending.length > 0
++        ? [...kept, { kind: "progress", text: "", pendingToolNames: pending }]
++        : kept;
++    }
++    return [
++      ...kept,
++      {
++        kind: "progress",
++        text: activityText,
++        activity: true as const,
++        ...(pending.length > 0 ? { pendingToolNames: pending } : {}),
++      },
++    ];
++  }
+   const priorText = liveMessageText(blocks);
+   const flushedLength =
+     tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
++  const progressText =
++    update.type === "progress" ? progressMessageText(update.payload, priorText) : "";
++  // A delta is the full text so far, so drop what was already committed. A `text`
++  // payload is only the new progress tail; slicing it by the old length cuts a word.
+   const tailText =
+     update.type === "progress"
+-      ? progressMessageText(update.payload, priorText).slice(flushedLength)
++      ? typeof update.payload?.delta === "string"
++        ? progressText.slice(flushedLength)
++        : progressText
+       : tail?.kind === "progress"
+         ? tail.text
+         : "";
+-- 
+2.55.0.windows.5
+

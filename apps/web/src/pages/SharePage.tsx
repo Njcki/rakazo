@@ -81,7 +81,7 @@ export function SharePage() {
 
   const { data } = state;
   return (
-    <div className="min-h-full bg-background">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto w-full max-w-[720px] px-4 py-10 md:px-6">
         <header className="mb-6 border-b border-input pb-4">
           <h1 className="text-[20px] font-semibold text-foreground">
@@ -105,7 +105,7 @@ export function SharePage() {
                   block.kind === "text" ? (
                     <div
                       key={blockIndex}
-                      className="text-[14.5px] leading-relaxed text-foreground"
+                      className="break-words text-[14.5px] leading-relaxed text-foreground"
                       dir="auto"
                     >
                       <ChatMarkdown>{block.text}</ChatMarkdown>
@@ -116,7 +116,7 @@ export function SharePage() {
                       src={shareImageUrl(token, block.artifactId)}
                       alt={block.name}
                       loading="lazy"
-                      className="max-h-[420px] w-auto rounded-lg border border-input"
+                      className="max-h-[420px] max-w-full rounded-lg border border-input"
                     />
                   ),
                 )}
@@ -135,6 +135,6 @@ export function SharePage() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid min-h-full place-items-center bg-background px-4">{children}</div>
+    <div className="grid min-h-screen place-items-center bg-background px-4">{children}</div>
   );
 }

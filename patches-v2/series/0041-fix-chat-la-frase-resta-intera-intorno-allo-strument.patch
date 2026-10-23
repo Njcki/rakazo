@@ -1,0 +1,136 @@
+From 53014d22783c32cdb5b5a827d759345af59ae642 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 04:41:11 +0200
+Subject: [PATCH] fix(chat): la frase resta intera intorno allo strumento /
+ keep the sentence whole around a tool
+
+IT: il chip Shell finiva in mezzo alla frase. La frase parcheggiata si allunga nello stesso blocco e il chip compare solo a fine periodo.
+
+EN: the Shell chip was landing in the middle of a sentence. The parked sentence grows in the same block, and the chip appears only when the sentence ends.
+---
+ packages/core/src/events.test.ts | 12 +++-----
+ packages/core/src/events.ts      | 51 +++++++++++++++++++++++++++++---
+ 2 files changed, 51 insertions(+), 12 deletions(-)
+
+diff --git a/packages/core/src/events.test.ts b/packages/core/src/events.test.ts
+index 6c4da3aa..a7b7f8de 100644
+--- a/packages/core/src/events.test.ts
++++ b/packages/core/src/events.test.ts
+@@ -129,10 +129,10 @@ describe("reduceLiveMessageBlocks", () => {
+     ).toEqual([{ kind: "progress", text: "Using browser", activity: true }]);
+   });
+ 
+-  it("keeps an unfinished sentence when a tool activity line replaces the live tail", () => {
++  it("keeps an unfinished sentence in one block when a tool activity line arrives", () => {
+     const streamed = reduceLiveMessageBlocks([], {
+       type: "progress",
+-      payload: { text: "spec", streaming: true },
++      payload: { text: "Ispeziono le", streaming: true },
+     });
+     const running = reduceLiveMessageBlocks(streamed, {
+       type: "progress",
+@@ -144,13 +144,9 @@ describe("reduceLiveMessageBlocks", () => {
+     });
+     const continued = reduceLiveMessageBlocks(cleared, {
+       type: "progress",
+-      payload: { delta: "ifici lotti", streaming: true },
++      payload: { text: " prime righe", streaming: true },
+     });
+-    expect(
+-      continued
+-        .map((block) => (block.kind === "text" || block.kind === "progress" ? block.text : ""))
+-        .join(""),
+-    ).toBe("specifici lotti");
++    expect(continued).toEqual([{ kind: "text", text: "Ispeziono le prime righe" }]);
+   });
+ 
+   it("replaces punctuated activity text with its tool step", () => {
+diff --git a/packages/core/src/events.ts b/packages/core/src/events.ts
+index 7729ca24..4363ac28 100644
+--- a/packages/core/src/events.ts
++++ b/packages/core/src/events.ts
+@@ -246,8 +246,8 @@ export function reduceLiveMessageBlocks(
+ ): MessageBlock[] {
+   const tail = blocks.at(-1);
+   const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
+-  // An activity line ("Running: …") is a status, not the sentence the model was writing.
+-  // Keep that unfinished sentence, or the next tokens resume it from the middle of a word.
++  // "Running: …" is a status line. Park the unfinished sentence beside it so the
++  // next tokens can extend that sentence instead of starting a new fragment.
+   if (
+     update.type === "progress" &&
+     update.payload?.activity === true &&
+@@ -273,18 +273,52 @@ export function reduceLiveMessageBlocks(
+       },
+     ];
+   }
++  const carriedSentence =
++    tail?.kind === "progress" && tail.activity && segments.at(-1)?.kind === "text"
++      ? segments.at(-1).text
++      : "";
++  const incoming =
++    update.type === "progress"
++      ? typeof update.payload?.delta === "string"
++        ? update.payload.delta
++        : typeof update.payload?.text === "string" && update.payload.activity !== true
++          ? update.payload.text
++          : ""
++      : "";
++  if (carriedSentence && incoming && !endsSentence(carriedSentence)) {
++    const extended = appendTextSegment(segments.slice(0, -1), carriedSentence + incoming);
++    const pending = [...(tail?.kind === "progress" ? (tail.pendingToolNames ?? []) : [])];
++    return pending.length > 0
++      ? [...extended, { kind: "progress", text: "", pendingToolNames: pending }]
++      : extended;
++  }
+   const priorText = liveMessageText(blocks);
+   const flushedLength =
+     tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
+   const progressText =
+     update.type === "progress" ? progressMessageText(update.payload, priorText) : "";
++  const rawText =
++    update.type === "progress" && typeof update.payload?.text === "string"
++      ? update.payload.text
++      : undefined;
++  const liveSentence = tail?.kind === "progress" && !tail.activity ? tail.text : "";
++  const continuation =
++    update.type === "progress" &&
++    update.payload?.activity !== true &&
++    rawText !== undefined &&
++    liveSentence.length > 0 &&
++    !rawText.startsWith(liveSentence) &&
++    !endsSentence(liveSentence);
+   // A delta is the full text so far, so drop what was already committed. A `text`
+-  // payload is only the new progress tail; slicing it by the old length cuts a word.
++  // payload is only the new progress tail. Mid-sentence, that tail is the rest of
++  // the word, so append it instead of slicing the word in half.
+   const tailText =
+     update.type === "progress"
+       ? typeof update.payload?.delta === "string"
+         ? progressText.slice(flushedLength)
+-        : progressText
++        : continuation
++          ? liveSentence + rawText
++          : progressText
+       : tail?.kind === "progress"
+         ? tail.text
+         : "";
+@@ -303,6 +337,15 @@ export function reduceLiveMessageBlocks(
+     return next;
+   }
+   if (!tailText) return [...segments];
++  const unfinished = segments.at(-1);
++  if (
++    !activity &&
++    unfinished?.kind === "text" &&
++    !endsSentence(unfinished.text) &&
++    pendingToolNames.length === 0
++  ) {
++    return appendTextSegment(segments, tailText);
++  }
+   return [
+     ...segments,
+     {
+-- 
+2.55.0.windows.5
+

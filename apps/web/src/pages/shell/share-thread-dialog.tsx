@@ -39,6 +39,31 @@ function messagePreview(blocks: MessageBlock[]): string {
   return "";
 }
 
+/** Per-bot memory of the messages the owner excluded from sharing. */
+function excludedKey(botId: string): string {
+  return `rakazo-share-excluded:${botId}`;
+}
+
+function loadExcluded(botId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(excludedKey(botId));
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveExcluded(botId: string, excluded: Set<string>): void {
+  try {
+    localStorage.setItem(excludedKey(botId), JSON.stringify([...excluded]));
+  } catch {
+    // Storage unavailable (e.g. private mode); the preference simply won't persist.
+  }
+}
+
 const EXPIRY_OPTIONS = [
   { value: "", label: "no-expiry" },
   { value: "7", label: "7-days" },
@@ -63,6 +88,7 @@ export function ShareThreadDialog({
   const [messages, setMessages] = useState<ThreadMessage[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   const [expiry, setExpiry] = useState<string>("");
   const [creating, setCreating] = useState(false);
@@ -85,11 +111,19 @@ export function ShareThreadDialog({
 
   useEffect(() => {
     let cancelled = false;
+    const remembered = loadExcluded(botId);
+    setExcluded(remembered);
     void loadAll()
       .then((all) => {
         if (cancelled) return;
         setMessages(all);
-        setSelected(new Set(all.filter((m) => shareableBlocks(m.blocks).length > 0).map((m) => m.id)));
+        setSelected(
+          new Set(
+            all
+              .filter((m) => shareableBlocks(m.blocks).length > 0 && !remembered.has(m.id))
+              .map((m) => m.id),
+          ),
+        );
       })
       .catch((reason: unknown) => {
         if (!cancelled) setLoadError(errorText(reason, t`Could not load messages`));
@@ -108,12 +142,16 @@ export function ShareThreadDialog({
   }, [botId, loadAll, t]);
 
   const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    const isSelected = selected.has(id);
+    const nextSelected = new Set(selected);
+    if (isSelected) nextSelected.delete(id);
+    else nextSelected.add(id);
+    const nextExcluded = new Set(excluded);
+    if (isSelected) nextExcluded.add(id);
+    else nextExcluded.delete(id);
+    setSelected(nextSelected);
+    setExcluded(nextExcluded);
+    saveExcluded(botId, nextExcluded);
   };
 
   const selectable = useMemo(
@@ -123,7 +161,15 @@ export function ShareThreadDialog({
   const allSelected = selectable.length > 0 && selectable.every((m) => selected.has(m.id));
 
   const setAll = (value: boolean) => {
-    setSelected(value ? new Set(selectable.map((m) => m.id)) : new Set());
+    const nextSelected: Set<string> = value
+      ? new Set(selectable.map((m) => m.id))
+      : new Set();
+    const nextExcluded: Set<string> = value
+      ? new Set()
+      : new Set(selectable.map((m) => m.id));
+    setSelected(nextSelected);
+    setExcluded(nextExcluded);
+    saveExcluded(botId, nextExcluded);
   };
 
   const create = async () => {
@@ -152,8 +198,11 @@ export function ShareThreadDialog({
 
   const revoke = async (id: string) => {
     try {
+      const target = shares.find((s) => s.id === id);
       await rpc.threadShares.revoke({ id });
       setShares(await rpc.threadShares.list({ botId }));
+      const createdToken = createdUrl ? createdUrl.split("/").pop() : null;
+      if (createdToken && target?.token === createdToken) setCreatedUrl(null);
     } catch (reason: unknown) {
       setCreateError(errorText(reason, t`Could not revoke the share`));
     }

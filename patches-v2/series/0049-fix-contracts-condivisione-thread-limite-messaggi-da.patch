@@ -1,0 +1,44 @@
+From 48584d4ce89113f9730666ff3135ed59abdf8192 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 18:46:25 +0200
+Subject: [PATCH] fix(contracts): condivisione thread, limite messaggi da 500 a
+ 5000 / thread sharing: raise message limit from 500 to 5000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: Condividendo una conversazione lunga (es. 1235 messaggi) il dialog dava
+"Input validation failed": lo schema di `threadShares/create` limitava
+`messageIds` a 500, quindi selezionare più di 500 messaggi falliva la
+validazione oRPC. Il limite di body RPC (16 MB) è ampiamente sufficiente per
+l'array degli id, quindi il vincolo era solo quello dello schema. Alzato il
+limite da 500 a 5000: copre conversazioni molto lunghe e resta un cap sensato
+contro richieste anomale. Solo contracts (validazione condivisa da api e web).
+
+EN: Sharing a long conversation (e.g. 1235 messages) made the dialog show
+"Input validation failed": the `threadShares/create` schema capped
+`messageIds` at 500, so selecting more than 500 messages failed oRPC
+validation. The RPC body limit (16 MB) is far above the id array's size, so
+the only constraint was the schema. Raised the limit from 500 to 5000: it
+covers very long conversations and stays a sensible cap against abnormal
+requests. Contracts only (validation shared by api and web).
+---
+ packages/contracts/src/rpc.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/packages/contracts/src/rpc.ts b/packages/contracts/src/rpc.ts
+index 842bc470..c311d76c 100644
+--- a/packages/contracts/src/rpc.ts
++++ b/packages/contracts/src/rpc.ts
+@@ -423,7 +423,7 @@ export const appContract = {
+       .input(
+         z.object({
+           botId: Id,
+-          messageIds: z.array(Id).min(1).max(500),
++          messageIds: z.array(Id).min(1).max(5000),
+           title: z.string().trim().min(1).max(200).optional(),
+           expiresInDays: z.number().int().min(1).max(365).optional(),
+         }),
+-- 
+2.55.0.windows.5
+

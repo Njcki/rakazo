@@ -94,43 +94,59 @@ export function SharePage() {
           </p>
         </header>
 
-        <ol className="flex flex-col gap-4">
-          {data.messages.map((message, index) => (
-            <li key={index} className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[12px] font-medium text-muted-foreground">
-                {message.authorName}
-              </span>
-              <div
+        <ol className="flex flex-col gap-2.5">
+          {data.messages.map((message, index) => {
+            const isUser = message.role === "user";
+            return (
+              <li
+                key={index}
                 className={
-                  message.role === "user"
-                    ? "min-w-0 rounded-[20px] bg-chat-user px-[18px] py-3 text-chat-user-foreground"
-                    : "min-w-0 rounded-[20px] bg-muted px-[18px] py-3 text-foreground/90"
+                  isUser ? "flex min-w-0 justify-end" : "flex min-w-0 justify-start"
                 }
               >
-                <div className="flex flex-col gap-2">
-                  {message.blocks.map((block, blockIndex) =>
-                    block.kind === "text" ? (
-                      <div
-                        key={blockIndex}
-                        className="break-words text-[14.5px] leading-relaxed"
-                        dir="auto"
-                      >
-                        <ChatMarkdown>{block.text}</ChatMarkdown>
-                      </div>
-                    ) : (
-                      <img
-                        key={blockIndex}
-                        src={shareImageUrl(token, block.artifactId)}
-                        alt={block.name}
-                        loading="lazy"
-                        className="max-h-[420px] max-w-full rounded-lg border border-input"
-                      />
-                    ),
-                  )}
+                <div
+                  className={
+                    isUser
+                      ? "flex min-w-0 max-w-[85%] flex-col items-end gap-1"
+                      : "flex min-w-0 max-w-[85%] flex-col items-start gap-1"
+                  }
+                >
+                  <span className="px-1 text-[11.5px] font-medium text-muted-foreground">
+                    {message.authorName}
+                  </span>
+                  <div
+                    className={
+                      isUser
+                        ? "min-w-0 rounded-2xl rounded-br-md bg-chat-user px-4 py-2.5 text-chat-user-foreground"
+                        : "min-w-0 rounded-2xl rounded-bl-md bg-muted px-4 py-2.5 text-foreground/90"
+                    }
+                  >
+                    <div className="flex flex-col gap-2">
+                      {message.blocks.map((block, blockIndex) =>
+                        block.kind === "text" ? (
+                          <div
+                            key={blockIndex}
+                            className="break-words text-[14.5px] leading-relaxed"
+                            dir="auto"
+                          >
+                            <ChatMarkdown>{block.text}</ChatMarkdown>
+                          </div>
+                        ) : (
+                          <img
+                            key={blockIndex}
+                            src={shareImageUrl(token, block.artifactId)}
+                            alt={block.name}
+                            loading="lazy"
+                            className="max-h-[420px] max-w-full rounded-lg border border-input"
+                          />
+                        ),
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
 
         <footer className="mt-8 border-t border-input pt-3 text-[12px] text-muted-foreground">

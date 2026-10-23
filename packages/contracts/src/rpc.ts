@@ -423,7 +423,7 @@ export const appContract = {
       .input(
         z.object({
           botId: Id,
-          messageIds: z.array(Id).min(1).max(500),
+          messageIds: z.array(Id).min(1).max(5000),
           title: z.string().trim().min(1).max(200).optional(),
           expiresInDays: z.number().int().min(1).max(365).optional(),
         }),

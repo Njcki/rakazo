@@ -13,6 +13,7 @@ import {
   sameDocumentOrigin,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
+  separateGluedImageText,
 } from "./markdown";
 
 type Token = { type: string; attrGet(name: string): string | null; children: Token[] | null };
@@ -205,7 +206,29 @@ describe("markdownLinkDisplayParts", () => {
   });
 });
 
+describe("separateGluedImageText", () => {
+  it("splits a sentence glued onto an image URL", () => {
+    const source =
+      "https://rakazo.example/download/scritta.pngL'ambiente circostante resta visibile.";
+    expect(separateGluedImageText(source)).toBe(
+      "https://rakazo.example/download/scritta.png L'ambiente circostante resta visibile.",
+    );
+  });
+
+  it("leaves a query string on the image URL", () => {
+    expect(separateGluedImageText("https://rakazo.example/a.png?w=10 next")).toBe(
+      "https://rakazo.example/a.png?w=10 next",
+    );
+  });
+});
+
 describe("linkedImageFile", () => {
+  it("drops sentence text glued onto the path", () => {
+    expect(linkedImageFile("https://rakazo.example/download/scritta.pngL'ambiente")?.href).toBe(
+      "https://rakazo.example/download/scritta.png",
+    );
+  });
+
   it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
     expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
       href: "https://rakazo.example/download/foyer.jpg",

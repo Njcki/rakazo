@@ -1,5 +1,15 @@
 import type { MouseEvent, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -35,8 +45,8 @@ import {
   RemoteImagesContext,
   remoteImageRenders,
   remoteMarkdownImage,
-  sameDocumentOrigin,
   sanitizeMarkdownUrl,
+  separateGluedImageText,
   useLinkFavicon,
 } from "./markdown";
 import { useMarkdownLinkCopy } from "./markdown-link-prompt";
@@ -266,11 +276,12 @@ function MarkdownImage({ src = "", alt, title }: { src?: string; alt?: string; t
   const enclosingLink = useContext(InsideLinkContext);
   const loadRemote = useContext(RemoteImagesContext);
   const remote = remoteMarkdownImage(src);
-  // Bumping this redraws after a tap. Whether the image shows is read from the current URL.
   const [, setRevision] = useState(0);
   const rejectedLink = enclosingLink === "rejected";
-  if (inlineMarkdownImageSrc(src)) {
-    return <img src={src} alt={alt ?? ""} title={title} loading="lazy" />;
+  const inline = inlineMarkdownImageSrc(src);
+  if (inline) return <ChatImageFrame src={inline} alt={alt ?? ""} title={title} />;
+  if (remote && linkedImageFile(remote.href) && !rejectedLink) {
+    return <ChatImageFrame src={remote.href} alt={alt ?? ""} title={title} />;
   }
   if (remote && remoteImageRenders(remote.href, loadRemote, rejectedLink)) {
     return (
@@ -386,19 +397,107 @@ function WebsiteLink({
 }
 
 function LinkedImageFile({ href, alt }: { href: string; alt?: string }) {
-  const loadRemote = useContext(RemoteImagesContext);
-  const [, setRevision] = useState(0);
-  const image = { href, host: new URL(href).host };
-  const pageOrigin = typeof window === "undefined" ? undefined : window.location.origin;
-  if (remoteImageRenders(href, loadRemote || sameDocumentOrigin(href, pageOrigin), false)) {
-    return <img src={href} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer" />;
-  }
+  return <ChatImageFrame src={href} alt={alt ?? ""} />;
+}
+
+const LIGHTBOX_MIN_SCALE = 1;
+const LIGHTBOX_MAX_SCALE = 5;
+
+/** Thumbnail of the original image. Click opens a zoomable overlay. */
+export function ChatImageFrame({ src, alt, title }: { src: string; alt: string; title?: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <RemoteImageButton
-      image={image}
-      alt={alt}
-      onLoad={() => setRevision((revision) => revision + 1)}
-    />
+    <>
+      <button type="button" className="rk-chat-image-preview" onClick={() => setOpen(true)}>
+        <img src={src} alt={alt} title={title} loading="lazy" referrerPolicy="no-referrer" />
+      </button>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const frame = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(LIGHTBOX_MIN_SCALE);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const overlay = frame.current;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const factor = Math.exp(-event.deltaY * 0.0015);
+      setScale((current) => {
+        const next = Math.min(LIGHTBOX_MAX_SCALE, Math.max(LIGHTBOX_MIN_SCALE, current * factor));
+        if (next === LIGHTBOX_MIN_SCALE) setPan({ x: 0, y: 0 });
+        return next;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    overlay?.addEventListener("wheel", onWheel, { passive: false });
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      overlay?.removeEventListener("wheel", onWheel);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={frame}
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt || "Image"}
+      className="rk-chat-image-lightbox"
+      onClick={onClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
+    >
+      <button
+        type="button"
+        className="rk-chat-image-lightbox-close"
+        aria-label="Close image"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        ×
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        referrerPolicy="no-referrer"
+        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => {
+          if (scale <= 1) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { x: event.clientX, y: event.clientY, ox: pan.x, oy: pan.y };
+        }}
+        onPointerMove={(event) => {
+          const start = drag.current;
+          if (!start) return;
+          setPan({ x: start.ox + event.clientX - start.x, y: start.oy + event.clientY - start.y });
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+      />
+    </div>
   );
 }
 
@@ -483,7 +582,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
 }: ChatMarkdownProps) {
   const { request, dialog } = useExternalLinkConfirm();
   const source = useMemo(
-    () => normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
+    () =>
+      separateGluedImageText(
+        normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
+      ),
     [children, streaming],
   );
 

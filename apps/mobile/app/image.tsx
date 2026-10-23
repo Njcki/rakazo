@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { useEffect } from "react";
 import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
-import { ImageArtifactViewer } from "../components/image-artifact-viewer";
+import { ImageArtifactViewer, UriImageViewer } from "../components/image-artifact-viewer";
 import type { MobileArtifactTarget } from "../lib/artifact-open";
 
 function first(value: string | string[] | undefined): string {
@@ -21,8 +21,10 @@ export default function ImageScreen() {
     mimeType?: string | string[];
     botId?: string | string[];
     groupId?: string | string[];
+    uri?: string | string[];
   }>();
   const groupId = first(params.groupId);
+  const uri = first(params.uri);
 
   useEffect(() => {
     // Most attached images are landscape desktop screenshots: let this screen rotate, like the
@@ -48,6 +50,17 @@ export default function ImageScreen() {
   // The app root mounts no SafeAreaProvider; this screen hides the native header, so it
   // provides its own, seeded with the window metrics so the first frame already has the
   // right insets (a measured SafeAreaView starts at zero inside a modal presentation).
+  if (uri) {
+    return (
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <UriImageViewer
+          uri={uri}
+          name={first(params.name) || "Image"}
+          onClose={() => router.back()}
+        />
+      </SafeAreaProvider>
+    );
+  }
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ImageArtifactViewer

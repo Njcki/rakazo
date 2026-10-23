@@ -47,6 +47,7 @@ import {
   remoteImageRenders,
   remoteMarkdownImage,
   sanitizeMarkdownUrl,
+  separateGluedImageText,
   useLinkFavicon,
 } from "./markdown";
 
@@ -242,6 +243,7 @@ async function openSafeLink(url: string) {
 }
 
 const OpenLinkContext = createContext<(url: string) => void>(() => undefined);
+const OpenImageContext = createContext<((src: string, alt: string) => void) | null>(null);
 
 function useNativeLinkConfirm() {
   const appOrigin = useMarkdownLinkAppOrigin();
@@ -917,8 +919,26 @@ export function RemoteMarkdownImage({
   onLoad?: () => void;
 }) {
   const loadRemote = useContext(RemoteImagesContext);
+  const openImage = useContext(OpenImageContext);
   // Bumping this redraws after a tap. Whether the image shows is read from the current URL.
   const [, setRevision] = useState(0);
+  const raster = linkedImageFile(image.href);
+  if (raster && !rejectedLink) {
+    return (
+      <Pressable
+        accessibilityRole="imagebutton"
+        accessibilityLabel={alt || raster.host}
+        onPress={() => (openImage ? openImage(raster.href, alt || "") : undefined)}
+      >
+        <Image
+          source={{ uri: raster.href }}
+          resizeMode="contain"
+          style={layout.imagePreview}
+          accessibilityIgnoresInvertColors
+        />
+      </Pressable>
+    );
+  }
   if (remoteImageRenders(image.href, loadRemote, rejectedLink)) {
     return (
       <FitImage
@@ -1033,9 +1053,15 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   streaming = false,
   palette = darkTokens,
   colorScheme = "dark",
-}: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
+  onOpenImage,
+}: ChatMarkdownProps & {
+  palette?: ColorTokens;
+  colorScheme?: ResolvedAppearance;
+  onOpenImage?: (src: string, alt: string) => void;
+}) {
   const openLink = useNativeLinkConfirm();
   const styles = useMemo(() => markdownStyles(palette), [palette]);
+  const source = separateGluedImageText(children);
   const sharedProps = {
     colorScheme,
     markdownit: markdownParser,
@@ -1048,19 +1074,21 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   };
 
   return (
-    <OpenLinkContext.Provider value={openLink}>
-      <View style={layout.wrap}>
-        <LinkFaviconsPausedContext.Provider value={streaming}>
-          {streaming ? (
-            <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-              {children}
-            </MarkdownStream>
-          ) : (
-            <Markdown {...sharedProps}>{children}</Markdown>
-          )}
-        </LinkFaviconsPausedContext.Provider>
-      </View>
-    </OpenLinkContext.Provider>
+    <OpenImageContext.Provider value={onOpenImage ?? null}>
+      <OpenLinkContext.Provider value={openLink}>
+        <View style={layout.wrap}>
+          <LinkFaviconsPausedContext.Provider value={streaming}>
+            {streaming ? (
+              <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+                {source}
+              </MarkdownStream>
+            ) : (
+              <Markdown {...sharedProps}>{source}</Markdown>
+            )}
+          </LinkFaviconsPausedContext.Provider>
+        </View>
+      </OpenLinkContext.Provider>
+    </OpenImageContext.Provider>
   );
 });
 
@@ -1103,6 +1131,11 @@ const layout = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
+  },
+  imagePreview: {
+    width: 240,
+    height: 180,
+    borderRadius: 12,
   },
   linkIcon: {
     width: "100%",

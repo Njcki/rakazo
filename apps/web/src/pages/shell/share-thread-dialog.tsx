@@ -12,11 +12,6 @@ import {
   Input,
   Label,
   ScrollArea,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
   Separator,
   Spinner,
 } from "@rakazo/ui-web";
@@ -217,7 +212,7 @@ export function ShareThreadDialog({
                   return (
                     <li
                       key={message.id}
-                      className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-accent/40"
+                      className="flex cursor-pointer select-none items-start gap-3 px-3 py-2 hover:bg-accent/40"
                       onClick={() => toggle(message.id)}
                     >
                       <Checkbox
@@ -246,7 +241,7 @@ export function ShareThreadDialog({
               </ul>
             </ScrollArea>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid gap-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="share-title" className="text-[13px] text-muted-foreground">
                   <Trans>Title (optional)</Trans>
@@ -263,20 +258,28 @@ export function ShareThreadDialog({
                 <Label className="text-[13px] text-muted-foreground">
                   <Trans>Link expires</Trans>
                 </Label>
-                <Select value={expiry} onValueChange={(value) => setExpiry(String(value ?? ""))}>
-                  <SelectTrigger className="w-full" aria-label={t`Link expires`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {EXPIRY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                  {EXPIRY_OPTIONS.map((option) => {
+                    const active = expiry === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setExpiry(option.value)}
+                        className={
+                          active
+                            ? "rounded-lg border border-input bg-accent px-2 py-1.5 text-[13px] font-medium text-foreground"
+                            : "rounded-lg border border-transparent px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent/40 hover:text-foreground"
+                        }
+                      >
                         {option.value === ""
                           ? t`No expiration`
                           : t`After ${option.value} days`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

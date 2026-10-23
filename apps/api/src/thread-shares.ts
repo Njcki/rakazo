@@ -40,10 +40,10 @@ async function ownedBotThread(
 ): Promise<{ threadId: string; botName: string } | null> {
   const bot = await prisma.bot.findFirst({
     where: { id: botId, spaceId: actor.spaceId, userId: actor.userId },
-    select: { id: true, name: true, threadId: true },
+    select: { name: true, thread: { select: { id: true } } },
   });
-  if (!bot?.threadId) return null;
-  return { threadId: bot.threadId, botName: bot.name };
+  if (!bot?.thread) return null;
+  return { threadId: bot.thread.id, botName: bot.name };
 }
 
 function toShareDto(row: {

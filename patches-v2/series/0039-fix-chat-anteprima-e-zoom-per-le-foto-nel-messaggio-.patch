@@ -1,0 +1,995 @@
+From a3df6231785793a1bd267d259f1979d956928f8c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Fri, 23 Oct 2026 02:36:37 +0200
+Subject: [PATCH] fix(chat): anteprima e zoom per le foto nel messaggio /
+ preview and zoom for photos in a message
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: le foto dentro il messaggio del bot usano l'anteprima già prevista per gli allegati e si aprono ingrandite. Sul web la rotella zooma e un clic fuori chiude; su Android pinch e il tasto indietro. Il testo attaccato dopo l'estensione non fa più parte del link.
+
+EN: photos inside a bot message use the attachment preview and open enlarged. On the web the wheel zooms and a click outside closes; on Android, pinch and the back button. Text glued after the extension is no longer part of the link.
+---
+ apps/mobile/app/image.tsx                     |  15 +-
+ apps/mobile/app/thread.tsx                    |  16 +-
+ .../components/image-artifact-viewer.tsx      |  91 +++++++++++-
+ apps/mobile/components/message-caption.tsx    |   9 +-
+ apps/web/src/pages/shell/message-cards.tsx    |  32 +---
+ packages/chat-ui/src/markdown.native.test.tsx |  50 ++-----
+ packages/chat-ui/src/markdown.native.tsx      |  61 ++++++--
+ packages/chat-ui/src/markdown.test.ts         |  23 +++
+ packages/chat-ui/src/markdown.ts              |  25 +++-
+ packages/chat-ui/src/markdown.web.css         |  62 ++++++++
+ packages/chat-ui/src/markdown.web.test.tsx    |  59 ++++----
+ packages/chat-ui/src/markdown.web.tsx         | 138 +++++++++++++++---
+ 12 files changed, 445 insertions(+), 136 deletions(-)
+
+diff --git a/apps/mobile/app/image.tsx b/apps/mobile/app/image.tsx
+index 50c32ff2..ec1010e6 100644
+--- a/apps/mobile/app/image.tsx
++++ b/apps/mobile/app/image.tsx
+@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
+ import * as ScreenOrientation from "expo-screen-orientation";
+ import { useEffect } from "react";
+ import { initialWindowMetrics, SafeAreaProvider } from "react-native-safe-area-context";
+-import { ImageArtifactViewer } from "../components/image-artifact-viewer";
++import { ImageArtifactViewer, UriImageViewer } from "../components/image-artifact-viewer";
+ import type { MobileArtifactTarget } from "../lib/artifact-open";
+ 
+ function first(value: string | string[] | undefined): string {
+@@ -21,8 +21,10 @@ export default function ImageScreen() {
+     mimeType?: string | string[];
+     botId?: string | string[];
+     groupId?: string | string[];
++    uri?: string | string[];
+   }>();
+   const groupId = first(params.groupId);
++  const uri = first(params.uri);
+ 
+   useEffect(() => {
+     // Most attached images are landscape desktop screenshots: let this screen rotate, like the
+@@ -48,6 +50,17 @@ export default function ImageScreen() {
+   // The app root mounts no SafeAreaProvider; this screen hides the native header, so it
+   // provides its own, seeded with the window metrics so the first frame already has the
+   // right insets (a measured SafeAreaView starts at zero inside a modal presentation).
++  if (uri) {
++    return (
++      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
++        <UriImageViewer
++          uri={uri}
++          name={first(params.name) || "Image"}
++          onClose={() => router.back()}
++        />
++      </SafeAreaProvider>
++    );
++  }
+   return (
+     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+       <ImageArtifactViewer
+diff --git a/apps/mobile/app/thread.tsx b/apps/mobile/app/thread.tsx
+index 948e41c4..c651e7b4 100644
+--- a/apps/mobile/app/thread.tsx
++++ b/apps/mobile/app/thread.tsx
+@@ -2738,6 +2738,10 @@ function QuoteSheet({
+   );
+ }
+ 
++function openMarkdownImage(router: ReturnType<typeof useRouter>, src: string, alt: string) {
++  router.push({ pathname: "/image", params: { uri: src, name: alt || "Image" } });
++}
++
+ function previewMessageText(message: MobileMessage): string {
+   const text = message.blocks
+     .flatMap((block) => {
+@@ -3142,6 +3146,7 @@ const MessageBubble = memo(function MessageBubble({
+   const colorScheme = useResolvedAppearance();
+   const tokens = mobileTokens();
+   const { t } = useI18n();
++  const router = useRouter();
+   const [peerExpanded, setPeerExpanded] = useState(false);
+   const artifactTarget: MobileArtifactTarget = groupId ? { groupId } : { botId };
+   const cardBotId = message.botId ?? botId;
+@@ -3603,6 +3608,7 @@ const MessageBubble = memo(function MessageBubble({
+             tokens={tokens}
+             colorScheme={colorScheme}
+             streaming={message.id.startsWith("progress:")}
++            onOpenImage={(src, alt) => openMarkdownImage(router, src, alt)}
+           />
+         ) : null}
+         {attachments.map((attachment, index) =>
+@@ -3790,6 +3796,8 @@ function MessageTextCard({
+ }) {
+   const colorScheme = useResolvedAppearance();
+   const tokens = mobileTokens();
++  const router = useRouter();
++  const showMarkdownImage = (src: string, alt: string) => openMarkdownImage(router, src, alt);
+   const contentText = blockText(message);
+   if (!contentText) return null;
+   return (
+@@ -3822,6 +3830,7 @@ function MessageTextCard({
+         tokens={tokens}
+         colorScheme={colorScheme}
+         streaming={message.id.startsWith("progress:")}
++        onOpenImage={showMarkdownImage}
+       />
+     </Pressable>
+   );
+@@ -3843,6 +3852,7 @@ function AgentEventLabel({
+   const colorScheme = useResolvedAppearance();
+   const tokens = mobileTokens();
+   const { t } = useI18n();
++  const router = useRouter();
+   return (
+     <Pressable
+       {...actionProps}
+@@ -3875,7 +3885,11 @@ function AgentEventLabel({
+             paddingVertical: 10,
+           }}
+         >
+-          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
++          <ChatMarkdown
++            palette={tokens}
++            colorScheme={colorScheme}
++            onOpenImage={(src, alt) => openMarkdownImage(router, src, alt)}
++          >
+             {detail}
+           </ChatMarkdown>
+         </View>
+diff --git a/apps/mobile/components/image-artifact-viewer.tsx b/apps/mobile/components/image-artifact-viewer.tsx
+index 62426c63..02c9911b 100644
+--- a/apps/mobile/components/image-artifact-viewer.tsx
++++ b/apps/mobile/components/image-artifact-viewer.tsx
+@@ -1,5 +1,5 @@
+ import { useEffect, useState } from "react";
+-import { Alert, StyleSheet, Text, View } from "react-native";
++import { Alert, Image, StyleSheet, Text, View } from "react-native";
+ import { Gesture, GestureDetector } from "react-native-gesture-handler";
+ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+ import { useSafeAreaInsets } from "react-native-safe-area-context";
+@@ -263,6 +263,95 @@ export function ImageArtifactViewer({
+   );
+ }
+ 
++/** A picture that is already a URL, using the same pinch viewer as an attached image. */
++export function UriImageViewer({
++  uri,
++  name,
++  onClose,
++}: {
++  uri: string;
++  name: string;
++  onClose: () => void;
++}) {
++  const { t } = useI18n();
++  const tokens = mobileTokens();
++  const insets = useSafeAreaInsets();
++  const [box, setBox] = useState<ImageSize | null>(null);
++  const [natural, setNatural] = useState<ImageSize | null>(null);
++  const [failed, setFailed] = useState(false);
++
++  useEffect(() => {
++    let cancelled = false;
++    Image.getSize(
++      uri,
++      (width, height) => {
++        if (!cancelled) setNatural({ width, height });
++      },
++      () => {
++        if (!cancelled) setFailed(true);
++      },
++    );
++    return () => {
++      cancelled = true;
++    };
++  }, [uri]);
++
++  return (
++    <View
++      style={[
++        styles.screen,
++        {
++          backgroundColor: tokens.background,
++          paddingTop: insets.top,
++          paddingBottom: insets.bottom,
++        },
++      ]}
++    >
++      <View
++        style={[
++          styles.header,
++          { borderBottomColor: tokens.border, borderBottomWidth: StyleSheet.hairlineWidth },
++        ]}
++      >
++        <Text numberOfLines={1} style={[styles.title, { color: tokens.foreground }]}>
++          {name}
++        </Text>
++        <GlassIconButton
++          accessibilityLabel={t("Close image")}
++          ios="xmark"
++          android="close"
++          iconSize={18}
++          onPress={onClose}
++        />
++      </View>
++      <View
++        style={styles.stage}
++        onLayout={(event) => {
++          const { width, height } = event.nativeEvent.layout;
++          if (width <= 0 || height <= 0) return;
++          setBox((current) =>
++            current?.width === width && current?.height === height ? current : { width, height },
++          );
++        }}
++      >
++        {natural && box ? (
++          <ZoomableImage
++            uri={uri}
++            displayed={fitImageSize(natural, box.width, box.height)}
++            box={box}
++            onClose={onClose}
++            onError={() => setFailed(true)}
++          />
++        ) : (
++          <Text style={[styles.message, { color: tokens.mutedForeground }]}>
++            {failed ? t("Could not load image") : t("Loading image…")}
++          </Text>
++        )}
++      </View>
++    </View>
++  );
++}
++
+ const styles = StyleSheet.create({
+   screen: { flex: 1 },
+   header: {
+diff --git a/apps/mobile/components/message-caption.tsx b/apps/mobile/components/message-caption.tsx
+index 3ab96c6e..a4486e50 100644
+--- a/apps/mobile/components/message-caption.tsx
++++ b/apps/mobile/components/message-caption.tsx
+@@ -8,12 +8,14 @@ export function MessageCaption({
+   tokens,
+   colorScheme,
+   streaming,
++  onOpenImage,
+ }: {
+   role: MobileMessage["role"];
+   text: string;
+   tokens: ColorTokens;
+   colorScheme: ResolvedAppearance;
+   streaming: boolean;
++  onOpenImage?: (src: string, alt: string) => void;
+ }) {
+   // User messages keep literal Markdown; only explicit URLs and email addresses link.
+   return role === "user" ? (
+@@ -21,7 +23,12 @@ export function MessageCaption({
+       {text}
+     </LinkifiedText>
+   ) : (
+-    <ChatMarkdown palette={tokens} colorScheme={colorScheme} streaming={streaming}>
++    <ChatMarkdown
++      palette={tokens}
++      colorScheme={colorScheme}
++      streaming={streaming}
++      onOpenImage={onOpenImage}
++    >
+       {text}
+     </ChatMarkdown>
+   );
+diff --git a/apps/web/src/pages/shell/message-cards.tsx b/apps/web/src/pages/shell/message-cards.tsx
+index 70668895..7f74d953 100644
+--- a/apps/web/src/pages/shell/message-cards.tsx
++++ b/apps/web/src/pages/shell/message-cards.tsx
+@@ -1,4 +1,5 @@
+ import { Trans, useLingui } from "@lingui/react/macro";
++import { ChatImageFrame } from "@rakazo/chat-ui/web";
+ import type { MessageBlock } from "@rakazo/contracts";
+ import { abortableDelay } from "@rakazo/core";
+ import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
+@@ -526,8 +527,6 @@ export function ArtifactImage({
+   artifactId: string;
+   name: string;
+ }) {
+-  const { t } = useLingui();
+-  const [open, setOpen] = useState(false);
+   const [visible, setVisible] = useState(false);
+   const container = useRef<HTMLDivElement>(null);
+   const src = useArtifactImage(target, artifactId, visible);
+@@ -554,39 +553,12 @@ export function ArtifactImage({
+   return (
+     <div ref={container}>
+       {src ? (
+-        <button
+-          type="button"
+-          onClick={() => setOpen(true)}
+-          className="max-w-[240px] overflow-hidden rounded-[20px]"
+-        >
+-          <img src={src} alt={name} className="max-h-48 w-full object-cover" />
+-        </button>
++        <ChatImageFrame src={src} alt={name} />
+       ) : (
+         <div className="rounded-[20px] border border-border bg-muted px-4 py-3 text-[14px] text-muted-foreground">
+           {name}
+         </div>
+       )}
+-      {src ? (
+-        <Dialog open={open} onOpenChange={setOpen}>
+-          <DialogContent
+-            showCloseButton={false}
+-            className="w-auto max-w-none bg-transparent p-0 ring-0 sm:max-w-none"
+-          >
+-            <DialogTitle className="sr-only">{name}</DialogTitle>
+-            <DialogClose
+-              aria-label={t`Close image preview`}
+-              render={<Button variant="ghost" size="icon-sm" className="absolute end-2 top-2" />}
+-            >
+-              <X />
+-            </DialogClose>
+-            <img
+-              src={src}
+-              alt={name}
+-              className="max-h-[85vh] max-w-[90vw] rounded-xl object-contain"
+-            />
+-          </DialogContent>
+-        </Dialog>
+-      ) : null}
+     </div>
+   );
+ }
+diff --git a/packages/chat-ui/src/markdown.native.test.tsx b/packages/chat-ui/src/markdown.native.test.tsx
+index f5a43f79..56fdcf81 100644
+--- a/packages/chat-ui/src/markdown.native.test.tsx
++++ b/packages/chat-ui/src/markdown.native.test.tsx
+@@ -443,41 +443,16 @@ describe("native markdown lists", () => {
+ });
+ 
+ describe("native markdown images", () => {
+-  it("shows a remote image as a placeholder that loads it in place on tap", async () => {
++  it("shows a raster image as a preview button instead of a full-size load", () => {
+     const markdown = '![chart](https://images.example.test/tap.png?d=secret "Q3 revenue")';
+     const html = renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>);
+     expect(html).not.toContain("<rn-stub");
+-    expect(html).toContain('data-accessibility-role="button"');
+-    expect(html).toContain('accessibilityLabel="chart, images.example.test"');
+-    expect(html).toContain('accessibilityHint="Q3 revenue"');
+-    // A filled chip on the muted bubble reads as a control in both themes.
+-    expect(html).toContain(`data-background-color="${darkTokens.background}"`);
+-
+-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+-    linking.openURL.mockClear();
+-    const container = document.createElement("div");
+-    document.body.appendChild(container);
+-    const root = createRoot(container);
+-    await act(async () => {
+-      root.render(<ChatMarkdown>{markdown}</ChatMarkdown>);
+-    });
+-    expect(container.querySelector("rn-stub")).toBeNull();
+-    await act(async () => {
+-      container.querySelector<HTMLElement>("[data-accessibility-role='button']")?.click();
+-    });
+-    expect(container.querySelector("rn-stub")).not.toBeNull();
+-    expect(container.querySelector("[data-accessibility-role='button']")).toBeNull();
+-    expect(linking.openURL).not.toHaveBeenCalled();
+-    await act(async () => {
+-      root.unmount();
+-    });
+-    container.remove();
+-
+-    // The reader's choice holds for the session, so a remounted bubble keeps the image.
+-    expect(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>)).toContain("<rn-stub");
++    expect(html).toContain('data-accessibility-role="imagebutton"');
++    expect(html).toContain('accessibilityLabel="chart"');
++    expect(html).toContain("<rn-image");
+   });
+ 
+-  it("shows a placeholder when a tapped image is replaced with another url", async () => {
++  it("keeps the preview when the image url changes", async () => {
+     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+     const container = document.createElement("div");
+     document.body.appendChild(container);
+@@ -497,24 +472,19 @@ describe("native markdown images", () => {
+     await act(async () => {
+       render("https://images.example.test/native-first.png");
+     });
+-    await act(async () => {
+-      container.querySelector<HTMLElement>("[data-accessibility-role='button']")?.click();
+-    });
+-    expect(container.querySelector("rn-stub")).not.toBeNull();
+-
++    expect(container.querySelector("rn-image")).not.toBeNull();
+     await act(async () => {
+       render("https://images.example.test/native-second.png");
+     });
++    expect(container.querySelector("rn-image")).not.toBeNull();
+     expect(container.querySelector("rn-stub")).toBeNull();
+-    expect(container.querySelector("[data-accessibility-role='button']")).not.toBeNull();
+-
+     await act(async () => {
+       root.unmount();
+     });
+     container.remove();
+   });
+ 
+-  it("loads remote images at once when the reader turned that on", () => {
++  it("previews a raster image and still links a non-raster badge", () => {
+     const html = renderToStaticMarkup(
+       <RemoteImagesContext.Provider value={true}>
+         <ChatMarkdown>
+@@ -524,9 +494,9 @@ describe("native markdown images", () => {
+         </ChatMarkdown>
+       </RemoteImagesContext.Provider>,
+     );
+-    expect(html.match(/<rn-stub/g)).toHaveLength(2);
++    expect(html.match(/<rn-stub/g)).toHaveLength(1);
++    expect(html).toContain('data-accessibility-role="imagebutton"');
+     expect(html).toContain('data-accessibility-role="link"');
+-    expect(html).not.toContain('data-accessibility-role="button"');
+   });
+ 
+   it("shows unopenable image sources and unsafe links as plain text", () => {
+diff --git a/packages/chat-ui/src/markdown.native.tsx b/packages/chat-ui/src/markdown.native.tsx
+index 496d97d0..176bab6d 100644
+--- a/packages/chat-ui/src/markdown.native.tsx
++++ b/packages/chat-ui/src/markdown.native.tsx
+@@ -47,6 +47,7 @@ import {
+   remoteImageRenders,
+   remoteMarkdownImage,
+   sanitizeMarkdownUrl,
++  separateGluedImageText,
+   useLinkFavicon,
+ } from "./markdown";
+ 
+@@ -242,6 +243,7 @@ async function openSafeLink(url: string) {
+ }
+ 
+ const OpenLinkContext = createContext<(url: string) => void>(() => undefined);
++const OpenImageContext = createContext<((src: string, alt: string) => void) | null>(null);
+ 
+ function useNativeLinkConfirm() {
+   const appOrigin = useMarkdownLinkAppOrigin();
+@@ -917,8 +919,26 @@ export function RemoteMarkdownImage({
+   onLoad?: () => void;
+ }) {
+   const loadRemote = useContext(RemoteImagesContext);
++  const openImage = useContext(OpenImageContext);
+   // Bumping this redraws after a tap. Whether the image shows is read from the current URL.
+   const [, setRevision] = useState(0);
++  const raster = linkedImageFile(image.href);
++  if (raster && !rejectedLink) {
++    return (
++      <Pressable
++        accessibilityRole="imagebutton"
++        accessibilityLabel={alt || raster.host}
++        onPress={() => (openImage ? openImage(raster.href, alt || "") : undefined)}
++      >
++        <Image
++          source={{ uri: raster.href }}
++          resizeMode="contain"
++          style={layout.imagePreview}
++          accessibilityIgnoresInvertColors
++        />
++      </Pressable>
++    );
++  }
+   if (remoteImageRenders(image.href, loadRemote, rejectedLink)) {
+     return (
+       <FitImage
+@@ -1033,9 +1053,15 @@ export const ChatMarkdown = memo(function ChatMarkdown({
+   streaming = false,
+   palette = darkTokens,
+   colorScheme = "dark",
+-}: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
++  onOpenImage,
++}: ChatMarkdownProps & {
++  palette?: ColorTokens;
++  colorScheme?: ResolvedAppearance;
++  onOpenImage?: (src: string, alt: string) => void;
++}) {
+   const openLink = useNativeLinkConfirm();
+   const styles = useMemo(() => markdownStyles(palette), [palette]);
++  const source = separateGluedImageText(children);
+   const sharedProps = {
+     colorScheme,
+     markdownit: markdownParser,
+@@ -1048,19 +1074,21 @@ export const ChatMarkdown = memo(function ChatMarkdown({
+   };
+ 
+   return (
+-    <OpenLinkContext.Provider value={openLink}>
+-      <View style={layout.wrap}>
+-        <LinkFaviconsPausedContext.Provider value={streaming}>
+-          {streaming ? (
+-            <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+-              {children}
+-            </MarkdownStream>
+-          ) : (
+-            <Markdown {...sharedProps}>{children}</Markdown>
+-          )}
+-        </LinkFaviconsPausedContext.Provider>
+-      </View>
+-    </OpenLinkContext.Provider>
++    <OpenImageContext.Provider value={onOpenImage ?? null}>
++      <OpenLinkContext.Provider value={openLink}>
++        <View style={layout.wrap}>
++          <LinkFaviconsPausedContext.Provider value={streaming}>
++            {streaming ? (
++              <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
++                {source}
++              </MarkdownStream>
++            ) : (
++              <Markdown {...sharedProps}>{source}</Markdown>
++            )}
++          </LinkFaviconsPausedContext.Provider>
++        </View>
++      </OpenLinkContext.Provider>
++    </OpenImageContext.Provider>
+   );
+ });
+ 
+@@ -1104,6 +1132,11 @@ const layout = StyleSheet.create({
+     alignItems: "center",
+     justifyContent: "center",
+   },
++  imagePreview: {
++    width: 240,
++    height: 180,
++    borderRadius: 12,
++  },
+   linkIcon: {
+     width: "100%",
+     height: "100%",
+diff --git a/packages/chat-ui/src/markdown.test.ts b/packages/chat-ui/src/markdown.test.ts
+index 0c1d334e..a1bb2701 100644
+--- a/packages/chat-ui/src/markdown.test.ts
++++ b/packages/chat-ui/src/markdown.test.ts
+@@ -13,6 +13,7 @@ import {
+   sameDocumentOrigin,
+   sanitizeMarkdownImageUrl,
+   sanitizeMarkdownUrl,
++  separateGluedImageText,
+ } from "./markdown";
+ 
+ type Token = { type: string; attrGet(name: string): string | null; children: Token[] | null };
+@@ -205,7 +206,29 @@ describe("markdownLinkDisplayParts", () => {
+   });
+ });
+ 
++describe("separateGluedImageText", () => {
++  it("splits a sentence glued onto an image URL", () => {
++    const source =
++      "https://rakazo.example/download/scritta.pngL'ambiente circostante resta visibile.";
++    expect(separateGluedImageText(source)).toBe(
++      "https://rakazo.example/download/scritta.png L'ambiente circostante resta visibile.",
++    );
++  });
++
++  it("leaves a query string on the image URL", () => {
++    expect(separateGluedImageText("https://rakazo.example/a.png?w=10 next")).toBe(
++      "https://rakazo.example/a.png?w=10 next",
++    );
++  });
++});
++
+ describe("linkedImageFile", () => {
++  it("drops sentence text glued onto the path", () => {
++    expect(linkedImageFile("https://rakazo.example/download/scritta.pngL'ambiente")?.href).toBe(
++      "https://rakazo.example/download/scritta.png",
++    );
++  });
++
+   it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
+     expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
+       href: "https://rakazo.example/download/foyer.jpg",
+diff --git a/packages/chat-ui/src/markdown.ts b/packages/chat-ui/src/markdown.ts
+index 24ff9b0f..b1c12261 100644
+--- a/packages/chat-ui/src/markdown.ts
++++ b/packages/chat-ui/src/markdown.ts
+@@ -198,13 +198,36 @@ export function inlineMarkdownImageSrc(url: string): string | undefined {
+ }
+ 
+ const rasterImageExtension = /\.(?:png|jpe?g|gif|webp)$/i;
++const gluedRasterUrl = /(https?:\/\/[^\s<>()\]]+?\.(?:png|jpe?g|gif|webp))(?=\p{L})/giu;
++
++/**
++ * A model sometimes writes the next sentence against the end of an image URL
++ * (`photo.pngL'ambiente`). Split that so the link stops at the extension.
++ */
++export function separateGluedImageText(markdown: string): string {
++  return markdown.replace(gluedRasterUrl, "$1 ");
++}
++
++/** Drop sentence text a model glued onto an image path. The query string is kept. */
++function unglueImageHref(href: string): string {
++  try {
++    const parsed = new URL(href);
++    const glued = parsed.pathname.match(/^(.*\.(?:png|jpe?g|gif|webp))(\p{L}.*)$/iu);
++    if (!glued?.[2]) return href;
++    parsed.pathname = glued[1] ?? parsed.pathname;
++    parsed.hash = "";
++    return parsed.href;
++  } catch {
++    return href;
++  }
++}
+ 
+ /**
+  * A normal link whose target is a raster image. Markdown writers often use
+  * `[label](photo.jpg)` instead of an image. SVG is excluded: a same-origin SVG can run script.
+  */
+ export function linkedImageFile(url: string): { href: string; host: string } | undefined {
+-  const href = sanitizeMarkdownImageUrl(url);
++  const href = sanitizeMarkdownImageUrl(unglueImageHref(url));
+   if (!href) return undefined;
+   try {
+     const parsed = new URL(href);
+diff --git a/packages/chat-ui/src/markdown.web.css b/packages/chat-ui/src/markdown.web.css
+index eb0e002c..c07c56bc 100644
+--- a/packages/chat-ui/src/markdown.web.css
++++ b/packages/chat-ui/src/markdown.web.css
+@@ -240,6 +240,68 @@
+   border-radius: 0.65em;
+ }
+ 
++.rk-chat-image-preview {
++  display: inline-block;
++  max-width: min(240px, 100%);
++  margin: 0.35em 0;
++  padding: 0;
++  border: 0;
++  border-radius: 0.75em;
++  background: transparent;
++  cursor: zoom-in;
++  vertical-align: top;
++}
++
++.rk-chat-image-preview img {
++  display: block;
++  max-width: 240px;
++  max-height: 12rem;
++  width: auto;
++  height: auto;
++  margin: 0;
++  object-fit: contain;
++  border-radius: 0.75em;
++}
++
++.rk-chat-image-lightbox {
++  position: fixed;
++  inset: 0;
++  z-index: 80;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background: rgb(0 0 0 / 82%);
++  cursor: zoom-out;
++}
++
++.rk-chat-image-lightbox img {
++  max-width: 90vw;
++  max-height: 85vh;
++  width: auto;
++  height: auto;
++  margin: 0;
++  object-fit: contain;
++  border-radius: 0.75em;
++  cursor: grab;
++  touch-action: none;
++}
++
++.rk-chat-image-lightbox-close {
++  position: absolute;
++  top: 16px;
++  right: 16px;
++  z-index: 1;
++  width: 40px;
++  height: 40px;
++  border: 0;
++  border-radius: 999px;
++  background: rgb(0 0 0 / 55%);
++  color: white;
++  font-size: 26px;
++  line-height: 1;
++  cursor: pointer;
++}
++
+ .rk-chat-markdown input[type="checkbox"] {
+   margin-right: 0.4em;
+   accent-color: var(--primary);
+diff --git a/packages/chat-ui/src/markdown.web.test.tsx b/packages/chat-ui/src/markdown.web.test.tsx
+index dda38bb1..23bda4d5 100644
+--- a/packages/chat-ui/src/markdown.web.test.tsx
++++ b/packages/chat-ui/src/markdown.web.test.tsx
+@@ -14,7 +14,7 @@ import {
+ } from "./markdown.web";
+ 
+ describe("web markdown remote images", () => {
+-  it("loads a remote image in place only after the reader asks", async () => {
++  it("shows a raster image as a preview that opens a zoomable overlay", async () => {
+     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+     const markdown = "![chart](https://images.example.test/tap.png)";
+     const container = document.createElement("div");
+@@ -23,29 +23,32 @@ describe("web markdown remote images", () => {
+     await act(async () => {
+       root.render(<ChatMarkdown>{markdown}</ChatMarkdown>);
+     });
+-    expect(container.querySelector("img")).toBeNull();
++    const preview = container.querySelector("button.rk-chat-image-preview img");
++    expect(preview?.getAttribute("src")).toBe("https://images.example.test/tap.png");
++    expect(document.body.querySelector("[role=dialog]")).toBeNull();
+ 
+-    const button = container.querySelector("button");
+-    expect(button?.textContent).toBe("chartimages.example.test");
+     await act(async () => {
+-      button?.click();
++      container
++        .querySelector("button.rk-chat-image-preview")
++        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+     });
+-    const image = container.querySelector("img");
+-    expect(image?.getAttribute("src")).toBe("https://images.example.test/tap.png");
+-    expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
+-    expect(container.querySelector("button")).toBeNull();
++    const dialog = document.body.querySelector("[role=dialog]");
++    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(
++      "https://images.example.test/tap.png",
++    );
++    const close = dialog?.querySelector("button");
++    await act(async () => {
++      close?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
++    });
++    expect(document.body.querySelector("[role=dialog]")).toBeNull();
++
+     await act(async () => {
+       root.unmount();
+     });
+     container.remove();
+-
+-    // The reader's choice holds for the session, so a remounted bubble keeps the image.
+-    expect(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>)).toContain(
+-      'src="https://images.example.test/tap.png"',
+-    );
+   });
+ 
+-  it("shows a placeholder when a tapped image is replaced with another url", async () => {
++  it("keeps the preview when the image url changes", async () => {
+     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+     const container = document.createElement("div");
+     document.body.appendChild(container);
+@@ -56,19 +59,15 @@ describe("web markdown remote images", () => {
+     await act(async () => {
+       render("https://images.example.test/first.png");
+     });
+-    await act(async () => {
+-      container.querySelector("button")?.click();
+-    });
+     expect(container.querySelector("img")?.getAttribute("src")).toBe(
+       "https://images.example.test/first.png",
+     );
+-
+     await act(async () => {
+       render("https://images.example.test/second.png");
+     });
+-    expect(container.querySelector("img")).toBeNull();
+-    expect(container.querySelector("button")?.textContent).toContain("images.example.test");
+-
++    expect(container.querySelector("img")?.getAttribute("src")).toBe(
++      "https://images.example.test/second.png",
++    );
+     await act(async () => {
+       root.unmount();
+     });
+@@ -113,23 +112,25 @@ describe("web markdown remote images", () => {
+     container.remove();
+   });
+ 
+-  it("shows a same-origin image link in the message", () => {
++  it("shows a same-origin image link as a preview, and detaches text glued to the url", () => {
+     const origin = window.location.origin;
+     const html = renderToStaticMarkup(
+-      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg)`}</ChatMarkdown>,
++      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg) e https://cdn.example.test/scritta.pngL'ambiente`}</ChatMarkdown>,
+     );
+     expect(html).toContain(`src="${origin}/download/foyer.jpg"`);
+     expect(html).toContain('alt="Foyer"');
+-    expect(html).not.toContain("<a");
++    expect(html).toContain('src="https://cdn.example.test/scritta.png"');
++    expect(html).toContain("L&#x27;ambiente");
++    expect(html).not.toContain("pngL");
+   });
+ 
+-  it("keeps an image link on another site behind a tap", () => {
++  it("previews an image link on another site instead of leaving a download link", () => {
+     const html = renderToStaticMarkup(
+       <ChatMarkdown>{"[Foto](https://cdn.example.test/a.jpg)"}</ChatMarkdown>,
+     );
+-    expect(html).not.toContain("<img");
+-    expect(html).toContain("cdn.example.test");
+-    expect(html).toContain("<button");
++    expect(html).toContain('src="https://cdn.example.test/a.jpg"');
++    expect(html).toContain("rk-chat-image-preview");
++    expect(html).not.toContain("<a");
+   });
+ 
+   it("keeps an image inside a rejected link as text when automatic loading is on", () => {
+diff --git a/packages/chat-ui/src/markdown.web.tsx b/packages/chat-ui/src/markdown.web.tsx
+index ca879b08..61f00382 100644
+--- a/packages/chat-ui/src/markdown.web.tsx
++++ b/packages/chat-ui/src/markdown.web.tsx
+@@ -1,5 +1,15 @@
+ import type { MouseEvent, ReactNode } from "react";
+-import { createContext, memo, useCallback, useContext, useMemo, useRef, useState } from "react";
++import {
++  createContext,
++  memo,
++  useCallback,
++  useContext,
++  useEffect,
++  useMemo,
++  useRef,
++  useState,
++} from "react";
++import { createPortal } from "react-dom";
+ import ReactMarkdown, { type Components } from "react-markdown";
+ import rehypeKatex from "rehype-katex";
+ import remarkGfm from "remark-gfm";
+@@ -35,8 +45,8 @@ import {
+   RemoteImagesContext,
+   remoteImageRenders,
+   remoteMarkdownImage,
+-  sameDocumentOrigin,
+   sanitizeMarkdownUrl,
++  separateGluedImageText,
+   useLinkFavicon,
+ } from "./markdown";
+ import { useMarkdownLinkCopy } from "./markdown-link-prompt";
+@@ -266,11 +276,12 @@ function MarkdownImage({ src = "", alt, title }: { src?: string; alt?: string; t
+   const enclosingLink = useContext(InsideLinkContext);
+   const loadRemote = useContext(RemoteImagesContext);
+   const remote = remoteMarkdownImage(src);
+-  // Bumping this redraws after a tap. Whether the image shows is read from the current URL.
+   const [, setRevision] = useState(0);
+   const rejectedLink = enclosingLink === "rejected";
+-  if (inlineMarkdownImageSrc(src)) {
+-    return <img src={src} alt={alt ?? ""} title={title} loading="lazy" />;
++  const inline = inlineMarkdownImageSrc(src);
++  if (inline) return <ChatImageFrame src={inline} alt={alt ?? ""} title={title} />;
++  if (remote && linkedImageFile(remote.href) && !rejectedLink) {
++    return <ChatImageFrame src={remote.href} alt={alt ?? ""} title={title} />;
+   }
+   if (remote && remoteImageRenders(remote.href, loadRemote, rejectedLink)) {
+     return (
+@@ -386,19 +397,107 @@ function WebsiteLink({
+ }
+ 
+ function LinkedImageFile({ href, alt }: { href: string; alt?: string }) {
+-  const loadRemote = useContext(RemoteImagesContext);
+-  const [, setRevision] = useState(0);
+-  const image = { href, host: new URL(href).host };
+-  const pageOrigin = typeof window === "undefined" ? undefined : window.location.origin;
+-  if (remoteImageRenders(href, loadRemote || sameDocumentOrigin(href, pageOrigin), false)) {
+-    return <img src={href} alt={alt ?? ""} loading="lazy" referrerPolicy="no-referrer" />;
+-  }
++  return <ChatImageFrame src={href} alt={alt ?? ""} />;
++}
++
++const LIGHTBOX_MIN_SCALE = 1;
++const LIGHTBOX_MAX_SCALE = 5;
++
++/** Thumbnail of the original image. Click opens a zoomable overlay. */
++export function ChatImageFrame({ src, alt, title }: { src: string; alt: string; title?: string }) {
++  const [open, setOpen] = useState(false);
+   return (
+-    <RemoteImageButton
+-      image={image}
+-      alt={alt}
+-      onLoad={() => setRevision((revision) => revision + 1)}
+-    />
++    <>
++      <button type="button" className="rk-chat-image-preview" onClick={() => setOpen(true)}>
++        <img src={src} alt={alt} title={title} loading="lazy" referrerPolicy="no-referrer" />
++      </button>
++      {open && typeof document !== "undefined"
++        ? createPortal(
++            <ImageLightbox src={src} alt={alt} onClose={() => setOpen(false)} />,
++            document.body,
++          )
++        : null}
++    </>
++  );
++}
++
++function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
++  const frame = useRef<HTMLDivElement>(null);
++  const [scale, setScale] = useState(LIGHTBOX_MIN_SCALE);
++  const [pan, setPan] = useState({ x: 0, y: 0 });
++  const drag = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
++
++  useEffect(() => {
++    const onKey = (event: KeyboardEvent) => {
++      if (event.key === "Escape") onClose();
++    };
++    const overlay = frame.current;
++    const onWheel = (event: WheelEvent) => {
++      event.preventDefault();
++      const factor = Math.exp(-event.deltaY * 0.0015);
++      setScale((current) => {
++        const next = Math.min(LIGHTBOX_MAX_SCALE, Math.max(LIGHTBOX_MIN_SCALE, current * factor));
++        if (next === LIGHTBOX_MIN_SCALE) setPan({ x: 0, y: 0 });
++        return next;
++      });
++    };
++    window.addEventListener("keydown", onKey);
++    overlay?.addEventListener("wheel", onWheel, { passive: false });
++    const previousOverflow = document.body.style.overflow;
++    document.body.style.overflow = "hidden";
++    return () => {
++      window.removeEventListener("keydown", onKey);
++      overlay?.removeEventListener("wheel", onWheel);
++      document.body.style.overflow = previousOverflow;
++    };
++  }, [onClose]);
++
++  return (
++    <div
++      ref={frame}
++      role="dialog"
++      aria-modal="true"
++      aria-label={alt || "Image"}
++      className="rk-chat-image-lightbox"
++      onClick={onClose}
++      onKeyDown={(event) => {
++        if (event.key === "Escape") onClose();
++      }}
++    >
++      <button
++        type="button"
++        className="rk-chat-image-lightbox-close"
++        aria-label="Close image"
++        onClick={(event) => {
++          event.stopPropagation();
++          onClose();
++        }}
++      >
++        ×
++      </button>
++      <img
++        src={src}
++        alt={alt}
++        draggable={false}
++        referrerPolicy="no-referrer"
++        style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})` }}
++        onClick={(event) => event.stopPropagation()}
++        onKeyDown={(event) => event.stopPropagation()}
++        onPointerDown={(event) => {
++          if (scale <= 1) return;
++          event.currentTarget.setPointerCapture(event.pointerId);
++          drag.current = { x: event.clientX, y: event.clientY, ox: pan.x, oy: pan.y };
++        }}
++        onPointerMove={(event) => {
++          const start = drag.current;
++          if (!start) return;
++          setPan({ x: start.ox + event.clientX - start.x, y: start.oy + event.clientY - start.y });
++        }}
++        onPointerUp={() => {
++          drag.current = null;
++        }}
++      />
++    </div>
+   );
+ }
+ 
+@@ -483,7 +582,10 @@ export const ChatMarkdown = memo(function ChatMarkdown({
+ }: ChatMarkdownProps) {
+   const { request, dialog } = useExternalLinkConfirm();
+   const source = useMemo(
+-    () => normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
++    () =>
++      separateGluedImageText(
++        normalizeMathMarkdown(streaming ? closeUnterminatedFence(children) : children),
++      ),
+     [children, streaming],
+   );
+ 
+-- 
+2.55.0.windows.5
+

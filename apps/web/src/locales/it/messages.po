@@ -83,13 +83,13 @@ msgstr "{0} MB"
 #. placeholder {0}: share.messageCount
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "{0} messages"
-msgstr """
+msgstr "{0} messaggi"
 
 #. placeholder {0}: selected.size
 #. placeholder {1}: selectable.length
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "{0} of {1} messages"
-msgstr """
+msgstr "{0} su {1} messaggi"
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -290,7 +290,7 @@ msgstr "Modello attivo"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Active shares"
-msgstr """
+msgstr "Condivisioni attive"
 
 #: src/components/computer/TerminalApp.tsx
 #: src/pages/Shell.tsx
@@ -423,7 +423,7 @@ msgstr "Avanzate..."
 #. placeholder {0}: option.value
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "After {0} days"
-msgstr """
+msgstr "Dopo {0} giorni"
 
 #: src/pages/Shell.tsx
 msgid "Agent computer"
@@ -1395,7 +1395,7 @@ msgstr "Impossibile creare lo spazio"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Could not create the share"
-msgstr """
+msgstr "Impossibile creare la condivisione"
 
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
@@ -1522,7 +1522,7 @@ msgstr "Impossibile caricare i server MCP"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Could not load messages"
-msgstr """
+msgstr "Impossibile caricare i messaggi"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not load model settings"
@@ -1647,7 +1647,7 @@ msgstr "Impossibile revocare la connessione"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Could not revoke the share"
-msgstr """
+msgstr "Impossibile revocare la condivisione"
 
 #: src/pages/Shell.tsx
 msgid "Could not run routine"
@@ -1801,7 +1801,7 @@ msgstr "Crea gruppo"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Create link"
-msgstr """
+msgstr "Crea link"
 
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
@@ -2253,7 +2253,7 @@ msgstr "Espandi {0}"
 #. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "expires {0}"
-msgstr """
+msgstr "scade il {0}"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -2586,7 +2586,7 @@ msgstr "Anteprima isolata — nessun accesso al tuo account"
 
 #: src/pages/SharePage.tsx
 msgid "It may have been revoked or expired."
-msgstr """
+msgstr "Potrebbe essere stata revocata o scaduta."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
@@ -2651,7 +2651,7 @@ msgstr "Collega un'app di chat"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Link expires"
-msgstr """
+msgstr "Scadenza del link"
 
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
@@ -3106,7 +3106,7 @@ msgstr "Nuovo ticket"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "No active shares."
-msgstr """
+msgstr "Nessuna condivisione attiva."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -3150,7 +3150,7 @@ msgstr "Nessuna credenziale salvata per questo bot."
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "No expiration"
-msgstr """
+msgstr "Nessuna scadenza"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
@@ -3497,7 +3497,7 @@ msgstr "Scegli un modello dall'elenco o inserisci l'id di un modello servito da 
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
-msgstr """
+msgstr "Scegli i messaggi da includere. Il link è pubblico: chiunque lo possiede può leggere la conversazione senza un account. Vengono condivisi solo testo e immagini."
 
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
@@ -4093,7 +4093,7 @@ msgstr "Seleziona un modello collegato"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Select all"
-msgstr """
+msgstr "Seleziona tutto"
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4175,7 +4175,7 @@ msgstr "Forma"
 #: src/pages/Shell.tsx
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Share conversation"
-msgstr """
+msgstr "Condividi conversazione"
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -4192,7 +4192,7 @@ msgstr "Documenti condivisi"
 
 #: src/pages/SharePage.tsx
 msgid "Shared from Rakazo"
-msgstr """
+msgstr "Condiviso da Rakazo"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
@@ -4306,7 +4306,7 @@ msgstr "Aggiornamento software"
 
 #: src/pages/SharePage.tsx
 msgid "Something went wrong loading this share."
-msgstr """
+msgstr "Qualcosa è andato storto nel caricare questa condivisione."
 
 #: src/App.tsx
 #: src/lib/user-error.ts
@@ -4568,7 +4568,7 @@ msgstr "questo computer"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "This conversation has no shareable messages yet."
-msgstr """
+msgstr "Questa conversazione non ha ancora messaggi condivisibili."
 
 #. placeholder {0}: pendingDelete.versionCount
 #: src/pages/Artifacts.tsx
@@ -4625,7 +4625,7 @@ msgstr "Questo server è già connesso. Scollegalo prima di autorizzarlo di nuov
 
 #: src/pages/SharePage.tsx
 msgid "This share link is not available."
-msgstr """
+msgstr "Questo link di condivisione non è disponibile."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
@@ -4646,7 +4646,7 @@ msgstr "Titolo"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Title (optional)"
-msgstr """
+msgstr "Titolo (facoltativo)"
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -4754,7 +4754,7 @@ msgstr "Tipo di file non supportato: {0}"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Untitled share"
-msgstr """
+msgstr "Condivisione senza titolo"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx

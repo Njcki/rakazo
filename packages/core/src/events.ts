@@ -246,12 +246,45 @@ export function reduceLiveMessageBlocks(
 ): MessageBlock[] {
   const tail = blocks.at(-1);
   const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
+  // An activity line ("Running: …") is a status, not the sentence the model was writing.
+  // Keep that unfinished sentence, or the next tokens resume it from the middle of a word.
+  if (
+    update.type === "progress" &&
+    update.payload?.activity === true &&
+    tail?.kind === "progress" &&
+    !tail.activity &&
+    tail.text
+  ) {
+    const pending = [...(tail.pendingToolNames ?? [])];
+    const kept = appendTextSegment(segments, tail.text);
+    const activityText = String(update.payload.text ?? "");
+    if (!activityText) {
+      return pending.length > 0
+        ? [...kept, { kind: "progress", text: "", pendingToolNames: pending }]
+        : kept;
+    }
+    return [
+      ...kept,
+      {
+        kind: "progress",
+        text: activityText,
+        activity: true as const,
+        ...(pending.length > 0 ? { pendingToolNames: pending } : {}),
+      },
+    ];
+  }
   const priorText = liveMessageText(blocks);
   const flushedLength =
     tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
+  const progressText =
+    update.type === "progress" ? progressMessageText(update.payload, priorText) : "";
+  // A delta is the full text so far, so drop what was already committed. A `text`
+  // payload is only the new progress tail; slicing it by the old length cuts a word.
   const tailText =
     update.type === "progress"
-      ? progressMessageText(update.payload, priorText).slice(flushedLength)
+      ? typeof update.payload?.delta === "string"
+        ? progressText.slice(flushedLength)
+        : progressText
       : tail?.kind === "progress"
         ? tail.text
         : "";

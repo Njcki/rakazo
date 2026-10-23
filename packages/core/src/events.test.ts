@@ -129,6 +129,30 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([{ kind: "progress", text: "Using browser", activity: true }]);
   });
 
+  it("keeps an unfinished sentence when a tool activity line replaces the live tail", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "spec", streaming: true },
+    });
+    const running = reduceLiveMessageBlocks(streamed, {
+      type: "progress",
+      payload: { text: "Running: python", activity: true },
+    });
+    const cleared = reduceLiveMessageBlocks(running, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+    const continued = reduceLiveMessageBlocks(cleared, {
+      type: "progress",
+      payload: { delta: "ifici lotti", streaming: true },
+    });
+    expect(
+      continued
+        .map((block) => (block.kind === "text" || block.kind === "progress" ? block.text : ""))
+        .join(""),
+    ).toBe("specifici lotti");
+  });
+
   it("replaces punctuated activity text with its tool step", () => {
     const activity = reduceLiveMessageBlocks([], {
       type: "progress",

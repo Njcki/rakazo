@@ -80,7 +80,9 @@ export function App() {
           ) : window.location.pathname === LOCAL_SETTINGS_PAGE ? (
             <LocalSettingsPage />
           ) : window.location.pathname.startsWith("/share/") ? (
-            <SharePage />
+            <Routes>
+              <Route path="/share/:token" element={<SharePage />} />
+            </Routes>
           ) : (
             <SessionApp />
           )}

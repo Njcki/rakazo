@@ -146,6 +146,7 @@ export function ShareThreadDialog({
         expiresInDays: expiry === "" ? undefined : Number(expiry),
       });
       setCreatedUrl(result.url);
+      void copy(result.url);
       setShares(await rpc.threadShares.list({ botId }));
     } catch (reason: unknown) {
       setCreateError(errorText(reason, t`Could not create the share`));
@@ -214,11 +215,16 @@ export function ShareThreadDialog({
                 {selectable.map((message) => {
                   const checked = selected.has(message.id);
                   return (
-                    <li key={message.id} className="flex items-start gap-3 px-3 py-2">
+                    <li
+                      key={message.id}
+                      className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-accent/40"
+                      onClick={() => toggle(message.id)}
+                    >
                       <Checkbox
                         aria-label={messagePreview(shareableBlocks(message.blocks)) || t`Message`}
                         checked={checked}
                         onCheckedChange={() => toggle(message.id)}
+                        onClick={(event) => event.stopPropagation()}
                         className="mt-0.5"
                       />
                       <div className="min-w-0 flex-1">
@@ -332,6 +338,16 @@ export function ShareThreadDialog({
                       ) : null}
                     </div>
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copy(`${window.location.origin}/share/${share.token}`)}
+                    className="shrink-0"
+                  >
+                    <Copy size={14} aria-hidden="true" />
+                    <Trans>Copy link</Trans>
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"

@@ -1297,6 +1297,10 @@ msgstr "Copier"
 msgid "Copy .env example"
 msgstr ""
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr ""
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "Impossible d'ajouter"

@@ -168,8 +168,8 @@ export function ShareThreadDialog({
         if (!open && !busy) onClose();
       }}
     >
-      <DialogContent className="max-w-[560px]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-[560px]">
+        <DialogHeader className="min-w-0">
           <DialogTitle className="flex items-center gap-2.5">
             <Share2 size={17} strokeWidth={1.8} className="text-muted-foreground" aria-hidden="true" />
             <Trans>Share conversation</Trans>
@@ -191,7 +191,7 @@ export function ShareThreadDialog({
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between px-1">
+            <div className="flex min-w-0 items-center justify-between px-1">
               <Label className="text-[13px] text-muted-foreground">
                 <Trans>{selected.size} of {selectable.length} messages</Trans>
               </Label>
@@ -205,7 +205,7 @@ export function ShareThreadDialog({
               </div>
             </div>
 
-            <ScrollArea className="max-h-[280px] rounded-lg border border-input">
+            <ScrollArea className="max-h-[280px] min-w-0 rounded-lg border border-input">
               <ul className="divide-y divide-input">
                 {selectable.map((message) => {
                   const checked = selected.has(message.id);
@@ -241,8 +241,8 @@ export function ShareThreadDialog({
               </ul>
             </ScrollArea>
 
-            <div className="grid gap-3">
-              <div className="grid gap-1.5">
+            <div className="grid min-w-0 gap-3">
+              <div className="grid min-w-0 gap-1.5">
                 <Label htmlFor="share-title" className="text-[13px] text-muted-foreground">
                   <Trans>Title (optional)</Trans>
                 </Label>
@@ -254,7 +254,7 @@ export function ShareThreadDialog({
                   placeholder={botName}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid min-w-0 gap-1.5">
                 <Label className="text-[13px] text-muted-foreground">
                   <Trans>Link expires</Trans>
                 </Label>
@@ -312,7 +312,7 @@ export function ShareThreadDialog({
 
         <Separator />
 
-        <div className="grid gap-1.5">
+        <div className="grid min-w-0 gap-1.5">
           <Label className="text-[13px] font-medium text-muted-foreground">
             <Trans>Active shares</Trans>
           </Label>
@@ -367,7 +367,7 @@ export function ShareThreadDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="min-w-0">
           <Button type="button" variant="outline" onClick={onClose}>
             <Trans>Close</Trans>
           </Button>

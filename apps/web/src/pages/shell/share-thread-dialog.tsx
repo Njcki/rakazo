@@ -168,7 +168,7 @@ export function ShareThreadDialog({
         if (!open && !busy) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[560px]">
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[640px]">
         <DialogHeader className="min-w-0">
           <DialogTitle className="flex items-center gap-2.5">
             <Share2 size={17} strokeWidth={1.8} className="text-muted-foreground" aria-hidden="true" />
@@ -286,9 +286,9 @@ export function ShareThreadDialog({
             {createError ? <p className="text-[13.5px] text-destructive">{createError}</p> : null}
 
             {createdUrl ? (
-              <div className="flex items-center gap-2 rounded-lg border border-input bg-accent/40 p-2">
+              <div className="flex min-w-0 items-center gap-2 rounded-lg border border-input bg-accent/40 p-2">
                 <Link2 size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-foreground" dir="ltr">
+                <span className="min-w-0 flex-1 break-all text-[13px] text-foreground" dir="ltr">
                   {createdUrl}
                 </span>
                 <Button
@@ -321,7 +321,7 @@ export function ShareThreadDialog({
               <Trans>No active shares.</Trans>
             </p>
           ) : (
-            <ul className="grid gap-1.5">
+            <ul className="grid grid-cols-[minmax(0,1fr)] gap-1.5">
               {shares.map((share) => (
                 <li
                   key={share.id}

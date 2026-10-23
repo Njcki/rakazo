@@ -246,8 +246,8 @@ export function reduceLiveMessageBlocks(
 ): MessageBlock[] {
   const tail = blocks.at(-1);
   const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
-  // An activity line ("Running: …") is a status, not the sentence the model was writing.
-  // Keep that unfinished sentence, or the next tokens resume it from the middle of a word.
+  // "Running: …" is a status line. Park the unfinished sentence beside it so the
+  // next tokens can extend that sentence instead of starting a new fragment.
   if (
     update.type === "progress" &&
     update.payload?.activity === true &&
@@ -273,18 +273,52 @@ export function reduceLiveMessageBlocks(
       },
     ];
   }
+  const carriedSentence =
+    tail?.kind === "progress" && tail.activity && segments.at(-1)?.kind === "text"
+      ? segments.at(-1).text
+      : "";
+  const incoming =
+    update.type === "progress"
+      ? typeof update.payload?.delta === "string"
+        ? update.payload.delta
+        : typeof update.payload?.text === "string" && update.payload.activity !== true
+          ? update.payload.text
+          : ""
+      : "";
+  if (carriedSentence && incoming && !endsSentence(carriedSentence)) {
+    const extended = appendTextSegment(segments.slice(0, -1), carriedSentence + incoming);
+    const pending = [...(tail?.kind === "progress" ? (tail.pendingToolNames ?? []) : [])];
+    return pending.length > 0
+      ? [...extended, { kind: "progress", text: "", pendingToolNames: pending }]
+      : extended;
+  }
   const priorText = liveMessageText(blocks);
   const flushedLength =
     tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
   const progressText =
     update.type === "progress" ? progressMessageText(update.payload, priorText) : "";
+  const rawText =
+    update.type === "progress" && typeof update.payload?.text === "string"
+      ? update.payload.text
+      : undefined;
+  const liveSentence = tail?.kind === "progress" && !tail.activity ? tail.text : "";
+  const continuation =
+    update.type === "progress" &&
+    update.payload?.activity !== true &&
+    rawText !== undefined &&
+    liveSentence.length > 0 &&
+    !rawText.startsWith(liveSentence) &&
+    !endsSentence(liveSentence);
   // A delta is the full text so far, so drop what was already committed. A `text`
-  // payload is only the new progress tail; slicing it by the old length cuts a word.
+  // payload is only the new progress tail. Mid-sentence, that tail is the rest of
+  // the word, so append it instead of slicing the word in half.
   const tailText =
     update.type === "progress"
       ? typeof update.payload?.delta === "string"
         ? progressText.slice(flushedLength)
-        : progressText
+        : continuation
+          ? liveSentence + rawText
+          : progressText
       : tail?.kind === "progress"
         ? tail.text
         : "";
@@ -303,6 +337,15 @@ export function reduceLiveMessageBlocks(
     return next;
   }
   if (!tailText) return [...segments];
+  const unfinished = segments.at(-1);
+  if (
+    !activity &&
+    unfinished?.kind === "text" &&
+    !endsSentence(unfinished.text) &&
+    pendingToolNames.length === 0
+  ) {
+    return appendTextSegment(segments, tailText);
+  }
   return [
     ...segments,
     {

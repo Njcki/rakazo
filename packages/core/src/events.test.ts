@@ -6,6 +6,7 @@ import {
   containsSecret,
   createStreamingRedactor,
   endsSentence,
+  ensureSentenceSpacing,
   humanizeToolName,
   isRunTerminalEvent,
   normalizeResponseStreamingPreference,
@@ -129,6 +130,26 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([{ kind: "progress", text: "Using browser", activity: true }]);
   });
 
+  it("keeps an unfinished sentence in one block when a tool activity line arrives", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Ispeziono le", streaming: true },
+    });
+    const running = reduceLiveMessageBlocks(streamed, {
+      type: "progress",
+      payload: { text: "Running: python", activity: true },
+    });
+    const cleared = reduceLiveMessageBlocks(running, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+    const continued = reduceLiveMessageBlocks(cleared, {
+      type: "progress",
+      payload: { text: " prime righe", streaming: true },
+    });
+    expect(continued).toEqual([{ kind: "text", text: "Ispeziono le prime righe" }]);
+  });
+
   it("replaces punctuated activity text with its tool step", () => {
     const activity = reduceLiveMessageBlocks([], {
       type: "progress",
@@ -138,6 +159,46 @@ describe("reduceLiveMessageBlocks", () => {
     expect(reduceLiveMessageBlocks(activity, { type: "tool", name: "shell" })).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ]);
+  });
+
+  it("rejoins a word split across step chips", () => {
+    const started = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "cat", streaming: true },
+    });
+    const withTool = reduceLiveMessageBlocks(started, { type: "tool", name: "web_search" });
+    // Force a steps block ahead of unfinished text the way a premature flush would.
+    const split = [
+      { kind: "text" as const, text: "cat" },
+      { kind: "steps" as const, steps: [{ label: "Web search", count: 1 }] },
+    ];
+    const continued = reduceLiveMessageBlocks(split, {
+      type: "progress",
+      payload: { text: "egoria 1.", streaming: true },
+    });
+    expect(continued).toEqual([
+      { kind: "text", text: "categoria 1." },
+      { kind: "steps", steps: [{ label: "Web search", count: 1 }] },
+    ]);
+    void withTool;
+  });
+
+  it("inserts a space when a new sentence starts after a finished one", () => {
+    const first = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Ripartenza pulita.", streaming: true },
+    });
+    const tool = reduceLiveMessageBlocks(first, { type: "tool", name: "shell" });
+    const second = reduceLiveMessageBlocks(tool, {
+      type: "progress",
+      payload: { text: "Sto verificando l'elenco.", streaming: true },
+    });
+    const joined = second
+      .filter((b) => b.kind === "text" || b.kind === "progress")
+      .map((b) => b.text)
+      .join("");
+    expect(joined).toContain("pulita. Sto");
+    expect(joined).not.toContain("pulita.Sto");
   });
 });
 
@@ -679,6 +740,33 @@ describe("endsSentence", () => {
   it("is true for an empty or whitespace-only string — nothing to protect", () => {
     expect(endsSentence("")).toBe(true);
     expect(endsSentence("   ")).toBe(true);
+  });
+});
+
+
+describe("ensureSentenceSpacing", () => {
+  it("splits glued Italian mid-turn sentences after a period", () => {
+    const glued =
+      "Sto avviando la rimozione dei file per una ripartenza pulita.Sto verificando l'elenco dei file.Sto ripulendo i dati pregressi.Sto verificando lo stato pulito.";
+    expect(ensureSentenceSpacing(glued)).toBe(
+      "Sto avviando la rimozione dei file per una ripartenza pulita. Sto verificando l'elenco dei file. Sto ripulendo i dati pregressi. Sto verificando lo stato pulito.",
+    );
+  });
+
+  it("leaves decimals, versions-like dots before lowercase, and ellipses intact", () => {
+    expect(ensureSentenceSpacing("pi Greco 3.14 circa")).toBe("pi Greco 3.14 circa");
+    expect(ensureSentenceSpacing("vedi file.json poi")).toBe("vedi file.json poi");
+    expect(ensureSentenceSpacing("attendi...Poi continua")).toBe("attendi... Poi continua");
+    expect(ensureSentenceSpacing("fine…Inizio")).toBe("fine… Inizio");
+  });
+
+  it("spaces after ! and ? before a letter", () => {
+    expect(ensureSentenceSpacing("Fatto!Sto andando")).toBe("Fatto! Sto andando");
+    expect(ensureSentenceSpacing("Davvero?Forse sì")).toBe("Davvero? Forse sì");
+  });
+
+  it("spaces numbered-list periods before a capital", () => {
+    expect(ensureSentenceSpacing("categoria 1.Zeus e Thor")).toBe("categoria 1. Zeus e Thor");
   });
 });
 

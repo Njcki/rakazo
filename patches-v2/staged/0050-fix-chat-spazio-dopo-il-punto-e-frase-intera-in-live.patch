@@ -1,0 +1,376 @@
+From 53d1a2fc1afa7a3d6ff46af6d6c9dc9a93ee581e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Niccol=C3=B2?= <Njcki@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 14:42:06 +0100
+Subject: [PATCH] fix(chat): spazio dopo il punto e frase intera in live /
+ space after period and keep live sentence whole
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+IT: le bolle mid-turn arrivavano come `pulita.Sto…` e i chip strumenti spezzavano le parole. `ensureSentenceSpacing` inserisce lo spazio dopo `.`/`!`/`?`/`…`; la narrazione diventa messaggio chat solo a fine frase; il testo incompleto si riattacca anche con i chip in mezzo.
+
+EN: mid-turn bubbles arrived as `pulita.Sto…` and tool chips split words. `ensureSentenceSpacing` inserts the missing space after `.`/`!`/`?`/`…`; narration is promoted to chat only at a sentence end; unfinished text rejoins even with chips in between.
+---
+ packages/adapters/src/executor.ts           |  12 ++-
+ packages/adapters/src/user-progress.test.ts |   8 ++
+ packages/adapters/src/user-progress.ts      |  10 +-
+ packages/core/src/events.test.ts            |  68 +++++++++++++
+ packages/core/src/events.ts                 | 106 +++++++++++++++++---
+ patches-v2/CHANGELOG.md                     |   3 +-
+ 6 files changed, 187 insertions(+), 20 deletions(-)
+
+diff --git a/packages/adapters/src/executor.ts b/packages/adapters/src/executor.ts
+index 4b5faa0e..de4e174b 100644
+--- a/packages/adapters/src/executor.ts
++++ b/packages/adapters/src/executor.ts
+@@ -65,6 +65,7 @@ import {
+   containsSecret,
+   createStreamingRedactor,
+   endsSentence,
++  ensureSentenceSpacing,
+   expandSkillReferencesInPrompt,
+   formatSkillRunPrompt,
+   formatSkillsCatalogInstruction,
+@@ -4101,6 +4102,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
+             discardedMidTurnNarration = true;
+             return;
+           }
++          // Keep unfinished clauses live so tool chips never split a word across
++          // durable bubbles (`cat` + tools + `egoria`). Promote only at a sentence end.
++          if (!endsSentence(narration)) {
++            return;
++          }
+           // Patch 0028: narration right after the previous chat message stays a
+           // live progress line instead of one more chat bubble per tool call.
+           // Leaving it there also keeps the sentence intact when a tool starts mid-word.
+@@ -7109,8 +7115,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
+             }
+ 
+             if (event.type === "text") {
+-              assembled += event.text;
+-              currentTextSegment += event.text;
++              assembled = ensureSentenceSpacing(assembled + event.text);
++              currentTextSegment = ensureSentenceSpacing(currentTextSegment + event.text);
+               toolCallStreak = { key: undefined, count: 0 };
+               tryFlushPendingTools();
+               pendingProgress += progressRedactor.push(event.text);
+@@ -7428,7 +7434,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
+                   // cumulative done.text (clamp/redaction make substring stripping brittle).
+                 } else {
+                   assembled = event.text;
+-                  currentTextSegment += event.text;
++                  currentTextSegment = ensureSentenceSpacing(currentTextSegment + event.text);
+                 }
+               }
+             }
+diff --git a/packages/adapters/src/user-progress.test.ts b/packages/adapters/src/user-progress.test.ts
+index f99cd9e6..2e76d5a6 100644
+--- a/packages/adapters/src/user-progress.test.ts
++++ b/packages/adapters/src/user-progress.test.ts
+@@ -106,6 +106,14 @@ describe("userProgressClientNonce", () => {
+ });
+ 
+ describe("clampMidTurnNarration", () => {
++  it("inserts spaces between glued Italian sentences before clamping", () => {
++    const glued =
++      "Sto avviando la rimozione dei file per una ripartenza pulita.Sto verificando l'elenco.";
++    expect(clampMidTurnNarration(glued)).toBe(
++      "Sto avviando la rimozione dei file per una ripartenza pulita. Sto verificando l'elenco.",
++    );
++  });
++
+   it("keeps a long status report that precedes a tool call intact", () => {
+     const report = `**Punto della situazione**\n\n${"dettaglio ".repeat(150)}`.trim();
+     expect(report.length).toBeGreaterThan(USER_PROGRESS_MESSAGE_MAX_LENGTH);
+diff --git a/packages/adapters/src/user-progress.ts b/packages/adapters/src/user-progress.ts
+index d266a8d3..edafb18c 100644
+--- a/packages/adapters/src/user-progress.ts
++++ b/packages/adapters/src/user-progress.ts
+@@ -1,5 +1,9 @@
+ import type { MessageBlock } from "@rakazo/contracts";
+-import { BOT_MESSAGE_MAX_LENGTH, isToolActivityBlock } from "@rakazo/core";
++import {
++  BOT_MESSAGE_MAX_LENGTH,
++  ensureSentenceSpacing,
++  isToolActivityBlock,
++} from "@rakazo/core";
+ 
+ /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
+ export const USER_PROGRESS_MESSAGE_MAX_LENGTH = 500;
+@@ -19,7 +23,7 @@ export function clampUserProgressMessage(text: string): string {
+ export const MID_TURN_NARRATION_MAX_LENGTH = BOT_MESSAGE_MAX_LENGTH;
+ 
+ export function clampMidTurnNarration(text: string): string {
+-  const trimmed = text.trim();
++  const trimmed = ensureSentenceSpacing(text).trim();
+   if (!trimmed) return "";
+   if (trimmed.length <= MID_TURN_NARRATION_MAX_LENGTH) return trimmed;
+   return `${trimmed.slice(0, MID_TURN_NARRATION_MAX_LENGTH - 1).trimEnd()}…`;
+@@ -67,7 +71,7 @@ export function extractNarrationText(
+     remaining.push(block);
+   }
+   if (currentText) parts.push(currentText);
+-  return { text: parts.join(""), remaining };
++  return { text: ensureSentenceSpacing(parts.join("")), remaining };
+ }
+ 
+ /**
+diff --git a/packages/core/src/events.test.ts b/packages/core/src/events.test.ts
+index a7b7f8de..5201d6a6 100644
+--- a/packages/core/src/events.test.ts
++++ b/packages/core/src/events.test.ts
+@@ -6,6 +6,7 @@ import {
+   containsSecret,
+   createStreamingRedactor,
+   endsSentence,
++  ensureSentenceSpacing,
+   humanizeToolName,
+   isRunTerminalEvent,
+   normalizeResponseStreamingPreference,
+@@ -159,6 +160,46 @@ describe("reduceLiveMessageBlocks", () => {
+       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+     ]);
+   });
++
++  it("rejoins a word split across step chips", () => {
++    const started = reduceLiveMessageBlocks([], {
++      type: "progress",
++      payload: { text: "cat", streaming: true },
++    });
++    const withTool = reduceLiveMessageBlocks(started, { type: "tool", name: "web_search" });
++    // Force a steps block ahead of unfinished text the way a premature flush would.
++    const split = [
++      { kind: "text" as const, text: "cat" },
++      { kind: "steps" as const, steps: [{ label: "Web search", count: 1 }] },
++    ];
++    const continued = reduceLiveMessageBlocks(split, {
++      type: "progress",
++      payload: { text: "egoria 1.", streaming: true },
++    });
++    expect(continued).toEqual([
++      { kind: "text", text: "categoria 1." },
++      { kind: "steps", steps: [{ label: "Web search", count: 1 }] },
++    ]);
++    void withTool;
++  });
++
++  it("inserts a space when a new sentence starts after a finished one", () => {
++    const first = reduceLiveMessageBlocks([], {
++      type: "progress",
++      payload: { text: "Ripartenza pulita.", streaming: true },
++    });
++    const tool = reduceLiveMessageBlocks(first, { type: "tool", name: "shell" });
++    const second = reduceLiveMessageBlocks(tool, {
++      type: "progress",
++      payload: { text: "Sto verificando l'elenco.", streaming: true },
++    });
++    const joined = second
++      .filter((b) => b.kind === "text" || b.kind === "progress")
++      .map((b) => b.text)
++      .join("");
++    expect(joined).toContain("pulita. Sto");
++    expect(joined).not.toContain("pulita.Sto");
++  });
+ });
+ 
+ describe("runFailureError", () => {
+@@ -702,6 +743,33 @@ describe("endsSentence", () => {
+   });
+ });
+ 
++
++describe("ensureSentenceSpacing", () => {
++  it("splits glued Italian mid-turn sentences after a period", () => {
++    const glued =
++      "Sto avviando la rimozione dei file per una ripartenza pulita.Sto verificando l'elenco dei file.Sto ripulendo i dati pregressi.Sto verificando lo stato pulito.";
++    expect(ensureSentenceSpacing(glued)).toBe(
++      "Sto avviando la rimozione dei file per una ripartenza pulita. Sto verificando l'elenco dei file. Sto ripulendo i dati pregressi. Sto verificando lo stato pulito.",
++    );
++  });
++
++  it("leaves decimals, versions-like dots before lowercase, and ellipses intact", () => {
++    expect(ensureSentenceSpacing("pi Greco 3.14 circa")).toBe("pi Greco 3.14 circa");
++    expect(ensureSentenceSpacing("vedi file.json poi")).toBe("vedi file.json poi");
++    expect(ensureSentenceSpacing("attendi...Poi continua")).toBe("attendi... Poi continua");
++    expect(ensureSentenceSpacing("fine…Inizio")).toBe("fine… Inizio");
++  });
++
++  it("spaces after ! and ? before a letter", () => {
++    expect(ensureSentenceSpacing("Fatto!Sto andando")).toBe("Fatto! Sto andando");
++    expect(ensureSentenceSpacing("Davvero?Forse sì")).toBe("Davvero? Forse sì");
++  });
++
++  it("spaces numbered-list periods before a capital", () => {
++    expect(ensureSentenceSpacing("categoria 1.Zeus e Thor")).toBe("categoria 1. Zeus e Thor");
++  });
++});
++
+ describe("appendTextSegment", () => {
+   it("starts a new text segment when there are none", () => {
+     expect(appendTextSegment([], "hello")).toEqual([{ kind: "text", text: "hello" }]);
+diff --git a/packages/core/src/events.ts b/packages/core/src/events.ts
+index 11a63e75..ed1618f2 100644
+--- a/packages/core/src/events.ts
++++ b/packages/core/src/events.ts
+@@ -318,7 +318,7 @@ export function reduceLiveMessageBlocks(
+       ? typeof update.payload?.delta === "string"
+         ? progressText.slice(flushedLength)
+         : continuation
+-          ? liveSentence + rawText
++          ? ensureSentenceSpacing(liveSentence + rawText)
+           : progressText
+       : tail?.kind === "progress"
+         ? tail.text
+@@ -333,25 +333,70 @@ export function reduceLiveMessageBlocks(
+       : tail?.kind === "progress" && tail.activity === true;
+ 
+   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
+-    let next = activity ? [...segments] : appendTextSegment(segments, tailText);
++    let next = activity ? [...segments] : appendTextSegment(segments, ensureSentenceSpacing(tailText));
+     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
+     return next;
+   }
+   if (!tailText) return [...segments];
+-  const unfinished = segments.at(-1);
+-  if (
+-    !activity &&
+-    unfinished?.kind === "text" &&
+-    !endsSentence(unfinished.text) &&
+-    pendingToolNames.length === 0
+-  ) {
+-    return appendTextSegment(segments, tailText);
++  const priorNarration = [...segments]
++    .reverse()
++    .find((block) => block.kind === "text" || block.kind === "progress");
++  const spacedTail = narrationContinuation(
++    priorNarration && (priorNarration.kind === "text" || priorNarration.kind === "progress")
++      ? priorNarration.text
++      : "",
++    tailText,
++  );
++  // Extend an unfinished sentence even when step chips sit after it, so "cat" +
++  // tools + "egoria" becomes one text block instead of a chip mid-word.
++  if (!activity) {
++    let unfinishedIdx = -1;
++    for (let i = segments.length - 1; i >= 0; i -= 1) {
++      const block = segments[i];
++      if (block?.kind === "text") {
++        if (!endsSentence(block.text)) unfinishedIdx = i;
++        break;
++      }
++    }
++    if (unfinishedIdx >= 0) {
++      const unfinished = segments[unfinishedIdx];
++      if (unfinished?.kind === "text") {
++        const merged = [
++          ...segments.slice(0, unfinishedIdx),
++          { kind: "text" as const, text: ensureSentenceSpacing(unfinished.text + spacedTail) },
++          ...segments.slice(unfinishedIdx + 1),
++        ];
++        const mergedText = merged[unfinishedIdx];
++        if (
++          pendingToolNames.length > 0 &&
++          mergedText?.kind === "text" &&
++          endsSentence(mergedText.text)
++        ) {
++          let next = merged;
++          for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
++          return next;
++        }
++        if (pendingToolNames.length > 0) {
++          return [
++            ...merged,
++            { kind: "progress", text: "", pendingToolNames },
++          ];
++        }
++        return merged;
++      }
++    }
++  }
++  // Merge into the trailing text block so `pulita.` + `Sto` becomes `pulita. Sto`
++  // (ensureSentenceSpacing runs inside appendTextSegment).
++  const trailing = segments.at(-1);
++  if (!activity && trailing?.kind === "text" && pendingToolNames.length === 0) {
++    return appendTextSegment(segments, spacedTail);
+   }
+   return [
+     ...segments,
+     {
+       kind: "progress",
+-      text: tailText,
++      text: spacedTail,
+       ...(activity ? { activity: true as const } : {}),
+       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
+     },
+@@ -400,13 +445,48 @@ export function endsSentence(text: string): boolean {
+   return text.trim() === "" || SENTENCE_END_RE.test(text);
+ }
+ 
++/**
++ * Insert a space after sentence terminators glued to the next sentence
++ * (`pulita.Sto` → `pulita. Sto`). Leaves decimals (`3.14`), ellipses (`...`),
++ * lowercase continuations (`file.json`, `e.g.foo`), and URL-ish hosts alone.
++ */
++export function ensureSentenceSpacing(text: string): string {
++  if (!text) return text;
++  // Unicode ellipsis before a letter.
++  let out = text.replace(/…(?=\p{L})/gu, "… ");
++  // ! or ? (plus closing quotes/brackets) before any letter.
++  out = out.replace(/([!?]["'”’)\]]*)(?=\p{L})/gu, "$1 ");
++  // Period (plus closing quotes/brackets) before an uppercase letter — Italian
++  // mid-turn lines often arrive as `fine.Inizio` with no space. Lowercase after
++  // a dot (`file.json`) and digits (`3.14`) stay untouched. Ellipsis `...Next`
++  // only inserts the space after the final dot.
++  out = out.replace(/(\.["'”’)\]]*)(?=\p{Lu})/gu, (match, punct, offset, full) => {
++    if (offset + 1 < full.length && full[offset + 1] === ".") return match;
++    return `${punct} `;
++  });
++  return out;
++}
++
++
++/** Space `next` so that concatenating it after `prior` stays correctly spaced. */
++export function narrationContinuation(prior: string, next: string): string {
++  if (!next) return next;
++  if (!prior) return ensureSentenceSpacing(next);
++  const joined = ensureSentenceSpacing(prior + next);
++  if (joined.startsWith(prior)) return joined.slice(prior.length);
++  return ensureSentenceSpacing(next);
++}
++
+ export function appendTextSegment(segments: readonly MessageBlock[], text: string): MessageBlock[] {
+   if (!text) return [...segments];
+   const last = segments.at(-1);
+   if (last?.kind === "text") {
+-    return [...segments.slice(0, -1), { kind: "text", text: last.text + text }];
++    return [
++      ...segments.slice(0, -1),
++      { kind: "text", text: ensureSentenceSpacing(last.text + text) },
++    ];
+   }
+-  return [...segments, { kind: "text", text }];
++  return [...segments, { kind: "text", text: ensureSentenceSpacing(text) }];
+ }
+ 
+ export function appendToolCallSegment(
+diff --git a/patches-v2/CHANGELOG.md b/patches-v2/CHANGELOG.md
+index c3a84ec3..04e013a4 100644
+--- a/patches-v2/CHANGELOG.md
++++ b/patches-v2/CHANGELOG.md
+@@ -56,6 +56,7 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
+ | 0037 | 2026-10-22 | agent: allega le immagini in chat invece del link / attach images in chat instead of a link | I bot incollavano un link da scaricare. `attach_file` mostra già l'immagine nel messaggio, ma il prompt non lo imponeva. Istruzione per ogni modello (Gemini e Qwen): salva il file nel workspace se serve e chiama `attach_file`; non incollare link, percorso o markdown. Stessa frase nella descrizione del tool. Solo worker. |
+ | 0036 | 2026-10-22 | usage: totale token anche senza cache misurata / token total without a measured cache | Causa: se il provider non mandava `total_tokens`, il totale si calcolava solo con cache letta e scritta entrambe misurate. Pi mette 0 sulla cache assente e quello 0 diventava «sconosciuto», quindi input e output venivano salvati e `totalTokens` restava null (soprattutto `local`, e tutti i `google`/`openrouter`/`nvidia`). `normalizePiUsage` ora deriva il totale da input+output più la cache davvero misurata. Il sommario non nasconde più la somma se qualche chiamata non ha token. Migrazione `20261022180000_backfill_usage_totals` riempie le righe vecchie che hanno input e output. api+worker. |
+ | 0035 | 2026-10-22 | agent: il contatore web_search usa il provider del worker / web_search counter uses the worker provider | Causa: le ricerche andavano a buon fine e `search_stats` restava vuota. Worker e API passavano `createWebProvider()` senza callback, e quel provider sostituisce quello dell'executor (l'unico che incrementava il contatore). `createCountingWebProvider`: lo stesso provider, con la scrittura best-effort del servizio che ha risposto. api+worker. |
++| 0050 | 2026-10-26 | chat: spazio dopo il punto + frase intera in live / space after period + keep live sentence whole | Causa: le bolle mid-turn arrivavano come `pulita.Sto verificando…` (punto attaccato alla maiuscola) e i chip «In corso… · N strumenti» spezzavano le parole (`cat` + tool + `egoria`). `ensureSentenceSpacing` / `narrationContinuation` in `packages/core/src/events.ts`: inserisce uno spazio dopo `.`/`!`/`?`/`…` prima di una lettera (`.` solo prima di maiuscola), senza toccare decimali, `file.json`, ellissi. Applicato in `appendTextSegment`, `reduceLiveMessageBlocks`, `clampMidTurnNarration`/`extractNarrationText` e sui join dello stream nel worker. `publishMidTurnNarration` promuove in chat solo se `endsSentence`; altrimenti resta live. `reduceLiveMessageBlocks` riattacca il testo incompleto anche con chip steps in mezzo. Solo api+worker+web (core condiviso; Android prende il fix al prossimo rebuild da `packages/core`). |
+ 
+ ## Compose (fuori da series/)
+ 
+@@ -107,4 +108,4 @@ Formato: `NNNN | data | titolo | scopo in una riga`.
+ - 2026-10-21 — `backup-nightly.sh`: copie esterne opzionali (`offsite-NOME.env`): `restic copy` + forget/prune 7/4/3 dopo il backup locale, guardia di dimensione `OFFSITE_MAX_GB` (default 18), timeout per comando, errori solo come avviso, modalità `--offsite-only`. Provato con una destinazione locale di prova (copia 3,5 GB in 2,5 min; guardia e destinazione irraggiungibile saltate con avviso). / Optional offsite copies with size guard, timeouts and non-fatal failures.
+ - 2026-10-21 — `update-rakazo-v2.sh`: cutover `fast` (default) / fast cutover. Prima, misurato sul cutover nk29 (61 s di 502): arresto vecchio stack ~7 s, supervisor + attesa healthcheck 10 s, api (corepack riscarica pnpm ~4 s, migrazioni <1 s, avvio tsx ~18 s) + altri ~7 s di attesa healthcheck, poi web e worker insieme (corepack ~8 s su una sola CPU). Ora: controllo run attive (`ALLOW_ACTIVE_RUNS=1` per saltarlo), snapshot, immagine tools, compose e migrazioni one-shot sulla nuova immagine (`PREMIGRATE=0` se una migrazione non è retrocompatibile) mentre il vecchio stack serve; poi un servizio alla volta con `--no-deps` (supervisor → api → web → worker), ognuno atteso con un polling da 0,5 s; `COREPACK_HOME=/data/.corepack` in `.env` per api/worker; fasi con orario in `backups/cutover-<STAMP>/phases.log`; `CUTOVER_MODE=legacy` per il vecchio percorso; `rollback` invariato. Proxy (Caddy davanti a web): `lb_try_duration 30s`, `lb_try_interval 250ms`, `health_uri /` ogni 1 s, così il riavvio di web diventa attesa invece di 502. Prova sulla stessa immagine nk29: pagina `/` 0 errori (attesa massima 6,3 s), API (`/api/…`) 502 per ~18 s (16:34:55–16:35:12 ora italiana, solo l'avvio di api), script 69 s in tutto. / Fast cutover: active-run check, one-shot migrations and corepack cache before any stop, one service at a time with 0.5 s readiness polls, per-phase log, `CUTOVER_MODE=legacy` fallback; Caddy upstream retry + active health check. Measured: page 0 errors (max 6.3 s wait), API 502 for ~18 s (was 61 s of 502 for everything).
+ 
+-Ultimo aggiornamento CHANGELOG: 2026-10-22 (Europe/Rome).
++Ultimo aggiornamento CHANGELOG: 2026-10-26 (Europe/Rome).
+-- 
+2.47.3
+

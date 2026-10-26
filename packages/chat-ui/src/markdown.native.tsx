@@ -279,6 +279,18 @@ function markdownStyles(palette: ColorTokens) {
     fence_code: {
       backgroundColor: palette.background,
     },
+    // Prism leaves plain tokens without a color (theme.plain is not applied to
+    // each Text). Without an explicit color, Android defaults to near-black text
+    // on our dark code background — unreadable in Scuro/Nero.
+    fence_token: {
+      color: palette.foreground,
+    },
+    fence_language_label: {
+      color: palette.mutedForeground,
+    },
+    fence_copy_text: {
+      color: palette.mutedForeground,
+    },
     // Bot bubbles are filled with `muted`, which `border` matches in light mode,
     // so rules drawn inside a message use the muted foreground to stay visible.
     blockquote: {

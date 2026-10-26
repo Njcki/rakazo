@@ -1,5 +1,9 @@
 import type { MessageBlock } from "@rakazo/contracts";
-import { BOT_MESSAGE_MAX_LENGTH, isToolActivityBlock } from "@rakazo/core";
+import {
+  BOT_MESSAGE_MAX_LENGTH,
+  ensureSentenceSpacing,
+  isToolActivityBlock,
+} from "@rakazo/core";
 
 /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
 export const USER_PROGRESS_MESSAGE_MAX_LENGTH = 500;
@@ -19,7 +23,7 @@ export function clampUserProgressMessage(text: string): string {
 export const MID_TURN_NARRATION_MAX_LENGTH = BOT_MESSAGE_MAX_LENGTH;
 
 export function clampMidTurnNarration(text: string): string {
-  const trimmed = text.trim();
+  const trimmed = ensureSentenceSpacing(text).trim();
   if (!trimmed) return "";
   if (trimmed.length <= MID_TURN_NARRATION_MAX_LENGTH) return trimmed;
   return `${trimmed.slice(0, MID_TURN_NARRATION_MAX_LENGTH - 1).trimEnd()}…`;
@@ -67,7 +71,7 @@ export function extractNarrationText(
     remaining.push(block);
   }
   if (currentText) parts.push(currentText);
-  return { text: parts.join(""), remaining };
+  return { text: ensureSentenceSpacing(parts.join("")), remaining };
 }
 
 /**

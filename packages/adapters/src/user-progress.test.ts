@@ -106,6 +106,14 @@ describe("userProgressClientNonce", () => {
 });
 
 describe("clampMidTurnNarration", () => {
+  it("inserts spaces between glued Italian sentences before clamping", () => {
+    const glued =
+      "Sto avviando la rimozione dei file per una ripartenza pulita.Sto verificando l'elenco.";
+    expect(clampMidTurnNarration(glued)).toBe(
+      "Sto avviando la rimozione dei file per una ripartenza pulita. Sto verificando l'elenco.",
+    );
+  });
+
   it("keeps a long status report that precedes a tool call intact", () => {
     const report = `**Punto della situazione**\n\n${"dettaglio ".repeat(150)}`.trim();
     expect(report.length).toBeGreaterThan(USER_PROGRESS_MESSAGE_MAX_LENGTH);

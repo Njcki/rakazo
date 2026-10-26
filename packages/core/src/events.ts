@@ -318,7 +318,7 @@ export function reduceLiveMessageBlocks(
       ? typeof update.payload?.delta === "string"
         ? progressText.slice(flushedLength)
         : continuation
-          ? liveSentence + rawText
+          ? ensureSentenceSpacing(liveSentence + rawText)
           : progressText
       : tail?.kind === "progress"
         ? tail.text
@@ -333,25 +333,70 @@ export function reduceLiveMessageBlocks(
       : tail?.kind === "progress" && tail.activity === true;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    let next = activity ? [...segments] : appendTextSegment(segments, tailText);
+    let next = activity ? [...segments] : appendTextSegment(segments, ensureSentenceSpacing(tailText));
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
   if (!tailText) return [...segments];
-  const unfinished = segments.at(-1);
-  if (
-    !activity &&
-    unfinished?.kind === "text" &&
-    !endsSentence(unfinished.text) &&
-    pendingToolNames.length === 0
-  ) {
-    return appendTextSegment(segments, tailText);
+  const priorNarration = [...segments]
+    .reverse()
+    .find((block) => block.kind === "text" || block.kind === "progress");
+  const spacedTail = narrationContinuation(
+    priorNarration && (priorNarration.kind === "text" || priorNarration.kind === "progress")
+      ? priorNarration.text
+      : "",
+    tailText,
+  );
+  // Extend an unfinished sentence even when step chips sit after it, so "cat" +
+  // tools + "egoria" becomes one text block instead of a chip mid-word.
+  if (!activity) {
+    let unfinishedIdx = -1;
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      const block = segments[i];
+      if (block?.kind === "text") {
+        if (!endsSentence(block.text)) unfinishedIdx = i;
+        break;
+      }
+    }
+    if (unfinishedIdx >= 0) {
+      const unfinished = segments[unfinishedIdx];
+      if (unfinished?.kind === "text") {
+        const merged = [
+          ...segments.slice(0, unfinishedIdx),
+          { kind: "text" as const, text: ensureSentenceSpacing(unfinished.text + spacedTail) },
+          ...segments.slice(unfinishedIdx + 1),
+        ];
+        const mergedText = merged[unfinishedIdx];
+        if (
+          pendingToolNames.length > 0 &&
+          mergedText?.kind === "text" &&
+          endsSentence(mergedText.text)
+        ) {
+          let next = merged;
+          for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
+          return next;
+        }
+        if (pendingToolNames.length > 0) {
+          return [
+            ...merged,
+            { kind: "progress", text: "", pendingToolNames },
+          ];
+        }
+        return merged;
+      }
+    }
+  }
+  // Merge into the trailing text block so `pulita.` + `Sto` becomes `pulita. Sto`
+  // (ensureSentenceSpacing runs inside appendTextSegment).
+  const trailing = segments.at(-1);
+  if (!activity && trailing?.kind === "text" && pendingToolNames.length === 0) {
+    return appendTextSegment(segments, spacedTail);
   }
   return [
     ...segments,
     {
       kind: "progress",
-      text: tailText,
+      text: spacedTail,
       ...(activity ? { activity: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
@@ -400,13 +445,48 @@ export function endsSentence(text: string): boolean {
   return text.trim() === "" || SENTENCE_END_RE.test(text);
 }
 
+/**
+ * Insert a space after sentence terminators glued to the next sentence
+ * (`pulita.Sto` → `pulita. Sto`). Leaves decimals (`3.14`), ellipses (`...`),
+ * lowercase continuations (`file.json`, `e.g.foo`), and URL-ish hosts alone.
+ */
+export function ensureSentenceSpacing(text: string): string {
+  if (!text) return text;
+  // Unicode ellipsis before a letter.
+  let out = text.replace(/…(?=\p{L})/gu, "… ");
+  // ! or ? (plus closing quotes/brackets) before any letter.
+  out = out.replace(/([!?]["'”’)\]]*)(?=\p{L})/gu, "$1 ");
+  // Period (plus closing quotes/brackets) before an uppercase letter — Italian
+  // mid-turn lines often arrive as `fine.Inizio` with no space. Lowercase after
+  // a dot (`file.json`) and digits (`3.14`) stay untouched. Ellipsis `...Next`
+  // only inserts the space after the final dot.
+  out = out.replace(/(\.["'”’)\]]*)(?=\p{Lu})/gu, (match, punct, offset, full) => {
+    if (offset + 1 < full.length && full[offset + 1] === ".") return match;
+    return `${punct} `;
+  });
+  return out;
+}
+
+
+/** Space `next` so that concatenating it after `prior` stays correctly spaced. */
+export function narrationContinuation(prior: string, next: string): string {
+  if (!next) return next;
+  if (!prior) return ensureSentenceSpacing(next);
+  const joined = ensureSentenceSpacing(prior + next);
+  if (joined.startsWith(prior)) return joined.slice(prior.length);
+  return ensureSentenceSpacing(next);
+}
+
 export function appendTextSegment(segments: readonly MessageBlock[], text: string): MessageBlock[] {
   if (!text) return [...segments];
   const last = segments.at(-1);
   if (last?.kind === "text") {
-    return [...segments.slice(0, -1), { kind: "text", text: last.text + text }];
+    return [
+      ...segments.slice(0, -1),
+      { kind: "text", text: ensureSentenceSpacing(last.text + text) },
+    ];
   }
-  return [...segments, { kind: "text", text }];
+  return [...segments, { kind: "text", text: ensureSentenceSpacing(text) }];
 }
 
 export function appendToolCallSegment(

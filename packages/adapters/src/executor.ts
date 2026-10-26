@@ -65,6 +65,7 @@ import {
   containsSecret,
   createStreamingRedactor,
   endsSentence,
+  ensureSentenceSpacing,
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
   formatSkillsCatalogInstruction,
@@ -4101,6 +4102,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             discardedMidTurnNarration = true;
             return;
           }
+          // Keep unfinished clauses live so tool chips never split a word across
+          // durable bubbles (`cat` + tools + `egoria`). Promote only at a sentence end.
+          if (!endsSentence(narration)) {
+            return;
+          }
           // Patch 0028: narration right after the previous chat message stays a
           // live progress line instead of one more chat bubble per tool call.
           // Leaving it there also keeps the sentence intact when a tool starts mid-word.
@@ -7109,8 +7115,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
 
             if (event.type === "text") {
-              assembled += event.text;
-              currentTextSegment += event.text;
+              assembled = ensureSentenceSpacing(assembled + event.text);
+              currentTextSegment = ensureSentenceSpacing(currentTextSegment + event.text);
               toolCallStreak = { key: undefined, count: 0 };
               tryFlushPendingTools();
               pendingProgress += progressRedactor.push(event.text);
@@ -7428,7 +7434,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   // cumulative done.text (clamp/redaction make substring stripping brittle).
                 } else {
                   assembled = event.text;
-                  currentTextSegment += event.text;
+                  currentTextSegment = ensureSentenceSpacing(currentTextSegment + event.text);
                 }
               }
             }

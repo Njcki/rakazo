@@ -580,6 +580,11 @@ export function BotSettings({
           className="mt-1.5"
         />
       </label>
+      <ErrorBoundary fallback={<SectionLoadFailed />}>
+        <Suspense fallback={null}>
+          <PlanSection botId={bot.id} />
+        </Suspense>
+      </ErrorBoundary>
       <div className="mt-5">
         <InstructionSettings key={bot.id} bot={bot} />
       </div>
@@ -618,7 +623,6 @@ export function BotSettings({
       </ErrorBoundary>
       <ErrorBoundary fallback={<SectionLoadFailed />}>
         <Suspense fallback={null}>
-          <PlanSection botId={bot.id} />
           <KnowledgeSection botId={bot.id} />
         </Suspense>
       </ErrorBoundary>

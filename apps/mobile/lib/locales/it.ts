@@ -946,6 +946,7 @@ export const IT_MESSAGES: Record<string, string> = {
   "Removed with chat, computer, and memory.": "Rimosso con chat, computer e memoria.",
   "Reply": "Rispondi",
   "Reset": "Reimposta",
+  "Statistics": "Statistiche",
   "Restore": "Ripristina",
   "Retry": "Riprova",
   "Robot": "Robot",

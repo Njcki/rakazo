@@ -4,7 +4,7 @@
     "slug": "rakazo-fork",
     "owner": "inbox-zero",
     "scheme": "rakazo",
-    "version": "1.0.27",
+    "version": "1.0.28",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -77,7 +77,7 @@
     },
     "android": {
       "package": "com.rakazo.fork",
-      "versionCode": 27,
+      "versionCode": 28,
       "softwareKeyboardLayoutMode": "resize",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {

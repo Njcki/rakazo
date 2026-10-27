@@ -169,6 +169,9 @@ export default function Account() {
   // A list that fails to refresh keeps its last count, so a passing error doesn't hide the row.
   const archivedCounts = useRef({ bots: 0, groups: 0 });
   const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const [searchStats, setSearchStats] = useState<{ service: string; count: number }[]>([]);
+  const [statsBusy, setStatsBusy] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const appearance = getCachedAppearancePreference();
   const streamReplies = useSyncExternalStore(
     subscribeResponseStreaming,
@@ -194,6 +197,9 @@ export default function Account() {
       .catch(() => undefined);
     void rpc("usage/summary")
       .then(setUsage)
+      .catch(() => undefined);
+    void rpc<{ service: string; count: number }[]>("stats/searches")
+      .then(setSearchStats)
       .catch(() => undefined);
     if (Platform.OS === "android") {
       void getLiveNotificationSettings()
@@ -246,6 +252,20 @@ export default function Account() {
       ))}
     </SettingsGroup>
   ) : null;
+
+  async function resetSearchStats() {
+    if (statsBusy) return;
+    setStatsBusy(true);
+    setStatsError(null);
+    try {
+      await rpc("stats/resetSearches", {});
+      setSearchStats([]);
+    } catch (err) {
+      setStatsError(errorText(err, t("Could not reset the statistics")));
+    } finally {
+      setStatsBusy(false);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -458,6 +478,29 @@ export default function Account() {
             {usageModels}
           </>
         ) : null}
+        <SettingsGroup label={t("Statistics")}>
+          {searchStats.map((entry) => (
+            <SettingsRow
+              key={entry.service}
+              accessible
+              title={entry.service}
+              value={String(entry.count)}
+            />
+          ))}
+          {statsError ? (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {statsError}
+            </Text>
+          ) : null}
+          <SettingsRow
+            accessibilityRole="button"
+            destructive
+            disabled={statsBusy || searchStats.length === 0}
+            dimmed={statsBusy || searchStats.length === 0}
+            onPress={() => void resetSearchStats()}
+            title={t("Reset")}
+          />
+        </SettingsGroup>
         <SettingsGroup>
           <SettingsRow
             accessibilityRole="button"

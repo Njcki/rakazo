@@ -14,6 +14,14 @@ const DAY_MS = 86_400_000;
 type ShareDeps = { prisma: PrismaClient };
 type PublicShareDeps = { prisma: PrismaClient; artifacts: ArtifactStore };
 
+type ShareTarget = {
+  threadId: string;
+  /** Display name for the conversation (bot or group). */
+  displayName: string;
+  /** botId → name for group member attribution; empty for 1:1. */
+  botNames: Map<string, string>;
+};
+
 /** The only block kinds that leave the instance in a public share. */
 function sanitizeBlocks(blocks: MessageBlock[]): SharedMessage["blocks"] {
   const out: SharedMessage["blocks"] = [];
@@ -32,18 +40,47 @@ function sanitizeBlocks(blocks: MessageBlock[]): SharedMessage["blocks"] {
   return out;
 }
 
-/** The owner's 1:1 thread for a bot, or null when the bot is not theirs. */
-async function ownedBotThread(
+/** The owner's 1:1 bot thread or group thread, or null when not theirs. */
+async function ownedShareTarget(
   prisma: PrismaClient,
   actor: Actor,
-  botId: string,
-): Promise<{ threadId: string; botName: string } | null> {
-  const bot = await prisma.bot.findFirst({
-    where: { id: botId, spaceId: actor.spaceId, userId: actor.userId },
-    select: { name: true, thread: { select: { id: true } } },
-  });
-  if (!bot?.thread) return null;
-  return { threadId: bot.thread.id, botName: bot.name };
+  input: { botId?: string; groupId?: string },
+): Promise<ShareTarget | null> {
+  if (input.botId) {
+    const bot = await prisma.bot.findFirst({
+      where: { id: input.botId, spaceId: actor.spaceId, userId: actor.userId },
+      select: { name: true, thread: { select: { id: true } } },
+    });
+    if (!bot?.thread) return null;
+    return { threadId: bot.thread.id, displayName: bot.name, botNames: new Map() };
+  }
+  if (input.groupId) {
+    const group = await prisma.chatGroup.findFirst({
+      where: { id: input.groupId, spaceId: actor.spaceId, userId: actor.userId },
+      select: {
+        name: true,
+        thread: { select: { id: true } },
+        members: { select: { bot: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!group?.thread) return null;
+    const botNames = new Map<string, string>();
+    for (const member of group.members) {
+      botNames.set(member.bot.id, member.bot.name);
+    }
+    return { threadId: group.thread.id, displayName: group.name, botNames };
+  }
+  return null;
+}
+
+function authorNameFor(
+  role: string,
+  botId: string | null | undefined,
+  target: ShareTarget,
+): string {
+  if (role === "user") return "You";
+  if (botId && target.botNames.has(botId)) return target.botNames.get(botId)!;
+  return target.displayName;
 }
 
 function toShareDto(row: {
@@ -73,9 +110,15 @@ function toShareDto(row: {
 export async function createThreadShare(
   deps: ShareDeps & { webOrigin: string },
   actor: Actor,
-  input: { botId: string; messageIds: string[]; title?: string; expiresInDays?: number },
+  input: {
+    botId?: string;
+    groupId?: string;
+    messageIds: string[];
+    title?: string;
+    expiresInDays?: number;
+  },
 ): Promise<{ token: string; url: string }> {
-  const target = await ownedBotThread(deps.prisma, actor, input.botId);
+  const target = await ownedShareTarget(deps.prisma, actor, input);
   if (!target) throw new ORPCError("NOT_FOUND");
   const rows = await deps.prisma.message.findMany({
     where: { threadId: target.threadId, id: { in: input.messageIds } },
@@ -84,7 +127,7 @@ export async function createThreadShare(
   const snapshot = rows
     .map((row) => ({
       role: row.role,
-      authorName: row.role === "user" ? "You" : target.botName,
+      authorName: authorNameFor(row.role, row.botId, target),
       blocks: sanitizeBlocks(row.blocks as MessageBlock[]),
       createdAt: row.createdAt.toISOString(),
     }))
@@ -115,9 +158,9 @@ export async function createThreadShare(
 export async function listThreadShares(
   deps: ShareDeps,
   actor: Actor,
-  input: { botId: string },
+  input: { botId?: string; groupId?: string },
 ) {
-  const target = await ownedBotThread(deps.prisma, actor, input.botId);
+  const target = await ownedShareTarget(deps.prisma, actor, input);
   if (!target) throw new ORPCError("NOT_FOUND");
   const now = new Date();
   const rows = await deps.prisma.threadShare.findMany({
@@ -175,7 +218,7 @@ export async function loadPublicShare(
     .catch(() => undefined);
   const thread = await deps.prisma.thread.findUnique({
     where: { id: row.threadId },
-    select: { botId: true },
+    select: { botId: true, groupId: true },
   });
   let botName = "Bot";
   if (thread?.botId) {
@@ -184,6 +227,12 @@ export async function loadPublicShare(
       select: { name: true },
     });
     if (bot?.name) botName = bot.name;
+  } else if (thread?.groupId) {
+    const group = await deps.prisma.chatGroup.findUnique({
+      where: { id: thread.groupId },
+      select: { name: true },
+    });
+    if (group?.name) botName = group.name;
   }
   const snapshot = Array.isArray(row.snapshot) ? (row.snapshot as SharedMessage[]) : [];
   return {

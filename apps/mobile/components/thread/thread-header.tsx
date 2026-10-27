@@ -105,6 +105,15 @@ export function useThreadHeader({
         onGroupSettings: () =>
           router.push({ pathname: "/group-settings", params: { groupId: groupId ?? "" } }),
         onBotActions: showBotActions,
+        onShare: !readOnly
+          ? () =>
+              router.push({
+                pathname: "/share-thread",
+                params: inGroup
+                  ? { groupId: groupId ?? "", name: displayName ?? t("Group") }
+                  : { botId: botId ?? "", name: displayName ?? t("Bot") },
+              })
+          : undefined,
         menuActions: botActions,
         computerLabel: t("Open computer"),
       }),
@@ -165,7 +174,19 @@ export function useThreadHeader({
     });
   }
 
+  function openShareConversation() {
+    router.push({
+      pathname: "/share-thread",
+      params: botId
+        ? { botId, name: displayName ?? t("Bot") }
+        : { groupId: groupId ?? "", name: displayName ?? t("Group") },
+    });
+  }
+
   const botActions = [
+    ...(!readOnly && botId
+      ? [{ text: t("Share conversation"), onPress: openShareConversation }]
+      : []),
     ...(!readOnly && botId ? [{ text: t("Open computer"), onPress: openBotComputer }] : []),
     {
       text: t("Profile"),

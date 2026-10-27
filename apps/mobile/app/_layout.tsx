@@ -430,6 +430,10 @@ function LayoutContent() {
                       name="group-settings"
                       options={glassHeaderOptions(t("Group settings"))}
                     />
+                    <Stack.Screen
+                      name="share-thread"
+                      options={glassHeaderOptions(t("Share conversation"))}
+                    />
                     <Stack.Screen name="bot-profile" options={glassHeaderOptions(t("Profile"))} />
                     <Stack.Screen
                       name="bot-settings"

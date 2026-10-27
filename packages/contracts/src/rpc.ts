@@ -593,15 +593,14 @@ export const appContract = {
   threadShares: {
     create: oc
       .input(
-        z.object({
-          botId: Id,
+        threadTarget.safeExtend({
           messageIds: z.array(Id).min(1).max(5000),
           title: z.string().trim().min(1).max(200).optional(),
           expiresInDays: z.number().int().min(1).max(365).optional(),
         }),
       )
       .output(z.object({ token: z.string(), url: z.string() })),
-    list: oc.input(z.object({ botId: Id })).output(z.array(ThreadShareSchema)),
+    list: oc.input(threadTarget).output(z.array(ThreadShareSchema)),
     revoke: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
     remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
   },

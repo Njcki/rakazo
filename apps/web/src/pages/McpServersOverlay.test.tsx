@@ -19,6 +19,9 @@ vi.mock("../lib/rpc", () => ({
   createSpaceRpc: () => api,
   selectedSpaceId: () => null,
 }));
+vi.mock("../components/McpAuthHelp", () => ({
+  McpAuthHelp: () => null,
+}));
 vi.mock("../lib/mcp-connect", () => ({
   MCP_OAUTH_CHANNEL: "test",
   mcpOAuthRedirectUri: () => "",

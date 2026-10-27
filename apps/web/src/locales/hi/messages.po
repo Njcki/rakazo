@@ -5900,6 +5900,10 @@ msgstr "ट्रांसक्रिप्ट"
 msgid "Transcription model"
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Transport"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr ""

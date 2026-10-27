@@ -4,6 +4,7 @@ import type { MessageBlock, ModelRoleChoice, RunStatus } from "@rakazo/contracts
 import { disabledBuiltinToolSet } from "@rakazo/contracts";
 import {
   assertTransition,
+  blocksToAgentHistoryText,
   botMessageAllowsSilence,
   expandSkillReferencesInPrompt,
   formatSkillRunPrompt,
@@ -166,6 +167,18 @@ import {
   RECENT_TURN_IMAGE_TURNS,
   withRecentTurnImages,
 } from "./run-turn-images.js";
+import { loadAgentPlanContext } from "./plan-context.js";
+import { getDisplayPlan } from "./plan-tools.js";
+import {
+  callQuickReplyModel,
+  QUICK_REPLY_MAX_TOKENS,
+  quickReplyConfig,
+  quickReplyEligible,
+  startRunQuickReply,
+} from "./quick-reply.js";
+import { publishMessage } from "./run-messages.js";
+import { markDurableProgress } from "./run-progress.js";
+import { userProgressClientNonce } from "./user-progress.js";
 import { loadAgentScratchpadContext } from "./scratchpad-context.js";
 import { inferScript } from "./scripted-runtime.js";
 import { listAgentSkillRecords } from "./skill-tools.js";
@@ -650,6 +663,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           memoryContext,
           scratchpadContext,
           ticketContext,
+          planContext,
           recalled,
         ] = await Promise.all([
           discoveredPromise,
@@ -669,6 +683,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 spaceId: run.spaceId,
                 text: task.prompt,
               }),
+          messagingChannelRun
+            ? Promise.resolve(undefined)
+            : loadAgentPlanContext(deps, { spaceId: run.spaceId, botId: bot.id }),
           recallPromise,
         ]);
         const semanticMemoryEnabled = Boolean(semanticMemory) && !messagingChannelRun;
@@ -1092,6 +1109,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
           earlierAttempt: undefined,
           handedOff: false,
           terminalCheckpointComplete: false,
+          planReminder: {
+            nonPlanToolsSincePlanUpdate: 0,
+            planToolUsedThisRun: false,
+            planCreateNudged: false,
+          },
         };
         const { effects } = state;
         /** Fleet tools take every scope from the run, never from arguments. */
@@ -1365,6 +1387,161 @@ export function createRunExecutor(deps: ExecutorDeps) {
         // Provider kind and model id only: custom endpoints are identified by kind, never host.
         const activeModel = { "model.provider": runModelProvider, "model.id": runModelId };
 
+        // Patch 0030: fast ack to messages sent while this run works.
+        const quickReplySettings = quickReplyConfig();
+        let quickReplyCount = 0;
+        let quickReplyArmed = false;
+        const runStartedAtMs = (run.startedAt ?? new Date()).getTime();
+        const quickReply = quickReplyEligible({
+          trigger: run.trigger,
+          scripted,
+          messageUserDisabled: disabledBuiltinTools.has("message_user") || voiceCall,
+          config: quickReplySettings,
+        })
+          ? startRunQuickReply({
+              config: quickReplySettings,
+              pollSteering: async (sinceMs) => {
+                const rows = await deps.prisma.steeringMessage.findMany({
+                  where: {
+                    botId: bot.id,
+                    claimedAt: null,
+                    createdAt: { gte: new Date(sinceMs) },
+                    OR: [{ runId }, { runId: null, originTrigger: null }],
+                    message: {
+                      threadId: thread.id,
+                      NOT: { blocks: { array_contains: [{ kind: "channel_message" }] } },
+                    },
+                  },
+                  include: { message: { select: { blocks: true } } },
+                  orderBy: { createdAt: "asc" },
+                  take: 10,
+                });
+                return rows.map((row) => ({
+                  id: row.id,
+                  messageId: row.messageId,
+                  text: blocksToAgentHistoryText(row.message.blocks as MessageBlock[]),
+                }));
+              },
+              resolveModel: async () => {
+                const choice =
+                  quickReplySettings.model ??
+                  fallbackModels[0] ?? { provider: runModelProvider, modelId: runModelId };
+                const base =
+                  choice.provider === runModelProvider && choice.modelId === runModelId
+                    ? {
+                        provider: runModelProvider!,
+                        id: runModelId!,
+                        ...(credential ? { connectionId: credential.id } : {}),
+                        apiKey: resolved.oauth ? undefined : resolved.apiKey,
+                        callObserver: resolved.callObserver,
+                        baseUrl: resolved.baseUrl,
+                        headers: resolved.headers,
+                        allowPrivateEndpoint: resolved.allowPrivateEndpoint,
+                        cacheCapabilities: resolved.cacheCapabilities,
+                        contextWindow: resolved.contextWindow,
+                        reasoning: resolved.reasoning,
+                        maxTokens: resolved.maxTokens,
+                        acceptsImages: resolved.acceptsImages,
+                        thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
+                        oauth: resolved.oauth
+                          ? {
+                              credential: resolved.oauth,
+                              persist: resolved.persistOAuth,
+                              retire: resolved.retireOAuth,
+                            }
+                          : undefined,
+                      }
+                    : await resolveConnectedModel(
+                        run,
+                        choice.provider,
+                        choice.modelId,
+                        (values) => runSecrets.push(...values),
+                      );
+                return {
+                  ...base,
+                  thinkingLevel: quickReplySettings.reasoning ?? base.thinkingLevel,
+                  maxTokens: Math.min(
+                    base.maxTokens ?? QUICK_REPLY_MAX_TOKENS,
+                    QUICK_REPLY_MAX_TOKENS,
+                  ),
+                };
+              },
+              loadContext: async () => {
+                const plan = await getDisplayPlan(deps, {
+                  spaceId: run.spaceId,
+                  botId: bot.id,
+                }).catch(() => null);
+                return {
+                  botName: bot.name,
+                  persona: redactSecrets(runIdentityInstruction(bot, run.trigger), runSecrets),
+                  task: redactSecrets(taskPrompt, runSecrets),
+                  plan: plan
+                    ? {
+                        title: plan.title,
+                        status: plan.status,
+                        progress: { done: plan.progress.done, total: plan.progress.total },
+                        steps: plan.steps.map((step) => ({
+                          index: step.index,
+                          title: step.title,
+                          status: step.status,
+                        })),
+                      }
+                    : null,
+                  recentActivity: [],
+                  recentUpdates: reply.midTurnUserTexts.slice(-2),
+                  runStartedAt: runStartedAtMs,
+                  now: Date.now(),
+                };
+              },
+              generate: (model, prompt, signal) =>
+                callQuickReplyModel({
+                  runtime: deps.runtime,
+                  model,
+                  instructions: prompt.instructions,
+                  prompt: prompt.prompt,
+                  runId,
+                  botId: bot.id,
+                  threadId: thread.id,
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  timeoutMs: quickReplySettings.timeoutMs,
+                  signal,
+                  onUsage: (event) =>
+                    recordUsage(deps.prisma, event, {
+                      spaceId: run.spaceId,
+                      botId: bot.id,
+                      userId: run.userId,
+                      runId,
+                      parentRunId: runId,
+                      operationId: `${runId}:quick-reply`,
+                    }),
+                }),
+              publish: async (text) => {
+                if (!lease.valid || runAbortController?.signal.aborted) return false;
+                const still = await deps.prisma.run.findFirst({
+                  where: {
+                    id: runId,
+                    status: "running",
+                    leaseOwner: workerId,
+                    leaseFence: fence,
+                  },
+                  select: { id: true },
+                });
+                if (!still) return false;
+                await publishMessage(
+                  deps,
+                  run,
+                  "bot",
+                  [{ kind: "text", text: redactSecrets(text, runSecrets) }],
+                  true,
+                  userProgressClientNonce(`${run.id}:quick`, quickReplyCount++),
+                );
+                markDurableProgress(reply);
+                return true;
+              },
+            })
+          : undefined;
+
         try {
           if (checkpointLoadError) throw checkpointLoadError;
           const runtimeEvents = deps.runtime.run(
@@ -1400,6 +1577,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   : undefined,
                 redactedTicketContext: ticketContext
                   ? redactSecrets(ticketContext, runSecrets)
+                  : undefined,
+                planContext: planContext
+                  ? redactSecrets(planContext, runSecrets)
                   : undefined,
                 hasHistoricalContext: historicalContext.length > 0,
                 historyRetrievalEnabled: contextStrategy !== "current",
@@ -1541,8 +1721,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   runSecrets,
                 );
               },
-              claimSteering: (seenIds) =>
-                claimRunSteering(
+              claimSteering: async (seenIds) => {
+                const claimed = await claimRunSteering(
                   deps,
                   {
                     threadId: thread.id,
@@ -1558,7 +1738,26 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     messageId: currentTurnMessage?.id,
                     hasImages: Boolean(currentTurnImages?.length),
                   },
-                ),
+                );
+                if (claimed.length) reply.steeringSinceDurableProgress = true;
+                if (!quickReply) return claimed;
+                if (!quickReplyArmed) {
+                  quickReply.arm(claimed.map((item) => item.messageId));
+                  quickReplyArmed = true;
+                  return claimed;
+                }
+                const replies = await quickReply.settle(
+                  claimed.map((item) => ({
+                    id: item.id,
+                    messageId: item.messageId,
+                    text: item.historyText ?? item.text,
+                  })),
+                );
+                return claimed.map((item) => ({
+                  ...item,
+                  quickReplyText: replies.get(item.id),
+                }));
+              },
             },
             context,
           );
@@ -1569,6 +1768,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ownCredential: resolved.ownCredential,
             active: activeModel,
           });
+        } finally {
+          quickReply?.stop();
         }
       } catch (setupError) {
         const computerBusy = setupError instanceof ComputerBusyError;

@@ -20,6 +20,10 @@ import {
   midTurnProgressBudgetAllows,
   userProgressClientNonce,
 } from "./user-progress.js";
+import {
+  progressCadenceConfig,
+  shouldPromoteNarration,
+} from "./progress-cadence.js";
 
 /** A fresh reply that knows the progress messages earlier attempts of this run posted. */
 export async function createReplyState(
@@ -46,6 +50,8 @@ export async function createReplyState(
     hasStreamedText: false,
     assistantTurnBreakPending: false,
     redactor: createStreamingRedactor(secrets),
+    lastDurableProgressAt: undefined,
+    steeringSinceDurableProgress: false,
   };
   const priorProgress = await deps.prisma.message.findMany({
     where: { runId: run.id, role: "bot" },
@@ -134,8 +140,19 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   const { reply } = ctx.state;
   const extracted = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
   const narration = clampUserProgressMessage(redactSecrets(extracted.text, ctx.secrets));
+  // Patch 0040/0041/0050: do not promote a mid-clause fragment into a durable chat bubble.
+  if (narration && !endsSentence(narration) && !beforeConnectCard) {
+    return;
+  }
+  const cadence = progressCadenceConfig();
+  const gapAllows = shouldPromoteNarration({
+    now: Date.now(),
+    lastDurableAt: reply.lastDurableProgressAt,
+    minGapSeconds: cadence.narrationMinGapSeconds,
+    steeringSinceDurable: reply.steeringSinceDurableProgress,
+  });
   const canPublish =
-    canPublishDurableNarration(ctx) ||
+    (canPublishDurableNarration(ctx) && gapAllows) ||
     (beforeConnectCard && runPromotesMidTurnNarration(run.trigger));
   if (
     narration &&
@@ -143,6 +160,10 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
     !ctx.allowSilentEmptyRun &&
     runPromotesMidTurnNarration(run.trigger)
   ) {
+    // Still streaming as transient progress; hold segments for a later sentence boundary.
+    if (!gapAllows && canPublishDurableNarration(ctx)) {
+      return;
+    }
     return;
   }
   reply.messageSegments = extracted.remaining;
@@ -166,5 +187,14 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
     userProgressClientNonce(run.id, reply.midTurnProgressCount++),
   );
   reply.midTurnUserTexts.push(narration);
+  reply.publishedMidTurnUserMessage = true;
+  reply.lastDurableProgressAt = Date.now();
+  reply.steeringSinceDurableProgress = false;
+}
+
+/** Mark that a durable mid-turn bot message was posted (message_user / quick-reply). */
+export function markDurableProgress(reply: ReplyState) {
+  reply.lastDurableProgressAt = Date.now();
+  reply.steeringSinceDurableProgress = false;
   reply.publishedMidTurnUserMessage = true;
 }

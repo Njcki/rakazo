@@ -63,6 +63,11 @@ import { callMediaTool } from "./run-tools-files.js";
 import { USER_COMPUTER_SHELL_TOOL, userComputerGate } from "./run-tools-user-computer.js";
 import { connectorTrustKeys } from "./run-trust.js";
 import { commandWatchFromTool } from "./schedule-tools.js";
+import {
+  PLAN_CREATE_REMINDER,
+  planReminderConfig,
+} from "./progress-cadence.js";
+import { getActivePlan, planStaleReminder } from "./plan-tools.js";
 
 export type AppliedEffect = Awaited<ReturnType<typeof recordEffect>>;
 
@@ -500,8 +505,50 @@ function createToolCall(
             result,
           )
         : Promise.resolve(true),
-    finish: async (result) =>
-      (await call.persistEffectResult(result)) ? result : uncertainEffectResult(name, args),
+    finish: async (result) => {
+      const persisted = (await call.persistEffectResult(result))
+        ? result
+        : uncertainEffectResult(name, args);
+      // Patch 0028: plan reminders (counter lives on RunState so it survives across calls).
+      const planState = ctx.state.planReminder;
+      if (String(name).startsWith("plan_")) {
+        planState.nonPlanToolsSincePlanUpdate = 0;
+        planState.planToolUsedThisRun = true;
+        return persisted;
+      }
+      planState.nonPlanToolsSincePlanUpdate += 1;
+      const planReminders = planReminderConfig();
+      const dueStale =
+        planReminders.every > 0 &&
+        planState.nonPlanToolsSincePlanUpdate % planReminders.every === 0;
+      const dueCreate =
+        planReminders.createAfter > 0 &&
+        !ctx.source.messagingChannelRun &&
+        !planState.planCreateNudged &&
+        !planState.planToolUsedThisRun &&
+        planState.nonPlanToolsSincePlanUpdate >= planReminders.createAfter;
+      if (!dueStale && !dueCreate) return persisted;
+      try {
+        const active = await getActivePlan(deps, {
+          spaceId: ctx.run.spaceId,
+          botId: ctx.bot.id,
+        });
+        let reminder: string | undefined;
+        if (active) {
+          reminder = dueStale ? planStaleReminder(active) : undefined;
+        } else if (dueCreate) {
+          planState.planCreateNudged = true;
+          reminder = PLAN_CREATE_REMINDER;
+        }
+        if (!reminder) return persisted;
+        if (persisted && typeof persisted === "object" && !Array.isArray(persisted)) {
+          return { ...(persisted as Record<string, unknown>), _planReminder: reminder };
+        }
+        return { result: persisted, _planReminder: reminder };
+      } catch {
+        return persisted;
+      }
+    },
     claimOrReturn: async (from) => {
       const claim = from === "approved" ? claimApprovedEffect : claimIntendedEffect;
       if (await claim(deps.prisma, applied!.effect.id)) {

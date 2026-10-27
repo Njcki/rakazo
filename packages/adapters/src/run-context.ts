@@ -99,6 +99,10 @@ export interface ReplyState {
   assistantTurnBreakPending: boolean;
   /** Replaced whenever a secret is added, so streamed progress hides it too. */
   redactor: ReturnType<typeof createStreamingRedactor>;
+  /** Patch 0028: last durable mid-turn chat message (promoted narration / message_user / quick-reply). */
+  lastDurableProgressAt: number | undefined;
+  /** Patch 0028: a mid-run user message arrived since the last durable progress. */
+  steeringSinceDurableProgress: boolean;
 }
 
 export interface ApprovalState {
@@ -128,6 +132,13 @@ export interface ScreenState {
   unchangedVisualStreak: UnchangedVisualStreak;
 }
 
+/** Patch 0028: plan_* reminder counters for this attempt. */
+export interface PlanReminderState {
+  nonPlanToolsSincePlanUpdate: number;
+  planToolUsedThisRun: boolean;
+  planCreateNudged: boolean;
+}
+
 /** What one attempt changes while it runs. Every piece shares these objects by reference. */
 export interface RunState {
   lease: RunLeaseState;
@@ -150,6 +161,7 @@ export interface RunState {
   earlierAttempt: Promise<boolean> | undefined;
   handedOff: boolean;
   terminalCheckpointComplete: boolean;
+  planReminder: PlanReminderState;
 }
 
 /** The computer this run may use and how. */

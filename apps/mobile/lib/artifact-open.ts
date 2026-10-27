@@ -172,7 +172,7 @@ export const APK_MIME_TYPE = "application/vnd.android.package-archive";
 /**
  * The type the viewer intent carries. Attachments often arrive as a generic
  * `application/octet-stream`; an `.apk` must still go out as a package archive, or the
- * system package installer is offered for `*/*` and then refuses the file without a word.
+ * system package installer is offered for a wildcard type and then refuses the file without a word.
  */
 export function intentMimeType(mimeType: string, fileName = ""): string {
   const normalized = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";

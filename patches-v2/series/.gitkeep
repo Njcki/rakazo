@@ -1,0 +1,2 @@
+# Intentionally empty at tip-as-base cutover (2026-10-27).
+# Add future deltas vs REBASE_TIP here as NNNN-*.patch — do not replay 0001–0050 on pin 0723154.

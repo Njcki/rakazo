@@ -40,6 +40,11 @@ msgstr "{0, plural, one {等待登入中 — 代碼將在約 # 分鐘後失效�
 msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 msgstr "{0, plural, one {等待登入中 — 連結將在約 # 分鐘後失效。} other {等待登入中 — 連結將在約 # 分鐘後失效。}}"
 
+#. placeholder {0}: copied ? "Copied" : "Copy"
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0}"
+msgstr ""
+
 #. placeholder {0}: file.name
 #: src/pages/shell/use-composer-actions.ts
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
@@ -100,6 +105,17 @@ msgstr "{0} KB"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} MB"
+
+#. placeholder {0}: share.messageCount
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} messages"
+msgstr ""
+
+#. placeholder {0}: selected.size
+#. placeholder {1}: selectable.length
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} of {1} messages"
+msgstr ""
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -436,6 +452,10 @@ msgstr "空間操作"
 msgid "Active"
 msgstr "啟用"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Active shares"
+msgstr ""
+
 #: src/pages/shell/sidebar-header.tsx
 msgid "Activity"
 msgstr "動態"
@@ -459,10 +479,6 @@ msgstr "新增要執行的命令"
 #: src/pages/RoutineEditor.tsx
 msgid "Add a file or folder to watch"
 msgstr "新增要監視的檔案或資料夾"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Add a label"
-msgstr "新增標籤"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -607,6 +623,11 @@ msgstr "進階"
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "進階..."
+
+#. placeholder {0}: option.value
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "After {0} days"
+msgstr ""
 
 #: src/pages/shell/chat-header.tsx
 msgid "Agent computer"
@@ -1248,6 +1269,7 @@ msgstr "Claude 訂閱"
 
 #: src/components/AskCard.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Clear"
 msgstr "清空"
 
@@ -1276,6 +1298,7 @@ msgstr "正在清空…"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "關閉"
@@ -1287,10 +1310,6 @@ msgstr "關閉圖表"
 #: src/pages/shell/computer-overlay.tsx
 msgid "Close computer"
 msgstr "關閉電腦"
-
-#: src/pages/shell/message-cards.tsx
-msgid "Close image preview"
-msgstr "關閉圖片預覽"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Close integrations"
@@ -1402,6 +1421,7 @@ msgid "Complete"
 msgstr "完成"
 
 #: src/components/SubagentCard.tsx
+#: src/pages/PlanSection.tsx
 msgid "Completed"
 msgstr "已完成"
 
@@ -1589,6 +1609,7 @@ msgstr "上下文長度限制"
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/shell/composer.tsx
 msgid "Continue"
 msgstr "繼續"
 
@@ -1604,6 +1625,12 @@ msgstr "繼續結帳"
 #: src/pages/Auth.tsx
 msgid "Continue with {0}"
 msgstr "透過 {0} 繼續"
+
+#. placeholder {0}: data.botName
+#. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
+#: src/pages/SharePage.tsx
+msgid "Conversation with {0} · shared {1}"
+msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -1634,6 +1661,10 @@ msgstr "複製程式碼"
 #: src/components/markdown-copy.tsx
 msgid "Copy diagram source"
 msgstr "複製圖表原始碼"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Copy prompt"
@@ -1745,6 +1776,10 @@ msgstr "無法建立分組"
 #: src/pages/shell/dialogs.tsx
 msgid "Could not create space"
 msgstr "無法建立空間"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not create the share"
+msgstr ""
 
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
@@ -1859,9 +1894,17 @@ msgstr "無法載入整合"
 msgid "Could not load MCP servers"
 msgstr "無法載入 MCP 伺服器"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not load messages"
+msgstr ""
+
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Could not load model settings"
 msgstr "無法載入模型設定"
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr ""
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -1875,6 +1918,10 @@ msgstr "無法載入登入選項"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "無法載入技能"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -1964,9 +2011,17 @@ msgstr "無法渲染圖表"
 msgid "Could not reset password"
 msgstr "無法重設密碼"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "無法撤銷連線授權"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not revoke the share"
+msgstr ""
 
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not run routine"
@@ -2016,6 +2071,10 @@ msgstr "無法儲存該語音模型"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not save that voice"
 msgstr "無法儲存該語音"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr ""
 
 #: src/components/VaultSettings.tsx
 msgid "Could not save the credential"
@@ -2135,6 +2194,10 @@ msgstr "建立帳號"
 msgid "Create group"
 msgstr "建立群組"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Create link"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Create Routine"
 msgstr "建立例行任務"
@@ -2248,6 +2311,10 @@ msgstr "預設"
 msgid "Default ({0})"
 msgstr "預設（{0}）"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "Default from Hermes"
 msgstr "Hermes 預設內容"
@@ -2339,6 +2406,10 @@ msgstr "已拒絕"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "拒絕"
+
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr ""
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
@@ -2491,6 +2562,10 @@ msgstr "拖放或貼上圖片"
 msgid "Duplicate"
 msgstr "複製"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "e.g. Research assistant, Ops bot"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Each name can be used once."
 msgstr "每個名稱只能使用一次。"
@@ -2504,14 +2579,6 @@ msgstr "編輯"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先編輯"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit label"
-msgstr "編輯標籤"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit name"
-msgstr "編輯名稱"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
@@ -2677,6 +2744,11 @@ msgstr "展開表格"
 #: src/components/CloudAgentCard.tsx
 msgid "expired"
 msgstr "已過期"
+
+#. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "expires {0}"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -3110,6 +3182,10 @@ msgstr "隔離"
 msgid "Isolated preview — no access to your account"
 msgstr "隔離預覽 — 無法存取你的帳號"
 
+#: src/pages/SharePage.tsx
+msgid "It may have been revoked or expired."
+msgstr ""
+
 #: src/pages/shell/shell-dialogs.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "其中的機器人和群組會保留，並移出該分組。"
@@ -3208,6 +3284,10 @@ msgstr "Linear 工單"
 msgid "Link DMs"
 msgstr "連結私訊"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Link expires"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
 msgstr "關聯 SSO"
@@ -3257,6 +3337,10 @@ msgstr "正在載入整合…"
 msgid "Loading memory settings…"
 msgstr "正在載入記憶設定…"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Loading messages…"
+msgstr ""
+
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -3271,10 +3355,12 @@ msgid "Loading voice providers…"
 msgstr "正在載入語音供應商…"
 
 #: src/components/PageLoading.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/SharePage.tsx
 #: src/pages/shell/transcript.tsx
 msgid "Loading…"
 msgstr "載入中…"
@@ -3456,6 +3542,7 @@ msgstr "提及：{mentions}"
 
 #: src/pages/shell/chat-shared.ts
 #: src/pages/shell/composer.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Message"
 msgstr "訊息"
 
@@ -3757,6 +3844,10 @@ msgstr "下一頁"
 msgid "Next settings sections"
 msgstr "下一組設定區段"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No active shares."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "沒有符合搜尋條件的應用程式。"
@@ -3781,6 +3872,10 @@ msgstr "沒有機器人"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "沒有符合的機器人"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No expiration"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "No longer active"
@@ -3828,6 +3923,10 @@ msgstr "未列出模型。"
 msgid "No OpenClaw, Hermes or agent document found."
 msgstr "找不到 OpenClaw、Hermes 或代理程式文件。"
 
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr "找不到遠端 MCP 伺服器"
@@ -3849,6 +3948,10 @@ msgstr "沒有符合篩選條件的執行紀錄。"
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "還沒有執行紀錄"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -3940,6 +4043,11 @@ msgstr "OAuth 連線失敗"
 #: src/pages/PluginsOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth 已過期"
+
+#. js-lingui-explicit-id
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
 msgid "Offline"
@@ -4195,6 +4303,10 @@ msgstr "請從清單中選擇模型，或輸入此端點提供的模型 ID。"
 msgid "Pick a tool to check"
 msgstr "選擇要檢查的工具"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "置頂"
@@ -4202,6 +4314,14 @@ msgstr "置頂"
 #: src/pages/Shell.tsx
 msgid "Pinned"
 msgstr "置頂"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr ""
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
@@ -4560,6 +4680,7 @@ msgid "Research & writing"
 msgstr "調研和寫作"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "重設"
@@ -4585,6 +4706,7 @@ msgid "Reset your password"
 msgstr "重設你的密碼"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 msgid "Resetting…"
 msgstr "正在重設…"
 
@@ -4653,6 +4775,7 @@ msgid "Review provider settings and test again."
 msgstr "請檢查供應商設定並重新測試。"
 
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Revoke"
 msgstr "撤銷授權"
 
@@ -4850,6 +4973,10 @@ msgstr "搜尋模型"
 msgid "Search runs"
 msgstr "搜尋執行紀錄"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr ""
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -4867,6 +4994,10 @@ msgstr "安全"
 #: src/pages/shell/chat-header.tsx
 msgid "Select a bot"
 msgstr "選擇機器人"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Select all"
+msgstr ""
 
 #: src/pages/memory-providers/ConnectionModeFields.tsx
 msgid "Self-hosted"
@@ -4973,10 +5104,19 @@ msgstr "形狀"
 msgid "Shape {0}"
 msgstr "形狀 {0}"
 
+#: src/pages/shell/chat-header.tsx
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Share conversation"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "共享"
+
+#: src/pages/SharePage.tsx
+msgid "Shared from Rakazo"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared memory"
@@ -5122,6 +5262,10 @@ msgstr "向上滑動以鎖定"
 msgid "Some settings are not imported"
 msgstr "部分設定不會匯入"
 
+#: src/pages/SharePage.tsx
+msgid "Something went wrong loading this share."
+msgstr ""
+
 #: src/App.tsx
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
@@ -5211,6 +5355,11 @@ msgstr "正在開始"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "正在開始…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Statistics"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5442,6 +5591,10 @@ msgstr "無法讀取已儲存的設定，請移除後重新新增。"
 msgid "Thinking"
 msgstr "思考"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Thinking in calls"
+msgstr ""
+
 #. placeholder {0}: thinkingLevelLabel(choice.thinkingLevel)
 #: src/pages/ModelRoleSettings.tsx
 msgid "Thinking: {0}"
@@ -5484,6 +5637,10 @@ msgstr "此對話為唯讀"
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "這臺電腦"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "This conversation has no shareable messages yet."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5565,6 +5722,10 @@ msgstr "此伺服器未請求瀏覽器授權。"
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "此伺服器已連線。請先中斷再重新授權。"
 
+#: src/pages/SharePage.tsx
+msgid "This share link is not available."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "此訂閱登入在 Rakazo 中尚不可用。請使用部署憑證或選擇其他供應商。"
@@ -5593,6 +5754,10 @@ msgstr "執行時間可能不同"
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "標題"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Title (optional)"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -5735,6 +5900,10 @@ msgstr "取消置頂"
 #: src/pages/shell/use-composer-actions.ts
 msgid "Unsupported file type: {0}"
 msgstr "不支援的檔案類型：{0}"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Untitled share"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Up to date"
@@ -5935,6 +6104,10 @@ msgstr "排隊等候…"
 msgid "Waiting…"
 msgstr "等待中…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Web, desktop and mobile"
 msgstr "網頁、桌面與手機"
@@ -6076,6 +6249,7 @@ msgstr "昨天"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/shell/shell-sidebar.tsx
 msgid "You"
 msgstr "你"

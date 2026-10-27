@@ -39,6 +39,11 @@ msgstr ""
 msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 msgstr ""
 
+#. placeholder {0}: copied ? "Copied" : "Copy"
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0}"
+msgstr ""
+
 #. placeholder {0}: file.name
 #: src/pages/shell/use-composer-actions.ts
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
@@ -99,6 +104,17 @@ msgstr "{0} КБ"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} МБ"
+
+#. placeholder {0}: share.messageCount
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} messages"
+msgstr ""
+
+#. placeholder {0}: selected.size
+#. placeholder {1}: selectable.length
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} of {1} messages"
+msgstr ""
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -435,6 +451,10 @@ msgstr "Действия для пространства"
 msgid "Active"
 msgstr "Активный"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Active shares"
+msgstr ""
+
 #: src/pages/shell/sidebar-header.tsx
 msgid "Activity"
 msgstr "Активность"
@@ -458,10 +478,6 @@ msgstr "Добавьте команду для выполнения"
 #: src/pages/RoutineEditor.tsx
 msgid "Add a file or folder to watch"
 msgstr "Добавьте файл или папку для отслеживания"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Add a label"
-msgstr "Добавить метку"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -606,6 +622,11 @@ msgstr "Расширенные"
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "Расширенные..."
+
+#. placeholder {0}: option.value
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "After {0} days"
+msgstr ""
 
 #: src/pages/shell/chat-header.tsx
 msgid "Agent computer"
@@ -1247,6 +1268,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Clear"
 msgstr "Очистить"
 
@@ -1275,6 +1297,7 @@ msgstr "Очистка…"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "Закрыть"
@@ -1286,10 +1309,6 @@ msgstr "Закрыть график"
 #: src/pages/shell/computer-overlay.tsx
 msgid "Close computer"
 msgstr "Закрыть компьютер"
-
-#: src/pages/shell/message-cards.tsx
-msgid "Close image preview"
-msgstr "Закрыть предварительный просмотр изображения"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Close integrations"
@@ -1401,6 +1420,7 @@ msgid "Complete"
 msgstr "Завершить"
 
 #: src/components/SubagentCard.tsx
+#: src/pages/PlanSection.tsx
 msgid "Completed"
 msgstr "Завершено"
 
@@ -1588,6 +1608,7 @@ msgstr ""
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/shell/composer.tsx
 msgid "Continue"
 msgstr "Продолжить"
 
@@ -1603,6 +1624,12 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {0}"
 msgstr "Продолжить с {0}"
+
+#. placeholder {0}: data.botName
+#. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
+#: src/pages/SharePage.tsx
+msgid "Conversation with {0} · shared {1}"
+msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -1633,6 +1660,10 @@ msgstr "Копировать код"
 #: src/components/markdown-copy.tsx
 msgid "Copy diagram source"
 msgstr "Копировать источник диаграммы"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Copy prompt"
@@ -1744,6 +1775,10 @@ msgstr "Не удалось создать раздел"
 #: src/pages/shell/dialogs.tsx
 msgid "Could not create space"
 msgstr "Не удалось создать пространство"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not create the share"
+msgstr ""
 
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
@@ -1858,9 +1893,17 @@ msgstr "Не удалось загрузить интеграции"
 msgid "Could not load MCP servers"
 msgstr "Не удалось загрузить серверы MCP."
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not load messages"
+msgstr ""
+
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Could not load model settings"
 msgstr "Не удалось загрузить настройки модели."
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr ""
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -1874,6 +1917,10 @@ msgstr "Не удалось загрузить способы входа"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Не удалось загрузить навык"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -1963,9 +2010,17 @@ msgstr "Не удалось отобразить диаграмму"
 msgid "Could not reset password"
 msgstr "Не удалось сбросить пароль"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Не удалось отменить соединение"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not revoke the share"
+msgstr ""
 
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not run routine"
@@ -2015,6 +2070,10 @@ msgstr "Не удалось сохранить речевую модель"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not save that voice"
 msgstr "Не удалось сохранить этот голос"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr ""
 
 #: src/components/VaultSettings.tsx
 msgid "Could not save the credential"
@@ -2134,6 +2193,10 @@ msgstr "Зарегистрироваться"
 msgid "Create group"
 msgstr "Создать группу"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Create link"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Create Routine"
 msgstr "Создать задачу"
@@ -2247,6 +2310,10 @@ msgstr "По умолчанию"
 msgid "Default ({0})"
 msgstr "По умолчанию ({0})"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "Default from Hermes"
 msgstr "По умолчанию из Hermes"
@@ -2338,6 +2405,10 @@ msgstr "Отклонено"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "Запретить"
+
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr ""
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
@@ -2490,6 +2561,10 @@ msgstr "Перетащите или вставьте изображение"
 msgid "Duplicate"
 msgstr "Дублировать"
 
+#: src/pages/shell/bot-panel.tsx
+msgid "e.g. Research assistant, Ops bot"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Each name can be used once."
 msgstr "Каждое имя можно использовать только один раз."
@@ -2503,14 +2578,6 @@ msgstr "Изменить"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Сначала отредактируйте"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit label"
-msgstr "Изменить метку"
-
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit name"
-msgstr "Изменить имя"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
@@ -2676,6 +2743,11 @@ msgstr "Развернуть таблицу"
 #: src/components/CloudAgentCard.tsx
 msgid "expired"
 msgstr "истёк срок"
+
+#. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "expires {0}"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -3109,6 +3181,10 @@ msgstr "изолированный"
 msgid "Isolated preview — no access to your account"
 msgstr ""
 
+#: src/pages/SharePage.tsx
+msgid "It may have been revoked or expired."
+msgstr ""
+
 #: src/pages/shell/shell-dialogs.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "Боты и группы из него сохранятся и выйдут из раздела."
@@ -3207,6 +3283,10 @@ msgstr "Задача Linear"
 msgid "Link DMs"
 msgstr "Привязать ЛС"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Link expires"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
 msgstr "Привязать SSO"
@@ -3256,6 +3336,10 @@ msgstr "Загрузка интеграций…"
 msgid "Loading memory settings…"
 msgstr "Загрузка настроек памяти…"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Loading messages…"
+msgstr ""
+
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -3270,10 +3354,12 @@ msgid "Loading voice providers…"
 msgstr "Загрузка поставщиков голосовой связи…"
 
 #: src/components/PageLoading.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/SharePage.tsx
 #: src/pages/shell/transcript.tsx
 msgid "Loading…"
 msgstr "Загрузка…"
@@ -3455,6 +3541,7 @@ msgstr "Упоминает: {mentions}"
 
 #: src/pages/shell/chat-shared.ts
 #: src/pages/shell/composer.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Message"
 msgstr "Сообщение"
 
@@ -3756,6 +3843,10 @@ msgstr "Следующая страница"
 msgid "Next settings sections"
 msgstr ""
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No active shares."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Нет приложений, соответствующих вашему запросу."
@@ -3780,6 +3871,10 @@ msgstr "Нет ботов"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "Ни один бот не подходит"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No expiration"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "No longer active"
@@ -3827,6 +3922,10 @@ msgstr "Модели не перечислены."
 msgid "No OpenClaw, Hermes or agent document found."
 msgstr "Не найдено файлов OpenClaw, Hermes или документа агента."
 
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr "Удаленные MCP-серверы не найдены"
@@ -3848,6 +3947,10 @@ msgstr ""
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "Запусков пока нет"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -3939,6 +4042,11 @@ msgstr "Соединение OAuth не удалось"
 #: src/pages/PluginsOverlay.tsx
 msgid "OAuth expired"
 msgstr "Срок действия OAuth истек"
+
+#. js-lingui-explicit-id
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
 msgid "Offline"
@@ -4194,6 +4302,10 @@ msgstr "Выберите модель из списка или введите id
 msgid "Pick a tool to check"
 msgstr "Выберите инструмент для проверки"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Закрепить"
@@ -4201,6 +4313,14 @@ msgstr "Закрепить"
 #: src/pages/Shell.tsx
 msgid "Pinned"
 msgstr "Закреплённые"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr ""
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
@@ -4559,6 +4679,7 @@ msgid "Research & writing"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "Сбросить"
@@ -4584,6 +4705,7 @@ msgid "Reset your password"
 msgstr "Сбросить пароль"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 msgid "Resetting…"
 msgstr "Сброс…"
 
@@ -4652,6 +4774,7 @@ msgid "Review provider settings and test again."
 msgstr "Проверьте настройки поставщика и повторите тест."
 
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Revoke"
 msgstr "Отозвать"
 
@@ -4849,6 +4972,10 @@ msgstr "Поиск моделей"
 msgid "Search runs"
 msgstr "Поиск запусков"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr ""
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -4866,6 +4993,10 @@ msgstr "Безопасность"
 #: src/pages/shell/chat-header.tsx
 msgid "Select a bot"
 msgstr "Выберите бота"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Select all"
+msgstr ""
 
 #: src/pages/memory-providers/ConnectionModeFields.tsx
 msgid "Self-hosted"
@@ -4972,10 +5103,19 @@ msgstr "Форма"
 msgid "Shape {0}"
 msgstr ""
 
+#: src/pages/shell/chat-header.tsx
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Share conversation"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "Общий"
+
+#: src/pages/SharePage.tsx
+msgid "Shared from Rakazo"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared memory"
@@ -5121,6 +5261,10 @@ msgstr "Проведите вверх, чтобы закрепить"
 msgid "Some settings are not imported"
 msgstr "Некоторые настройки не импортируются"
 
+#: src/pages/SharePage.tsx
+msgid "Something went wrong loading this share."
+msgstr ""
+
 #: src/App.tsx
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
@@ -5210,6 +5354,11 @@ msgstr "Запуск"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Запуск…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Statistics"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5441,6 +5590,10 @@ msgstr ""
 msgid "Thinking"
 msgstr "рассуждение"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Thinking in calls"
+msgstr ""
+
 #. placeholder {0}: thinkingLevelLabel(choice.thinkingLevel)
 #: src/pages/ModelRoleSettings.tsx
 msgid "Thinking: {0}"
@@ -5483,6 +5636,10 @@ msgstr "Этот чат доступен только для просмотра"
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "этот компьютер"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "This conversation has no shareable messages yet."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5564,6 +5721,10 @@ msgstr "Этот сервер не запрашивал авторизацию �
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Этот сервер уже подключен. Сначала отключите его, чтобы авторизоваться снова."
 
+#: src/pages/SharePage.tsx
+msgid "This share link is not available."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "Вход по этой подписке пока недоступен в Rakazo. Используйте учетные данные развертывания или выберите другого поставщика."
@@ -5592,6 +5753,10 @@ msgstr "Время запуска может отличаться"
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Заголовок"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Title (optional)"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -5734,6 +5899,10 @@ msgstr "Открепить"
 #: src/pages/shell/use-composer-actions.ts
 msgid "Unsupported file type: {0}"
 msgstr "Неподдерживаемый тип файла: {0}."
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Untitled share"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Up to date"
@@ -5934,6 +6103,10 @@ msgstr "Ожидание в очереди…"
 msgid "Waiting…"
 msgstr "Ожидание…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Web, desktop and mobile"
 msgstr ""
@@ -6075,6 +6248,7 @@ msgstr "Вчера"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/shell/shell-sidebar.tsx
 msgid "You"
 msgstr "Вы"

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AdapterContext, ComputerAction, ComputerRef } from "@rakazo/adapter-kit";
 import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { LinuxDesktop } from "./linux-desktop.js";
 
 const context = {
@@ -145,8 +145,15 @@ describe("provider focus command", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(Date.now() - started).toBeLessThan(2_000);
     expect(readFileSync(activated, "utf8").trim()).toBe("0x00000009");
-    const pid = Number(readFileSync(recorded, "utf8").trim());
-    expect(pid).toBeGreaterThan(0);
+    // Focus can finish before the detached launcher's first write is scheduled.
+    let pid = 0;
+    await vi.waitFor(
+      () => {
+        pid = Number(readFileSync(recorded, "utf8").trim());
+        expect(pid).toBeGreaterThan(0);
+      },
+      { timeout: 5_000, interval: 20 },
+    );
     try {
       process.kill(pid, "SIGTERM");
     } catch {
@@ -218,7 +225,7 @@ describe("provider focus command", () => {
     });
     expect(command).toContain("nohup /tmp/rakazo/browser-launch-1 'https://example.test'");
     expect(command).toContain(
-      "in chromium|chromium-browser|google-chrome|google-chrome-stable|chrome)",
+      "in chromium|chromium-browser|google-chrome|google-chrome-stable|chrome|brave-browser)",
     );
     expect(command).not.toContain("in firefox)");
     expect(command).not.toContain(`\ncd '${workspace}'\n`);

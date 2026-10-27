@@ -8,13 +8,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { LinkFavicons } from "./markdown.web";
 import {
   ChatMarkdown,
+  defaultMarkdownCopy,
   LinkFaviconsContext,
   LinkifiedText,
+  MarkdownCopyProvider,
   RemoteImagesContext,
 } from "./markdown.web";
 
 describe("web markdown remote images", () => {
-  it("shows a raster image as a preview that opens a zoomable overlay", async () => {
+  it("loads a remote image in place only after the reader asks", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const markdown = "![chart](https://images.example.test/tap.png)";
     const container = document.createElement("div");
@@ -23,32 +25,29 @@ describe("web markdown remote images", () => {
     await act(async () => {
       root.render(<ChatMarkdown>{markdown}</ChatMarkdown>);
     });
-    const preview = container.querySelector("button.rk-chat-image-preview img");
-    expect(preview?.getAttribute("src")).toBe("https://images.example.test/tap.png");
-    expect(document.body.querySelector("[role=dialog]")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
 
+    const button = container.querySelector("button");
+    expect(button?.textContent).toBe("chartimages.example.test");
     await act(async () => {
-      container
-        .querySelector("button.rk-chat-image-preview")
-        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      button?.click();
     });
-    const dialog = document.body.querySelector("[role=dialog]");
-    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(
-      "https://images.example.test/tap.png",
-    );
-    const close = dialog?.querySelector("button");
-    await act(async () => {
-      close?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(document.body.querySelector("[role=dialog]")).toBeNull();
-
+    const image = container.querySelector("img");
+    expect(image?.getAttribute("src")).toBe("https://images.example.test/tap.png");
+    expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
+    expect(container.querySelector("button")).toBeNull();
     await act(async () => {
       root.unmount();
     });
     container.remove();
+
+    // The reader's choice holds for the session, so a remounted bubble keeps the image.
+    expect(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>)).toContain(
+      'src="https://images.example.test/tap.png"',
+    );
   });
 
-  it("keeps the preview when the image url changes", async () => {
+  it("shows a placeholder when a tapped image is replaced with another url", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -59,15 +58,19 @@ describe("web markdown remote images", () => {
     await act(async () => {
       render("https://images.example.test/first.png");
     });
+    await act(async () => {
+      container.querySelector("button")?.click();
+    });
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "https://images.example.test/first.png",
     );
+
     await act(async () => {
       render("https://images.example.test/second.png");
     });
-    expect(container.querySelector("img")?.getAttribute("src")).toBe(
-      "https://images.example.test/second.png",
-    );
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("button")?.textContent).toContain("images.example.test");
+
     await act(async () => {
       root.unmount();
     });
@@ -110,27 +113,6 @@ describe("web markdown remote images", () => {
       root.unmount();
     });
     container.remove();
-  });
-
-  it("shows a same-origin image link as a preview, and detaches text glued to the url", () => {
-    const origin = window.location.origin;
-    const html = renderToStaticMarkup(
-      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg) e https://cdn.example.test/scritta.pngL'ambiente`}</ChatMarkdown>,
-    );
-    expect(html).toContain(`src="${origin}/download/foyer.jpg"`);
-    expect(html).toContain('alt="Foyer"');
-    expect(html).toContain('src="https://cdn.example.test/scritta.png"');
-    expect(html).toContain("L&#x27;ambiente");
-    expect(html).not.toContain("pngL");
-  });
-
-  it("previews an image link on another site instead of leaving a download link", () => {
-    const html = renderToStaticMarkup(
-      <ChatMarkdown>{"[Foto](https://cdn.example.test/a.jpg)"}</ChatMarkdown>,
-    );
-    expect(html).toContain('src="https://cdn.example.test/a.jpg"');
-    expect(html).toContain("rk-chat-image-preview");
-    expect(html).not.toContain("<a");
   });
 
   it("keeps an image inside a rejected link as text when automatic loading is on", () => {
@@ -581,23 +563,73 @@ describe("web external link confirmation", () => {
   });
 });
 
-describe("web math", () => {
-  it("typesets inline and display TeX with KaTeX and keeps prices as text", () => {
-    const html = renderToStaticMarkup(
-      <ChatMarkdown>
-        {"Pressione $1018.86\\text{hPa}$.\n\n$$E=mc^2$$\n\nArea \\(\\pi r^2\\), costa $5 o $10."}
-      </ChatMarkdown>,
-    );
-    expect(html).toContain('class="katex"');
-    expect(html).toContain('class="katex-display"');
-    expect(html).toContain("hPa");
-    expect(html).not.toContain("$1018.86");
-    expect(html).toContain("costa $5 o $10.");
+describe("web markdown code copy", () => {
+  it("copies a fence's code exactly as written, then reads Copied", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<ChatMarkdown>{"```ts\nconst a = 1;\n\n  return a;\n```"}</ChatMarkdown>);
+    });
+    const button = container.querySelector("button");
+    expect(button?.getAttribute("aria-label")).toBe("Copy code");
+    await act(async () => {
+      button?.click();
+    });
+    expect(writeText).toHaveBeenCalledWith("const a = 1;\n\n  return a;");
+    expect(button?.getAttribute("aria-label")).toBe("Copied");
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    Reflect.deleteProperty(navigator, "clipboard");
   });
 
-  it("leaves dollars in code untouched", () => {
-    const html = renderToStaticMarkup(<ChatMarkdown>{"`echo $HOME $x$`"}</ChatMarkdown>);
-    expect(html).toContain("echo $HOME $x$");
-    expect(html).not.toContain("katex");
+  it("gives an empty fence no copy button, as on mobile", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"```ts\n```\n\n```\n\n\n```\n\n    indented"}</ChatMarkdown>,
+    );
+    expect(html.match(/<pre/g)).toHaveLength(3);
+    expect(html.match(/aria-label="Copy code"/g)).toHaveLength(1);
+  });
+
+  it("renders provider copy in place of the English defaults", () => {
+    const rows = Array.from({ length: 12 }, (_, i) => `| ${i + 1} | v${i + 1} |`).join("\n");
+    const markdown = ["```ts", "const a = 1;", "```", "", "| N | V |", "|---|---|", rows].join(
+      "\n",
+    );
+    const html = renderToStaticMarkup(
+      <MarkdownCopyProvider
+        copy={{
+          ...defaultMarkdownCopy,
+          copyCode: "Copiar código",
+          copyRows: "Copiar filas",
+          rowRange: (from, to, total) => `${from} a ${to} de ${total} filas`,
+        }}
+      >
+        <ChatMarkdown>{markdown}</ChatMarkdown>
+      </MarkdownCopyProvider>,
+    );
+    expect(html).toContain('aria-label="Copiar código"');
+    expect(html).toContain('aria-label="Copiar filas"');
+    expect(html).toContain("1 a 10 de 12 filas");
+  });
+});
+
+describe("web markdown mentions", () => {
+  it("draws a mention the app renders and keeps an unknown one as its name", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown
+        renderMention={(id, name) => (id === "bot-1" ? <b data-id={id}>{name}</b> : undefined)}
+      >
+        {"[Planner](rakazo-mention:bot-1) and [Other](rakazo-mention:bot-2)"}
+      </ChatMarkdown>,
+    );
+    expect(html).toContain('<b data-id="bot-1">Planner</b>');
+    expect(html).toContain("<span>Other</span>");
+    expect(html).not.toContain("<a");
   });
 });

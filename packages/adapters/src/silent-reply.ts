@@ -1,6 +1,6 @@
 import type { MessageBlock } from "@rakazo/contracts";
 
-/** Exact token a silent routine must emit as its entire final assistant reply. */
+/** Exact token a silent run must emit as its entire final assistant reply. */
 export const NO_RESPONSE = "NO_RESPONSE";
 
 function textBlocksOf(
@@ -24,7 +24,7 @@ function joinedText(blocks: readonly MessageBlock[]): string {
  */
 const SENTINEL_ONLY = /^(?:NO_RESPONSE\s*)+$/;
 
-/** True when trimmed text is only the silent-routine sentinel, once or repeated. Extra prose does not match. */
+/** True when trimmed text is only the silent-reply sentinel, once or repeated. Extra prose does not match. */
 export function isExactNoResponse(text: string): boolean {
   return SENTINEL_ONLY.test(text.trim());
 }
@@ -87,6 +87,20 @@ export function stripNoResponseReply(
     assembled: "",
     blocks: blocks.filter((block) => block.kind !== "text"),
   };
+}
+
+/**
+ * For runs that must reply: drop stray sentinels at the edges of a reply with
+ * prose, such as one a late follow-up message adds after the final answer.
+ * A sentinel-only reply is left as is, so the run still says something.
+ */
+export function stripStrayNoResponse(
+  assembled: string,
+  blocks: MessageBlock[],
+): { assembled: string; blocks: MessageBlock[] } {
+  const visible = assembled.trim() || joinedText(blocks).trim();
+  if (isExactNoResponse(visible)) return { assembled, blocks };
+  return withoutStraySentinelsAtEdges(assembled, blocks);
 }
 
 /** A reply with prose stays a reply; a sentinel misplaced at its edge is dropped from what the user sees. */

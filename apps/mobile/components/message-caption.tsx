@@ -1,6 +1,8 @@
 import { ChatMarkdown, LinkifiedText } from "@rakazo/chat-ui/native";
 import type { ColorTokens, ResolvedAppearance } from "@rakazo/ui-tokens";
+import { useContext } from "react";
 import type { MobileMessage } from "../lib/api";
+import { MessageMentionsContext } from "../lib/message-mentions";
 
 export function MessageCaption({
   role,
@@ -17,9 +19,15 @@ export function MessageCaption({
   streaming: boolean;
   onOpenImage?: (src: string, alt: string) => void;
 }) {
+  const renderMention = useContext(MessageMentionsContext);
   // User messages keep literal Markdown; only explicit URLs and email addresses link.
+  // Links stay the bubble's text colour (underlined): link blue is too faint on chatUser.
   return role === "user" ? (
-    <LinkifiedText color={tokens.secondaryForeground} linkColor={tokens.link} palette={tokens}>
+    <LinkifiedText
+      color={tokens.chatUserForeground}
+      linkColor={tokens.chatUserForeground}
+      palette={tokens}
+    >
       {text}
     </LinkifiedText>
   ) : (
@@ -28,6 +36,7 @@ export function MessageCaption({
       colorScheme={colorScheme}
       streaming={streaming}
       onOpenImage={onOpenImage}
+      renderMention={renderMention}
     >
       {text}
     </ChatMarkdown>

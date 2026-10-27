@@ -2,6 +2,7 @@ import type { WebProvider } from "@rakazo/adapter-kit";
 import { ExaWebProvider } from "./exa-web.js";
 import { FakeWebProvider } from "./fake-web.js";
 import { KeylessHttpWebProvider } from "./keyless-http-web.js";
+import { ParallelWebProvider } from "./parallel-web.js";
 import { SearxngWebProvider } from "./searxng-web.js";
 import { SerperWebProvider } from "./serper-web.js";
 import { TavilyWebProvider } from "./tavily-web.js";
@@ -46,6 +47,8 @@ export function createWebProvider(
 ): WebProvider {
   const notify = (service: string) => (onResults ? () => onResults(service) : undefined);
   switch (kind) {
+    case "parallel":
+      return new ParallelWebProvider(options);
     case "fake":
       return new FakeWebProvider();
     case "keyless-http":

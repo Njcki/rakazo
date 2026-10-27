@@ -1,34 +1,42 @@
 import { t } from "@lingui/core/macro";
 import type { ThreadMessage, ThreadSnapshot } from "@rakazo/contracts";
+import type { CallExchange } from "@rakazo/core";
 import {
+  CALL_FAREWELL_TIMEOUT_MS,
   callClientNonce,
-  INTERIM_BARGE_IN_MS,
+  createCallSendTracker,
+  createInterimBargeIn,
   isCallBargeIn,
   isFarewell,
-  isInterimCallBargeIn,
   isSecretAskBlock,
+  newClientId,
   runThreadSubscription,
   speechFromBlocks,
   spokenDecision,
   spokenMemory,
 } from "@rakazo/core";
 import { useSyncExternalStore } from "react";
+import { pickUp } from "./call-pickup.js";
 import { dictation } from "./dictation.js";
+import { reportClientError } from "./monitoring";
 import { rpc } from "./rpc.js";
 import { isThreadSnapshotEvent, reduceThreadSnapshot } from "./thread-events.js";
 import { speaker } from "./tts.js";
 import { errorText } from "./user-error";
 
-export type CallPhase = "listening" | "thinking" | "speaking";
-export type CallExchange = { role: "user" | "bot"; text: string };
+/** `ringing` until the call picks up; the rest describe the conversation. */
+type CallPhase = "ringing" | "listening" | "thinking" | "speaking";
 
 export interface CallState {
   botId: string;
   botName: string;
   botColor: string;
-  startedAt: number;
+  /** When the call picked up; null while it is still ringing. */
+  connectedAt: number | null;
   phase: CallPhase;
   muted: boolean;
+  /** The call window is tucked away; the call keeps running. */
+  minimized: boolean;
   transcriptOpen: boolean;
   caption: string;
   heard: string;
@@ -36,8 +44,6 @@ export interface CallState {
 }
 
 const RUN_ACTIVE = ["running", "queued", "leased"];
-/** How long a goodbye waits for a reply that may never come before hanging up anyway. */
-const FAREWELL_TIMEOUT = 20_000;
 /**
  * Quiet gap between the last audio frame and opening the microphone.
  * ponytail: one fixed delay for every room and output device; make it adaptive only
@@ -47,11 +53,18 @@ export const ECHO_GUARD_MS = 600;
 let state: CallState | null = null;
 /** Shared by every message this call sends, so the thread can group one call's exchange. */
 let callId = "";
+/** Cancels the ringing of a call that is hung up before it picks up. */
+let pickup: AbortController | null = null;
+/** The bot's opening is playing: nothing else is spoken and the mic waits for it. */
+let openingPending = false;
 /** Requests for this call that must persist before its server-side hang-up. */
-const pendingCallSends = new Map<string, Set<Promise<unknown>>>();
-let transcribe = false;
+const callSends = createCallSendTracker();
+let transcribe: boolean | undefined;
 let thread: ThreadSnapshot | null = null;
-let feed: AbortController | null = null;
+let feed: {
+  controller: AbortController;
+  load: () => Promise<ThreadSnapshot | null>;
+} | null = null;
 /** Every bot message already spoken this call: a streaming message updates many times. */
 const spokenMessageIds = new Set<string>();
 let unsubSpeech: (() => void) | null = null;
@@ -69,7 +82,13 @@ let bargedIn = false;
 /** A turn is in flight: its reply must be spoken even if the mic reopened meanwhile. */
 let awaitingReply = false;
 /** Counting down an interim phrase heard over the reply, before it counts as cutting in. */
-let interimTimer: ReturnType<typeof setTimeout> | null = null;
+const interim = createInterimBargeIn(() => {
+  if (state?.phase !== "speaking") return;
+  // Never resume the cut-off message, and keep the idle it emits from reopening the mic.
+  bargedIn = true;
+  speaker.stop();
+  set({ phase: "listening", caption: "" });
+});
 const watchers = new Set<() => void>();
 
 export function subscribe(watcher: () => void): () => void {
@@ -101,13 +120,15 @@ export function startCall(call: {
   botId: string;
   botName: string;
   botColor?: string;
-  transcribe: boolean;
+  transcribe?: boolean;
+  /** The bot called and the user picked up: no ringing, and the bot speaks first. */
+  answered?: { callId: string; opening: string };
 }): void {
   endCall();
-  callId = randomId();
+  callId = call.answered?.callId ?? newClientId();
   transcribe = call.transcribe;
   spokenMemory.clear();
-  clearInterim();
+  interim.clear();
   micOpen = false;
   bargedIn = false;
   awaitingReply = false;
@@ -115,16 +136,18 @@ export function startCall(call: {
     botId: call.botId,
     botName: call.botName,
     botColor: call.botColor ?? "",
-    startedAt: Date.now(),
-    phase: "listening",
+    connectedAt: null,
+    phase: "ringing",
     muted: false,
+    minimized: false,
     transcriptOpen: false,
     caption: "",
     heard: "",
     exchanges: [],
   };
   unsubSpeech = speaker.subscribe((speech) => {
-    if (!state) return;
+    if (!state || state.phase === "ringing") return;
+    if (openingPending && speech.status === "idle") openingPending = false;
     if (speech.status === "speaking") {
       bargedIn = false;
       set({ phase: "speaking", caption: speech.caption ?? "" });
@@ -141,7 +164,7 @@ export function startCall(call: {
     if (heard.status === "listening") {
       set({ heard: pendingSecretAsk(thread) ? "" : heard.transcript });
       watchInterim(heard.transcript);
-    } else clearInterim();
+    } else interim.clear();
     if (heard.error) {
       if (heard.status === "idle") micOpen = false;
       set({ caption: heard.error });
@@ -149,25 +172,54 @@ export function startCall(call: {
   });
   watchThread(call.botId);
   emit();
-  void listen();
+  const ringing = new AbortController();
+  pickup = ringing;
+  const ringingCallId = callId;
+  const opening = call.answered?.opening.trim() ?? "";
+  void pickUp(ringing.signal, { ring: !call.answered }).then(() => {
+    if (ringing.signal.aborted || !state || callId !== ringingCallId) return;
+    pickup = null;
+    if (!opening) {
+      set({ phase: "listening", connectedAt: Date.now() });
+      void listen();
+      return;
+    }
+    // The bot opens the call; its speech ending hands the turn to the user.
+    set({
+      phase: "thinking",
+      connectedAt: Date.now(),
+      exchanges: [{ role: "bot", text: opening }],
+    });
+    spokenMemory.remember(opening);
+    openingPending = true;
+    void speaker.speak(opening, { botId: call.botId }).catch(() => {
+      if (callId !== ringingCallId) return;
+      openingPending = false;
+      void listen();
+    });
+  });
 }
 
 export function endCall(): void {
   // A caller hang-up closes the call server-side, which files the marker and the wrap-up
   // run. The bot's own end_call already did that, so only tell the server when it did not.
   if (state && !botEndedCall) {
-    const { botId } = state;
+    const { botId, connectedAt } = state;
     const closingCallId = callId;
-    const closeServerCall = () => rpc.threads.endCall({ botId, callId: closingCallId });
-    const pendingSends = [...(pendingCallSends.get(closingCallId) ?? [])];
-    // The server checks durable user messages, so its close must follow an in-flight write.
-    if (pendingSends.length === 0) void closeServerCall().catch(() => undefined);
-    else
-      void Promise.allSettled(pendingSends)
-        .then(closeServerCall)
-        .catch(() => undefined);
+    const durationSeconds =
+      connectedAt === null ? undefined : Math.max(0, Math.round((Date.now() - connectedAt) / 1000));
+    const closeServerCall = () =>
+      rpc.threads.endCall({
+        botId,
+        callId: closingCallId,
+        ...(durationSeconds === undefined ? {} : { durationSeconds }),
+      });
+    callSends.closeAfterSends(closingCallId, closeServerCall);
   }
-  feed?.abort();
+  pickup?.abort();
+  pickup = null;
+  openingPending = false;
+  feed?.controller.abort();
   feed = null;
   hangUpAfterReply = false;
   botEndedCall = false;
@@ -175,7 +227,7 @@ export function endCall(): void {
   hangUpTimer = null;
   if (guardTimer) clearTimeout(guardTimer);
   guardTimer = null;
-  clearInterim();
+  interim.clear();
   micOpen = false;
   bargedIn = false;
   awaitingReply = false;
@@ -212,18 +264,40 @@ export function toggleTranscript(): void {
   set({ transcriptOpen: !state.transcriptOpen });
 }
 
+export function setCallMinimized(minimized: boolean): void {
+  if (!state) return;
+  set({ minimized });
+}
+
 /** Live feed for the bot on the call, independent of whichever thread is on screen. */
 function watchThread(botId: string) {
   const controller = new AbortController();
-  feed = controller;
-  const load = async () => commit(await rpc.threads.get({ botId }, { signal: controller.signal }));
+  const feedCallId = callId;
+  let requestEpoch = 0;
+  let acceptedEpoch = 0;
+  const isCurrent = () =>
+    feed?.controller === controller &&
+    !controller.signal.aborted &&
+    callId === feedCallId &&
+    state?.botId === botId;
+  const load = async () => {
+    if (!isCurrent()) return null;
+    const request = ++requestEpoch;
+    const next = await rpc.threads.get({ botId }, { signal: controller.signal });
+    if (!isCurrent()) return null;
+    if (request < acceptedEpoch) return thread;
+    if (thread?.threadId === next.threadId && thread.cursor > next.cursor) return thread;
+    acceptedEpoch = request;
+    return commit(next);
+  };
+  feed = { controller, load };
   void runThreadSubscription({
     signal: controller.signal,
     loadInitial: load,
     loadHead: () => rpc.threads.head({ botId }, { signal: controller.signal }),
     refresh: load,
     currentSnapshot: () => thread,
-    subscribe: (cursor) => rpc.threads.subscribe({ botId, cursor }, { signal: controller.signal }),
+    subscribe: (cursor, signal) => rpc.threads.subscribe({ botId, cursor }, { signal }),
     applyEvent: (event) => {
       if (isThreadSnapshotEvent(event)) commit(reduceThreadSnapshot(thread, event));
     },
@@ -235,7 +309,7 @@ function watchThread(botId: string) {
       hangUpAfterReply = true;
       botEndedCall = true;
       if (hangUpTimer) clearTimeout(hangUpTimer);
-      hangUpTimer = setTimeout(endCall, FAREWELL_TIMEOUT);
+      hangUpTimer = setTimeout(endCall, CALL_FAREWELL_TIMEOUT_MS);
       speakFarewell(event.payload);
     },
   });
@@ -312,6 +386,7 @@ async function openMic() {
     });
   } catch (error) {
     micOpen = false;
+    reportClientError(error, "voice.microphone");
     set({ caption: errorText(error, t`Microphone failed`) });
   }
 }
@@ -361,7 +436,7 @@ async function handleTranscript(text: string) {
     // A second goodbye replaces this timer. Clear the previous one or it can
     // end the next call after this one has already hung up.
     if (hangUpTimer) clearTimeout(hangUpTimer);
-    hangUpTimer = setTimeout(endCall, FAREWELL_TIMEOUT);
+    hangUpTimer = setTimeout(endCall, CALL_FAREWELL_TIMEOUT_MS);
   }
   let releasePendingSend: () => void = () => undefined;
   try {
@@ -377,7 +452,7 @@ async function handleTranscript(text: string) {
       : runActive(thread)
         ? rpc.threads.followUp({ botId, text, clientNonce })
         : rpc.threads.send({ botId, clientNonce, text });
-    releasePendingSend = trackPendingCallSend(turnCallId, sendRequest);
+    releasePendingSend = callSends.track(turnCallId, sendRequest);
     await sendRequest;
   } catch (error) {
     if (!state || state.botId !== botId || callId !== turnCallId) return;
@@ -390,7 +465,7 @@ async function handleTranscript(text: string) {
   }
   if (!state || state.botId !== botId || callId !== turnCallId) return;
   try {
-    commit(await rpc.threads.get({ botId }, { signal: callFeed?.signal }));
+    await callFeed?.load();
   } catch (error) {
     if (!state || state.botId !== botId || callId !== turnCallId) return;
     awaitingReply = false;
@@ -407,24 +482,7 @@ async function handleTranscript(text: string) {
  */
 function watchInterim(text: string) {
   if (state?.phase !== "speaking") return;
-  if (!isInterimCallBargeIn(text)) {
-    clearInterim();
-    return;
-  }
-  if (interimTimer) return;
-  interimTimer = setTimeout(() => {
-    interimTimer = null;
-    if (state?.phase !== "speaking") return;
-    // Never resume the cut-off message, and keep the idle it emits from reopening the mic.
-    bargedIn = true;
-    speaker.stop();
-    set({ phase: "listening", caption: "" });
-  }, INTERIM_BARGE_IN_MS);
-}
-
-function clearInterim() {
-  if (interimTimer) clearTimeout(interimTimer);
-  interimTimer = null;
+  interim.hear(text);
 }
 
 /**
@@ -432,7 +490,8 @@ function clearInterim() {
  * card's phase indicator is the only feedback, so nothing talks over the caller.
  */
 function reactToThread() {
-  if (!state) return;
+  // Nothing is spoken before the call picks up, or over the bot's opening.
+  if (!state || state.phase === "ringing" || openingPending) return;
   // The bot already said goodbye: neither its marker nor the work it files after it is spoken.
   if (botEndedCall) return;
   if (pendingSecretAsk(thread)) {
@@ -508,21 +567,4 @@ function latestAskId(snapshot: ThreadSnapshot | null): string | null {
     }
   }
   return null;
-}
-
-function trackPendingCallSend(callId: string, request: Promise<unknown>): () => void {
-  const pending = pendingCallSends.get(callId) ?? new Set<Promise<unknown>>();
-  pending.add(request);
-  pendingCallSends.set(callId, pending);
-  return () => {
-    pending.delete(request);
-    if (pending.size === 0) pendingCallSends.delete(callId);
-  };
-}
-
-function randomId(): string {
-  const webCrypto = globalThis.crypto;
-  return typeof webCrypto?.randomUUID === "function"
-    ? webCrypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

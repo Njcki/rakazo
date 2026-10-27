@@ -26,6 +26,7 @@ import { MessageRow } from "./message-row";
 const rowStyles = StyleSheet.create({
   row: { marginTop: 12, width: "100%" },
 });
+const emptyPending: ReadonlySet<string> = new Set();
 
 /** Stable row actions that call the latest screen actions, so settled rows don't re-render. */
 export function useLatestRowActions(current: MessageRowActions): MessageRowActions {
@@ -79,6 +80,9 @@ export function useThreadRows({
   readSeq,
   markedUnreadMessageId,
   highlightedMessageId,
+  messages: messagesOverride,
+  pendingIds,
+  keyOf,
 }: {
   snap: MobileSnapshot | null;
   userId: string;
@@ -99,10 +103,16 @@ export function useThreadRows({
   readSeq: number | null;
   markedUnreadMessageId?: string;
   highlightedMessageId: string | null;
+  /** Reconciled list (server + in-flight stand-ins); defaults to transcript visible messages. */
+  messages?: MobileMessage[];
+  pendingIds?: ReadonlySet<string>;
+  keyOf?: (id: string) => string;
 }) {
   const { t, locale } = useI18n();
   const { showBotSenderName, peerTranscript, reactionView, expandedPeerMarkers } = transcript;
-  const visibleMessages = reactionView.visibleMessages;
+  const visibleMessages = messagesOverride ?? reactionView.visibleMessages;
+  const resolveKey = keyOf ?? ((id: string) => id);
+  const pending = pendingIds ?? emptyPending;
   const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
   const dismissableAskIds = useMemo(() => dismissableAskMessageIds(snap, userId), [snap, userId]);
   const separatorIds = useMemo(() => timeSeparatorIds(visibleMessages), [visibleMessages]);
@@ -145,8 +155,9 @@ export function useThreadRows({
         : undefined;
       return (
         <MessageRow
-          key={message.id}
+          key={resolveKey(message.id)}
           message={message}
+          pending={pending.has(message.id)}
           actions={rowActions}
           botId={botId}
           bubbleBotId={botId ?? snap?.members?.[0]?.botId ?? ""}
@@ -219,6 +230,8 @@ export function useThreadRows({
       unreadDividerId,
       markedUnreadMessageId,
       columnWidth,
+      resolveKey,
+      pending,
       t,
       locale,
     ],

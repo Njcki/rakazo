@@ -15,9 +15,10 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
 });
 const messageListPosition = { minIndexForVisible: 0 };
-const liveMessageListPosition = { ...messageListPosition, autoscrollToTopThreshold: 80 };
-function threadItemKey(item: ThreadItem<MobileMessage>) {
-  return item.kind === "voiceChat" ? item.key : item.message.id;
+const liveMessageListPosition = { ...messageListPosition, autoscrollToTopThreshold: 100 };
+function threadItemKey(item: ThreadItem<MobileMessage>, messageKey?: (id: string) => string) {
+  if (item.kind === "voiceChat") return item.key;
+  return messageKey ? messageKey(item.message.id) : item.message.id;
 }
 
 /**
@@ -40,6 +41,7 @@ export function ThreadMessageList({
   workingFooter,
   loadingNewer,
   showLatest,
+  messageKey,
 }: {
   scroll: ThreadListScroll;
   pinnedListHandlers: ReturnType<typeof useThreadPaging>["pinnedListHandlers"];
@@ -60,6 +62,7 @@ export function ThreadMessageList({
   workingFooter: ReactNode;
   loadingNewer: boolean;
   showLatest: () => void;
+  messageKey?: (id: string) => string;
 }) {
   const tokens = mobileTokens();
   const { showPinnedPage, pinnedTarget, pinnedNewerCursor, behavior, state } = scroll;
@@ -113,7 +116,7 @@ export function ThreadMessageList({
             ref={scroll.list}
             data={liveItems}
             inverted
-            keyExtractor={threadItemKey}
+            keyExtractor={(item) => threadItemKey(item, messageKey)}
             // This callback tracks every row input, including reply, reaction and highlight state.
             extraData={renderMessageRow}
             style={styles.list}

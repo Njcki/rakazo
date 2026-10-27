@@ -56,6 +56,7 @@ import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
 import { loadDeviceVoiceEnabled } from "../lib/device-voice";
 import { useI18n } from "../lib/i18n";
 import { native, useMobileTokens } from "../lib/native";
+import { PlanSection } from "../components/plan-section";
 import { createQueuedSave } from "../lib/queued-save";
 import { useSideInsets } from "../lib/side-insets";
 import { thinkingLevelLabel } from "../lib/thinking-level";
@@ -540,6 +541,7 @@ export default function BotSettingsScreen() {
             }}
           />
         </View>
+        {botId ? <PlanSection botId={botId} /> : null}
         <View style={{ marginTop: 16 }}>
           <View>
             <View

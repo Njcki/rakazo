@@ -65,7 +65,8 @@
     "react-native-svg": "15.15.4",
     "react-native-web": "0.21.2",
     "react-native-webview": "13.16.1",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "expo-intent-launcher": "57.0.1"
   },
   "devDependencies": {
     "@react-native/metro-config": "0.86.3",

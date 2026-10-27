@@ -18,7 +18,7 @@ import { Platform, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { readableGutters } from "../../lib/adaptive-layout";
-import { rpc } from "../../lib/api";
+import { rpc, type MobileMessage } from "../../lib/api";
 import { useAppForeground } from "../../lib/app-foreground";
 import { mobileTokens } from "../../lib/appearance";
 import type { MobileArtifactTarget } from "../../lib/artifact-open";
@@ -33,6 +33,8 @@ import { useThreadAttachments } from "../../lib/thread-attachments";
 import { useThreadBots } from "../../lib/thread-bots";
 import { threadHeaderClearance, threadHeaderFloats } from "../../lib/thread-edges";
 import { useThreadFeedback } from "../../lib/thread-feedback";
+import type { SendAttempt } from "../../lib/thread-feedback";
+import { reconcileOutgoing } from "../../lib/outgoing-reconcile";
 import { useThreadFocus } from "../../lib/thread-focus";
 import { useThreadSnapshot } from "../../lib/thread-history";
 import { threadKeyboardOffset } from "../../lib/thread-keyboard-offset";
@@ -75,6 +77,20 @@ function isActiveStatus(status: string | undefined): boolean {
  * The chat screen. Hook order is effect order: the snapshot, scroll, sync and send hooks run their
  * effects at the positions the screen ran them before they were split out.
  */
+
+/** The row a text send is drawn as until its server copy replaces it under the same key. */
+function outgoingStandIn(attempt: SendAttempt, id: string): MobileMessage {
+  const { payload } = attempt;
+  return {
+    id,
+    role: "user",
+    createdAt: payload.sentAt ?? new Date().toISOString(),
+    replyToMessageId: payload.reroutedToGroup ? undefined : payload.replyTargetId,
+    replyQuote: payload.reroutedToGroup ? undefined : (payload.replyQuote ?? undefined),
+    blocks: [{ kind: "text", text: payload.plan.trimmed }],
+  };
+}
+
 export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId: string }) {
   const keyboardLayout = useKeyboardLayout();
   const tokens = mobileTokens();
@@ -195,7 +211,38 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
   const transcript = useThreadTranscript(snap?.messages, inGroup);
   const { reactionView, peerTranscript, setExpandedPeerMarkers } = transcript;
   const visibleMessages = reactionView.visibleMessages;
-  const latestMessage = latestArrivalMessage(visibleMessages, peerTranscript.markerOf);
+  // Sends in flight are rows of the same list, keyed by their nonce before and after the server
+  // copy arrives: one bubble that only loses "Sending…", never two copies or a remount.
+  const outgoingKeys = useRef({ thread: threadKey, keys: new Map<string, string>() });
+  if (outgoingKeys.current.thread !== threadKey)
+    outgoingKeys.current = { thread: threadKey, keys: new Map() };
+  const snapInThread = Boolean(snap && (snap.groupId ?? snap.botId) === threadKey);
+  const sendsSignature = feedback.unsentSends
+    .map(
+      (a) =>
+        `${a.clientNonce}:${a.state}:${a.acceptedSeq ?? ""}:${a.acceptedRunId ?? ""}:${a.error ? 1 : 0}`,
+    )
+    .join("|");
+  const threadSends = useMemo(() => feedback.unsentSends, [sendsSignature]);
+  const outgoing = useMemo(
+    () =>
+      snapInThread
+        ? reconcileOutgoing(
+            visibleMessages,
+            threadSends,
+            outgoingKeys.current.keys,
+            outgoingStandIn,
+          )
+        : {
+            messages: visibleMessages,
+            pendingIds: new Set<string>(),
+            separate: threadSends,
+            keyOf: (id: string) => id,
+          },
+    [visibleMessages, threadSends, snapInThread],
+  );
+  const threadMessages = outgoing.messages;
+  const latestMessage = latestArrivalMessage(threadMessages, peerTranscript.markerOf);
   const composerMentionTargets = useMemo(
     () =>
       buildComposerMentionOptions({
@@ -452,6 +499,9 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     readSeq: readBoundary?.visit === readVisit.current.visit ? readBoundary.seq : null,
     markedUnreadMessageId,
     highlightedMessageId: scroll.highlightedMessageId,
+    messages: threadMessages,
+    pendingIds: outgoing.pendingIds,
+    keyOf: outgoing.keyOf,
   });
 
   const workingBots =
@@ -491,7 +541,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
       />
     ) : null;
 
-  const failedSendBubbles = feedback.unsentSends.map((attempt) => (
+  const failedSendBubbles = outgoing.separate.map((attempt) => (
     <FailedSendBubble
       key={attempt.clientNonce}
       attempt={attempt}
@@ -539,10 +589,11 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
           threadKey={threadKey}
           headerClearance={headerClearance}
           bottomInset={bottomInset}
-          visibleMessages={visibleMessages}
+          visibleMessages={threadMessages}
           liveItems={liveItems}
           renderItem={renderItem}
           renderMessageRow={renderMessageRow}
+          messageKey={outgoing.keyOf}
           loadEarlierControl={loadEarlierControl}
           failedSendBubbles={failedSendBubbles}
           errorNotice={errorNotice}

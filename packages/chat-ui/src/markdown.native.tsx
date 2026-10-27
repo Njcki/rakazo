@@ -13,7 +13,7 @@ import Markdown, {
 } from "@ronradtke/react-native-markdown-display";
 import { Highlight, themes } from "prism-react-renderer";
 import type { ComponentType, ReactNode } from "react";
-import { createContext, memo, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -55,6 +55,7 @@ import {
 
 import { useMarkdownLinkAppOrigin, useMarkdownLinkCopy } from "./markdown-link-prompt";
 import { isMermaidFence } from "./mermaid";
+import { normalizeMathMarkdown, texToUnicode } from "./math";
 
 function keepMarkdownLinkToken(_url: string) {
   return true;
@@ -93,9 +94,132 @@ const ISOLATE = "\u2068";
 const POP_ISOLATE = "\u2069";
 
 // One shared parser: the Markdown components memoize on its identity.
+
+type MathToken = {
+  content: string;
+  markup: string;
+  block: boolean;
+  map: [number, number] | null;
+};
+type InlineState = {
+  src: string;
+  pos: number;
+  push: (type: string, tag: string, nesting: number) => MathToken;
+};
+type BlockState = {
+  src: string;
+  line: number;
+  blkIndent: number;
+  bMarks: number[];
+  eMarks: number[];
+  tShift: number[];
+  sCount: number[];
+  push: (type: string, tag: string, nesting: number) => MathToken;
+};
+type MathRuler<State> = {
+  before: (name: string, rule: string, fn: State, options?: { alt: string[] }) => void;
+};
+type MarkdownIt = {
+  inline: { ruler: MathRuler<(state: InlineState, silent: boolean) => boolean> };
+  block: {
+    ruler: MathRuler<
+      (state: BlockState, startLine: number, endLine: number, silent: boolean) => boolean
+    >;
+  };
+};
+
+/**
+ * `math_inline` and `math_block` tokens for the canonical math Markdown that
+ * `normalizeMathMarkdown` writes: every unescaped `$` there opens real math.
+ */
+function mathSyntax(md: MarkdownIt) {
+  md.inline.ruler.before("escape", "math_inline", (state: InlineState, silent: boolean) => {
+    const start = state.pos;
+    const src = state.src;
+    if (src.charCodeAt(start) !== 0x24) return false;
+    const marker = src.charCodeAt(start + 1) === 0x24 ? "$$" : "$";
+    let close = src.indexOf(marker, start + marker.length);
+    while (close > 0 && src[close - 1] === "\\") close = src.indexOf(marker, close + 1);
+    if (close < 0) return false;
+    const tex = src.slice(start + marker.length, close);
+    if (!tex.trim()) return false;
+    if (!silent) {
+      const token = state.push("math_inline", "math", 0);
+      token.content = tex;
+      token.markup = marker;
+    }
+    state.pos = close + marker.length;
+    return true;
+  });
+  md.block.ruler.before(
+    "fence",
+    "math_block",
+    (state: BlockState, startLine: number, endLine: number, silent: boolean) => {
+      if ((state.sCount[startLine] ?? 0) - state.blkIndent >= 4) return false;
+      const lineText = (line: number) =>
+        state.src.slice(
+          (state.bMarks[line] ?? 0) + (state.tShift[line] ?? 0),
+          state.eMarks[line] ?? 0,
+        );
+      const first = lineText(startLine).trimEnd();
+      if (!first.startsWith("$$")) return false;
+      let tex: string;
+      let last = startLine;
+      const rest = first.slice(2);
+      if (rest.trim() !== "") {
+        if (!rest.endsWith("$$") || rest.slice(0, -2).includes("$$")) return false;
+        tex = rest.slice(0, -2);
+      } else {
+        const lines: string[] = [];
+        let closed = false;
+        for (let line = startLine + 1; line < endLine; line++) {
+          const textLine = lineText(line).trimEnd();
+          if (textLine.endsWith("$$")) {
+            lines.push(textLine.slice(0, -2));
+            last = line;
+            closed = true;
+            break;
+          }
+          lines.push(textLine);
+        }
+        if (!closed) return false;
+        tex = lines.join("\n");
+      }
+      if (!tex.trim()) return false;
+      if (silent) return true;
+      state.line = last + 1;
+      const token = state.push("math_block", "math", 0);
+      token.block = true;
+      token.content = tex.trim();
+      token.markup = "$$";
+      token.map = [startLine, state.line];
+      return true;
+    },
+    { alt: ["paragraph", "reference", "blockquote", "list"] },
+  );
+}
+
+/** Draws a display formula. The app supplies one (KaTeX in a WebView); without it the formula reads as text. */
+export type MathBlockRenderer = (props: { tex: string; palette: ColorTokens }) => ReactNode;
+
+export const MathBlockContext = createContext<MathBlockRenderer | null>(null);
+const MathPaletteContext = createContext<ColorTokens>(darkTokens);
+
+function MathBlock({ tex, style }: { tex: string; style: StyleProp<TextStyle> }) {
+  const Renderer = useContext(MathBlockContext);
+  const palette = useContext(MathPaletteContext);
+  if (Renderer) return <Renderer tex={tex} palette={palette} />;
+  return (
+    <Text style={style} selectable>
+      {texToUnicode(tex)}
+    </Text>
+  );
+}
+
 const markdownParser = createMarkdownIt();
 markdownParser.validateLink = keepMarkdownLinkToken;
 linkifyExplicitUrls(markdownParser);
+mathSyntax(markdownParser as unknown as MarkdownIt);
 
 /** The code of each fenced or indented block in a message, as its copy button copies it. */
 export function markdownCodeBlocks(markdown: string): string[] {
@@ -684,6 +808,31 @@ const scrollFrame: ViewStyle = {
  * A block that scrolls sideways when it is wider than the bubble. Tables pass the width they lay
  * out to; code is measured.
  */
+
+function PlainGuard({ style, children }: ComponentProps<TableGestureGuard>) {
+  return <View style={style}>{children}</View>;
+}
+
+/**
+ * Wraps a wide table's horizontal scroller. The app supplies a native guard on Android so a
+ * sideways swipe goes to the table instead of the chat list around it; elsewhere a plain View.
+ */
+export type TableGestureGuard = ComponentType<{
+  enabled: boolean;
+  style?: StyleProp<ViewStyle>;
+  children?: ReactNode;
+}>;
+export const TableGestureGuardContext = createContext<TableGestureGuard | null>(null);
+
+/** Width of each edge fade, in dp. */
+const TABLE_FADE = 24;
+
+/** Which sides of a scrolled table still hide columns: only those get a fade. */
+export function tableFadeEdges(offset: number, contentWidth: number, viewportWidth: number) {
+  if (viewportWidth <= 0 || contentWidth <= viewportWidth + 1) return { start: false, end: false };
+  return { start: offset > 1, end: offset < contentWidth - viewportWidth - 1 };
+}
+
 function SidewaysScrollView({
   contentWidth,
   onViewportWidth,
@@ -757,12 +906,33 @@ function TableScrollView({
   const [viewportWidth, setViewportWidth] = useState(0);
   const [scrollX, setScrollX] = useState(0);
   const widths = useMemo(() => fittedColumnWidths(table, viewportWidth), [table, viewportWidth]);
+  const contentWidth = widths.reduce((total, width) => total + width, 0);
+  const overflows = viewportWidth > 0 && contentWidth > viewportWidth + 1;
   const tableLayout = useMemo(
     () => ({ widths, viewportWidth, scrollX }),
     [widths, viewportWidth, scrollX],
   );
+  const Guard = useContext(TableGestureGuardContext) ?? PlainGuard;
+  const metrics = useRef({ offset: 0, content: 0 });
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const updateEdges = useCallback(
+    (viewport: number) => {
+      const { offset, content } = metrics.current;
+      const next = tableFadeEdges(offset, content || contentWidth, viewport);
+      setEdges((current) =>
+        current.start === next.start && current.end === next.end ? current : next,
+      );
+    },
+    [contentWidth],
+  );
+  useEffect(() => {
+    updateEdges(viewportWidth);
+  }, [updateEdges, viewportWidth]);
   const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const next = event.nativeEvent.contentOffset.x;
+    metrics.current.offset = next;
+    metrics.current.content = contentWidth;
+    updateEdges(viewportWidth);
     setScrollX((current) =>
       heightMask(widths, viewportWidth, current) === heightMask(widths, viewportWidth, next)
         ? current
@@ -770,16 +940,49 @@ function TableScrollView({
     );
   };
   return (
-    <TableLayoutContext.Provider value={tableLayout}>
-      <SidewaysScrollView
-        contentWidth={widths.reduce((total, width) => total + width, 0)}
-        onViewportWidth={setViewportWidth}
-        onScroll={onScroll}
-        style={style}
-      >
-        {children}
-      </SidewaysScrollView>
-    </TableLayoutContext.Provider>
+    <View style={{ position: "relative", width: "100%", minWidth: 0 }}>
+      <TableLayoutContext.Provider value={tableLayout}>
+        <Guard enabled={overflows} style={{ width: "100%", minWidth: 0 }}>
+          <SidewaysScrollView
+            contentWidth={contentWidth}
+            onViewportWidth={setViewportWidth}
+            onScroll={onScroll}
+            style={style}
+          >
+            {children}
+          </SidewaysScrollView>
+        </Guard>
+      </TableLayoutContext.Provider>
+      {edges.start ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: TABLE_FADE,
+            backgroundColor: "transparent",
+            // Android fadingEdgeLength is unreliable; a soft veil marks more content.
+            borderLeftWidth: 0,
+            opacity: 0.35,
+          }}
+        />
+      ) : null}
+      {edges.end ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: TABLE_FADE,
+            opacity: 0.35,
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -1043,6 +1246,16 @@ const renderRules: RenderRules = {
       {node.content}
     </Text>
   ),
+  // Inline formulas flow with the text as readable Unicode ("1018.86 hPa", "x²").
+  math_inline: (node, _children, parents, styleMap, inherited) => (
+    <Text key={node.key} style={textStyleForParents(inherited, parents, styleMap)}>
+      {texToUnicode(node.content)}
+    </Text>
+  ),
+  math_block: (node, _children, _parent, styleMap) => (
+    <MathBlock key={node.key} tex={node.content} style={styleMap.plain_text ?? styleMap.body} />
+  ),
+
   table: (node, children, _parent, styleMap) => (
     <TableScrollView key={node.key} table={node} style={styleMap._VIEW_SAFE_table}>
       {children}
@@ -1387,22 +1600,25 @@ export const ChatMarkdown = memo(function ChatMarkdown({
     },
   };
 
+  const markdown = useMemo(() => normalizeMathMarkdown(children), [children]);
   return (
     <OpenLinkContext.Provider value={openLink}>
       <MentionContext.Provider value={renderMention}>
-        <View style={layout.wrap}>
-          <LinkFaviconsPausedContext.Provider value={streaming}>
-            <DiagramSurfaceContext.Provider value={diagramSurface}>
-              {streaming ? (
-                <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
-                  {children}
-                </MarkdownStream>
-              ) : (
-                <Markdown {...sharedProps}>{children}</Markdown>
-              )}
-            </DiagramSurfaceContext.Provider>
-          </LinkFaviconsPausedContext.Provider>
-        </View>
+        <MathPaletteContext.Provider value={palette}>
+          <View style={layout.wrap}>
+            <LinkFaviconsPausedContext.Provider value={streaming}>
+              <DiagramSurfaceContext.Provider value={diagramSurface}>
+                {streaming ? (
+                  <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+                    {markdown}
+                  </MarkdownStream>
+                ) : (
+                  <Markdown {...sharedProps}>{markdown}</Markdown>
+                )}
+              </DiagramSurfaceContext.Provider>
+            </LinkFaviconsPausedContext.Provider>
+          </View>
+        </MathPaletteContext.Provider>
       </MentionContext.Provider>
     </OpenLinkContext.Provider>
   );

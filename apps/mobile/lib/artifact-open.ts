@@ -1,6 +1,7 @@
 import { Directory, File, Paths } from "expo-file-system";
+import { getContentUriAsync } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { Image } from "react-native";
+import { Image, Platform } from "react-native";
 import type { ApiRequestContext } from "./api";
 import { captureApiRequestContext, currentApiBase, rpc, selectedSpaceId } from "./api";
 import { artifactCacheSession } from "./artifact-cache-session";
@@ -162,7 +163,74 @@ export async function readMobileArtifactText(
   return file.text();
 }
 
+
+/** FLAG_GRANT_READ_URI_PERMISSION: lets the viewer app read our FileProvider content:// URI. */
+const FLAG_GRANT_READ_URI_PERMISSION = 1;
+
+export const APK_MIME_TYPE = "application/vnd.android.package-archive";
+
+/**
+ * The type the viewer intent carries. Attachments often arrive as a generic
+ * `application/octet-stream`; an `.apk` must still go out as a package archive, or the
+ * system package installer is offered for `*/*` and then refuses the file without a word.
+ */
+export function intentMimeType(mimeType: string, fileName = ""): string {
+  const normalized = mimeType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (fileName.toLowerCase().endsWith(".apk")) return APK_MIME_TYPE;
+  if (!normalized || normalized === "application/octet-stream") return "*/*";
+  return normalized;
+}
+
+/**
+ * ACTION_VIEW resolves only when the viewer returns (startActivityForResult), so do not wait for
+ * it: a launch failure (no app for this type) rejects right away, anything slower means the viewer
+ * is open. Returns false only when no viewer could be started.
+ */
+async function launchAndroidViewer(file: File, mimeType: string): Promise<boolean> {
+  let IntentLauncher: typeof import("expo-intent-launcher");
+  let contentUri: string;
+  try {
+    IntentLauncher = await import("expo-intent-launcher");
+    contentUri = await getContentUriAsync(file.uri);
+  } catch {
+    return false;
+  }
+  const launch = IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+    data: contentUri,
+    // Installing an .apk also needs REQUEST_INSTALL_PACKAGES in the manifest (app.json); with it
+    // Android asks once to allow installs from this app, without it the installer quits silently.
+    type: intentMimeType(mimeType, file.name),
+    flags: FLAG_GRANT_READ_URI_PERMISSION,
+  }).then(
+    () => true,
+    () => false,
+  );
+  const started = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 1200));
+  return Promise.race([launch, started]);
+}
+
+/**
+ * Tap on an attachment. Android: open the file in a viewer app (ACTION_VIEW on a FileProvider
+ * content:// URI); falls back to the share sheet only when no app can view it. iOS keeps the
+ * system share sheet (which also offers Quick Look / "Open in").
+ */
 export async function openMobileArtifact(
+  target: MobileArtifactTarget,
+  artifactId: string,
+  name: string,
+  mimeType: string,
+): Promise<void> {
+  const file = await cacheMobileArtifact(target, artifactId, mimeType);
+  if (
+    Platform.OS === "android" &&
+    (await launchAndroidViewer(namedCopy(file, mimeType, name), mimeType))
+  )
+    return;
+  await shareNamedFile(file, mimeType, name);
+}
+
+/** Explicit "Share" action: always the system share sheet. */
+export async function shareMobileArtifact(
   target: MobileArtifactTarget,
   artifactId: string,
   name: string,
@@ -243,13 +311,18 @@ export async function shareLocalFile(uri: string, mimeType: string, name: string
   await shareNamedFile(new File(uri), mimeType, name);
 }
 
-async function shareNamedFile(source: File, mimeType: string, name: string): Promise<void> {
+function namedCopy(source: File, mimeType: string, name: string): File {
   const root = new Directory(Paths.cache, "artifact-shares");
   if (!root.exists) root.create();
   const dir = new Directory(root, source.name || "attachment");
   if (!dir.exists) dir.create();
   const shared = new File(dir, artifactShareFileName(name, mimeType));
   source.copySync(shared, { overwrite: true });
+  return shared;
+}
+
+async function shareNamedFile(source: File, mimeType: string, name: string): Promise<void> {
+  const shared = namedCopy(source, mimeType, name);
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(shared.uri, { mimeType });
     return;

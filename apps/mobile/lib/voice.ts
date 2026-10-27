@@ -13,6 +13,7 @@ import { File, Paths } from "expo-file-system";
 import type * as ExpoSpeech from "expo-speech";
 import { Platform } from "react-native";
 import { promptAiConsent } from "./ai-consent";
+import { reassertCallAudio } from "./call-audio";
 import type { ApiRequestContext } from "./api";
 import { aiConsentCoalesceKey, captureApiRequestContext, rpc } from "./api";
 import { voiceForBot } from "./bot-voices";
@@ -547,6 +548,8 @@ async function playWithNativeAudio(bytes: Uint8Array, session?: HostedSession): 
     interruptionMode: "mixWithOthers",
     shouldPlayInBackground: playsInBackground,
   });
+  // Setting the audio mode drops a call's communication mode, and with it echo cancellation.
+  reassertCallAudio();
   const file = new File(Paths.cache, `rakazo-voice-${Date.now()}.mp3`);
   file.create({ overwrite: true });
   file.write(bytesToBase64(bytes), { encoding: "base64" });

@@ -3,6 +3,7 @@ import type { MessageBlock } from "@rakazo/contracts";
 import { isAttachmentAudioMimeType } from "@rakazo/contracts";
 import type { ChildBotBlock } from "@rakazo/core";
 import {
+  Dimensions,
   formatFileSize,
   isApprovalAskBlock,
   memberName,
@@ -41,6 +42,7 @@ import { InstructionUndo } from "../instruction-undo";
 import { McpApprovalCard } from "../McpApprovalCard";
 import type { MarkdownArtifactPreviewTarget } from "../markdown-artifact-preview";
 import { MessageCaption } from "../message-caption";
+import { ChartBlockView } from "../chart-block";
 import { NativeSymbol } from "../native-symbol";
 import { AskBlock } from "./ask-block";
 import type { MessageRowActions } from "./message-row";
@@ -503,6 +505,54 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
       </View>
     );
   }
+  const chartBlocks = message.blocks.filter(
+    (block): block is Extract<(typeof message.blocks)[number], { kind: "chart" }> =>
+      block.kind === "chart",
+  );
+  if (chartBlocks.length > 0) {
+    const rest = {
+      ...message,
+      blocks: message.blocks.filter((block) => block.kind !== "chart"),
+    };
+    return (
+      <View style={{ maxWidth: "100%", gap: 8 }}>
+        {rest.blocks.length > 0 ? (
+          <MessageBubbleContent
+            botId={botId}
+            botName={botName}
+            showBotSenderName={showBotSenderName}
+            bots={bots}
+            groupId={groupId}
+            message={rest}
+            members={members}
+            canAnswer={canAnswer}
+            canDismiss={canDismiss}
+            onAnswer={onAnswer}
+            onOpenComputer={onOpenComputer}
+            onChoiceDismissed={onChoiceDismissed}
+            onPreviewMarkdown={onPreviewMarkdown}
+            onPreviewImage={onPreviewImage}
+            peerReplies={peerReplies}
+            onTogglePeerReplies={onTogglePeerReplies}
+            onOpenPeerChat={onOpenPeerChat}
+            actionProps={actionProps}
+            doubleTapSurface={doubleTapSurface}
+            userBubble={userBubble}
+          />
+        ) : null}
+        {chartBlocks.map((block, index) => (
+          <ChartBlockView
+            key={`${block.name}-${index}`}
+            name={block.name}
+            spec={block.spec}
+            data={block.data}
+            maxWidth={Math.min(Dimensions.get("window").width - 48, 560)}
+          />
+        ))}
+      </View>
+    );
+  }
+
   const attachments = message.blocks.filter(
     (block) => block.kind === "image" || block.kind === "file",
   );

@@ -41,7 +41,7 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
         /dynamic.?client|registration|oauth|authorization.?header|invalid.?redirect/i.test(
           message,
         )
-          ? t` If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again.`
+          ? t`If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again.`
           : "";
       setError(`${message}${hint}`);
     } finally {

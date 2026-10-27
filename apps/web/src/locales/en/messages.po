@@ -409,6 +409,7 @@ msgstr "A subscription credential is stored securely."
 msgid "About {label}"
 msgstr "About {label}"
 
+#: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Access token (optional)"
@@ -2862,6 +2863,10 @@ msgstr "Finished."
 msgid "Finishing MCP connection…"
 msgstr "Finishing MCP connection…"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgstr "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Forgot password?"
@@ -3031,6 +3036,10 @@ msgstr "How will you use Rakazo?"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "I’m done"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
+msgstr "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4158,6 +4167,10 @@ msgstr "Optional"
 msgid "Optional header value"
 msgstr "Optional header value"
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+msgstr "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
@@ -4255,6 +4268,14 @@ msgstr "Paste your API key"
 #: src/lib/model-connection-preflight.ts
 msgid "Paste your API key, then test again."
 msgstr "Paste your API key, then test again."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "PAT or Bearer token — stored encrypted"
+msgstr "PAT or Bearer token — stored encrypted"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "PAT or Bearer token (GitHub MCP, etc.)"
+msgstr "PAT or Bearer token (GitHub MCP, etc.)"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/import-status.ts

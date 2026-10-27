@@ -410,6 +410,7 @@ msgstr "Una credenziale di abbonamento è salvata in modo sicuro."
 msgid "About {label}"
 msgstr "Informazioni su {label}"
 
+#: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Token di accesso (facoltativo)"
@@ -2863,6 +2864,10 @@ msgstr "Completato."
 msgid "Finishing MCP connection…"
 msgstr "Completamento della connessione MCP…"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgstr "Per GitHub MCP incolla qui un personal access token. L'header Bearer viene aggiunto automaticamente — salta Connetti OAuth sulle installazioni self-hosted."
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Password dimenticata?"
@@ -3032,6 +3037,10 @@ msgstr "Come userai Rakazo?"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Ho finito"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
+msgstr "Se questo provider rifiuta OAuth sulle installazioni self-hosted, incolla sotto un personal access token e riconnetti."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4159,6 +4168,10 @@ msgstr "Facoltativo"
 msgid "Optional header value"
 msgstr "Valore di intestazione facoltativo"
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+msgstr "Facoltativo. I provider che bloccano OAuth su domini personalizzati (GitHub MCP) richiedono qui un personal access token al posto di Connetti OAuth."
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
@@ -4256,6 +4269,14 @@ msgstr "Incolla la tua chiave API"
 #: src/lib/model-connection-preflight.ts
 msgid "Paste your API key, then test again."
 msgstr "Incolla la tua chiave API, poi riprova il test."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "PAT or Bearer token — stored encrypted"
+msgstr "PAT o token Bearer — salvato cifrato"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "PAT or Bearer token (GitHub MCP, etc.)"
+msgstr "PAT o token Bearer (GitHub MCP, ecc.)"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/import-status.ts
@@ -6326,4 +6347,3 @@ msgstr "Il tuo provider vocale ha esaurito i crediti."
 #: src/lib/user-error.ts
 msgid "Your voice provider key was rejected."
 msgstr "La chiave del provider vocale è stata rifiutata."
-

@@ -32,6 +32,7 @@ import { Disclosure } from "@rakazo/ui-web/components/ui/disclosure";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, LoaderCircle, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { McpAuthHelp } from "../components/McpAuthHelp";
 import { McpServerHealthLine } from "../components/McpServerHealthLine";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL, mcpOAuthRedirectUri } from "../lib/mcp-connect";
 import { useSpaceQueries } from "../lib/query";
@@ -556,12 +557,13 @@ export function McpServersOverlay({
                   {transport !== "stdio" ? (
                     <p className="text-xs text-muted-foreground">
                       <Trans>
-                        For GitHub MCP paste a personal access token here. Bearer is added
-                        automatically — skip Connect OAuth on self-hosted installs.
+                        For a PAT or API key, paste it here and Save. Bearer is added automatically
+                        when needed — skip Connect OAuth on self-hosted installs that block OAuth.
                       </Trans>
                     </p>
                   ) : null}
                 </Field>
+                {transport !== "stdio" ? <McpAuthHelp endpoint={endpoint} name={name} /> : null}
                 <Disclosure
                   className="group rounded-xl border border-border"
                   summary={<Trans>Advanced</Trans>}

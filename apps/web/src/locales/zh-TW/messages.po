@@ -415,6 +415,10 @@ msgstr "關於 {label}"
 msgid "Access token (optional)"
 msgstr "存取權杖（選填）"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Access token + Save for a PAT or API key. Advanced client ID/secret + Connect OAuth when the provider needs an app. On self-hosted installs, allowlist the redirect URI below."
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
 msgstr "帳號"
@@ -579,6 +583,10 @@ msgstr "新增伺服器"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add server URL"
 msgstr "新增伺服器網址"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Add this exact URL to the provider app redirect allowlist."
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Add to an existing bot"
@@ -1033,6 +1041,10 @@ msgstr "擁有專屬電腦與瀏覽器的機器人"
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "大腦標籤"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Browse catalog"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
@@ -1639,12 +1651,14 @@ msgstr "對話"
 
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
 msgstr "已複製"
 
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
@@ -2187,9 +2201,17 @@ msgstr "建立"
 msgid "Create a section and move {0} into it."
 msgstr "建立分組並把 {0} 移入。"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create access token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "建立帳號"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create an app in the developer portal, allowlist the redirect URI below, then put the client ID and secret under Advanced and use Connect OAuth."
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
@@ -2197,6 +2219,10 @@ msgstr "建立群組"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Create link"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create OAuth app"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -2431,6 +2457,10 @@ msgstr "桌面版更新"
 msgid "Details"
 msgstr "詳細資訊"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Developer portal"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "停用工具"
@@ -2584,6 +2614,10 @@ msgstr "先編輯"
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
 msgstr "編輯資料"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Either paste an API token in Access token and Save, or use Connect OAuth (Advanced client fields if redirect is rejected)."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2865,7 +2899,7 @@ msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 連線…"
 
 #: src/pages/McpServersOverlay.tsx
-msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgid "For a PAT or API key, paste it here and Save. Bearer is added automatically when needed — skip Connect OAuth on self-hosted installs that block OAuth."
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -3029,6 +3063,10 @@ msgstr "頻率"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "如何檢查"
+
+#: src/components/McpAuthHelp.tsx
+msgid "How to get a token or OAuth app"
+msgstr ""
 
 #: src/components/SignupSurvey.tsx
 msgid "How will you use Rakazo?"
@@ -4031,6 +4069,10 @@ msgstr "現在"
 msgid "OAuth authorization was cancelled."
 msgstr "OAuth 授權已取消。"
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth callback URL"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth client ID (optional)"
 msgstr "OAuth 客戶端 ID（選填）"
@@ -4053,9 +4095,17 @@ msgstr "OAuth 連線失敗"
 msgid "OAuth expired"
 msgstr "OAuth 已過期"
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth redirect URI"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/model-catalog.ts
 msgid "Off"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Official docs"
 msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
@@ -4248,6 +4298,10 @@ msgstr "兩次密碼不一致"
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Past due"
 msgstr "付款逾期"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Paste a personal access token in Access token, then Save. Do not use Connect OAuth for this provider on self-hosted installs."
+msgstr ""
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -5112,6 +5166,10 @@ msgstr "設定：用量"
 msgid "Setup complete"
 msgstr "設定完成"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Setup for {title}"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Setup help"
 msgstr "設定說明"
@@ -5864,6 +5922,10 @@ msgstr "試用於 {day} 結束"
 msgid "Try again"
 msgstr "重試"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Try Connect OAuth first. If you get an invalid redirect URI error, create an app and allowlist the redirect URI below, then fill Advanced client ID and secret."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Try the test again."
 msgstr "請重試測試。"
@@ -5904,6 +5966,10 @@ msgstr "要復原匯入嗎？"
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "解除安裝"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Unknown provider — check the catalog for auth details, then use Access token or Advanced OAuth as above."
+msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"

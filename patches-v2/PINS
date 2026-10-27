@@ -7,12 +7,12 @@
 # Upstream tip at the rebase merge (elie222/rakazo main):
 UPSTREAM_COMMIT=a0e57811172f5286d3d113e3117470d3762e2b99
 # Fork tip that matches the running image:
-REBASE_TIP=39e02fb22dc0ad5a4c09a55690b06dbda4e34a81
+REBASE_TIP=07b4c7d7e0c36d5a45399eb1b4c6f05ffc9b984c
 # Local image id on the build host (not a registry digest until pushed):
-APP_DIGEST=sha256:9ed9ad11ee86704332b1ed1b166ff490cfff818db2594003ab0d8c52824ffd52
+APP_DIGEST=sha256:caf8ed3a8a03deb07bdd0638f191756ad67d05829bc19ba6a7619d0e863f6c52
 # Computer tools unchanged from prior pin:
 COMPUTER_DIGEST=sha256:75c3cdc587ede7b3974cb10453ede9fe0629b606af385d5528a237c00e95836e
-CURRENT_TAG=rebase-39e02fb
+CURRENT_TAG=rebase-07b4c7d
 #
 # Historic (do not reapply): pin 0723154 + series 0001–0050 → tag 0723154-nk50
 # HISTORIC_UPSTREAM_COMMIT=0723154f23d6622ef0f4accafdd170e1cda808dd

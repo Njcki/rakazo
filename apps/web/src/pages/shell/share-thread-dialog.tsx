@@ -39,14 +39,14 @@ function messagePreview(blocks: MessageBlock[]): string {
   return "";
 }
 
-/** Per-bot memory of the messages the owner excluded from sharing. */
-function excludedKey(botId: string): string {
-  return `rakazo-share-excluded:${botId}`;
+/** Per-thread memory of the messages the owner excluded from sharing. */
+function excludedKey(targetKey: string): string {
+  return `rakazo-share-excluded:${targetKey}`;
 }
 
-function loadExcluded(botId: string): Set<string> {
+function loadExcluded(targetKey: string): Set<string> {
   try {
-    const raw = localStorage.getItem(excludedKey(botId));
+    const raw = localStorage.getItem(excludedKey(targetKey));
     if (!raw) return new Set();
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
@@ -56,9 +56,9 @@ function loadExcluded(botId: string): Set<string> {
   }
 }
 
-function saveExcluded(botId: string, excluded: Set<string>): void {
+function saveExcluded(targetKey: string, excluded: Set<string>): void {
   try {
-    localStorage.setItem(excludedKey(botId), JSON.stringify([...excluded]));
+    localStorage.setItem(excludedKey(targetKey), JSON.stringify([...excluded]));
   } catch {
     // Storage unavailable (e.g. private mode); the preference simply won't persist.
   }
@@ -72,19 +72,29 @@ const EXPIRY_OPTIONS = [
 ] as const;
 
 /**
- * Create and manage public, link-shareable snapshots of a 1:1 bot thread.
+ * Create and manage public, link-shareable snapshots of a bot or group thread.
  * The owner picks which messages to include; the resulting link needs no login.
  */
 export function ShareThreadDialog({
   botId,
-  botName,
+  groupId,
+  displayName,
+  memberNames,
   onClose,
 }: {
-  botId: string;
-  botName: string;
+  botId?: string;
+  groupId?: string;
+  displayName: string;
+  /** botId → name for group message labels; omit for 1:1. */
+  memberNames?: Record<string, string>;
   onClose: () => void;
 }) {
   const { t } = useLingui();
+  const targetKey = botId ? botId : `group:${groupId ?? ""}`;
+  const threadInput = useMemo(
+    () => (botId ? { botId } : { groupId: groupId! }),
+    [botId, groupId],
+  );
   const [messages, setMessages] = useState<ThreadMessage[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -97,21 +107,30 @@ export function ShareThreadDialog({
   const [shares, setShares] = useState<ThreadShare[]>([]);
   const [copied, copy] = useCopyText();
 
+  const labelFor = useCallback(
+    (message: ThreadMessage) => {
+      if (message.role === "user") return t`You`;
+      if (message.botId && memberNames?.[message.botId]) return memberNames[message.botId]!;
+      return displayName;
+    },
+    [displayName, memberNames, t],
+  );
+
   const loadAll = useCallback(async () => {
     let all: ThreadMessage[] = [];
     let before: number | undefined;
     for (;;) {
-      const page = await rpc.threads.messages({ botId, before });
+      const page = await rpc.threads.messages({ ...threadInput, before });
       all = [...page.messages, ...all];
       if (page.olderCursor == null) break;
       before = page.olderCursor;
     }
     return all;
-  }, [botId]);
+  }, [threadInput]);
 
   useEffect(() => {
     let cancelled = false;
-    const remembered = loadExcluded(botId);
+    const remembered = loadExcluded(targetKey);
     setExcluded(remembered);
     void loadAll()
       .then((all) => {
@@ -129,7 +148,7 @@ export function ShareThreadDialog({
         if (!cancelled) setLoadError(errorText(reason, t`Could not load messages`));
       });
     void rpc.threadShares
-      .list({ botId })
+      .list(threadInput)
       .then((rows) => {
         if (!cancelled) setShares(rows);
       })
@@ -139,7 +158,7 @@ export function ShareThreadDialog({
     return () => {
       cancelled = true;
     };
-  }, [botId, loadAll, t]);
+  }, [targetKey, threadInput, loadAll, t]);
 
   const toggle = (id: string) => {
     const isSelected = selected.has(id);
@@ -151,7 +170,7 @@ export function ShareThreadDialog({
     else nextExcluded.delete(id);
     setSelected(nextSelected);
     setExcluded(nextExcluded);
-    saveExcluded(botId, nextExcluded);
+    saveExcluded(targetKey, nextExcluded);
   };
 
   const selectable = useMemo(
@@ -169,7 +188,7 @@ export function ShareThreadDialog({
       : new Set(selectable.map((m) => m.id));
     setSelected(nextSelected);
     setExcluded(nextExcluded);
-    saveExcluded(botId, nextExcluded);
+    saveExcluded(targetKey, nextExcluded);
   };
 
   const create = async () => {
@@ -181,14 +200,14 @@ export function ShareThreadDialog({
     setCreateError(null);
     try {
       const result = await rpc.threadShares.create({
-        botId,
+        ...threadInput,
         messageIds,
         title: title.trim() || undefined,
         expiresInDays: expiry === "" ? undefined : Number(expiry),
       });
       setCreatedUrl(result.url);
       void copy(result.url);
-      setShares(await rpc.threadShares.list({ botId }));
+      setShares(await rpc.threadShares.list(threadInput));
     } catch (reason: unknown) {
       setCreateError(errorText(reason, t`Could not create the share`));
     } finally {
@@ -200,7 +219,7 @@ export function ShareThreadDialog({
     try {
       const target = shares.find((s) => s.id === id);
       await rpc.threadShares.revoke({ id });
-      setShares(await rpc.threadShares.list({ botId }));
+      setShares(await rpc.threadShares.list(threadInput));
       const createdToken = createdUrl ? createdUrl.split("/").pop() : null;
       if (createdToken && target?.token === createdToken) setCreatedUrl(null);
     } catch (reason: unknown) {
@@ -273,7 +292,7 @@ export function ShareThreadDialog({
                       />
                       <div className="min-w-0 flex-1">
                         <div className="text-[12px] font-medium text-muted-foreground">
-                          {message.role === "user" ? t`You` : botName}
+                          {labelFor(message)}
                         </div>
                         <div className="truncate text-[13.5px] text-foreground" dir="auto">
                           {messagePreview(shareableBlocks(message.blocks)) || "—"}
@@ -300,7 +319,7 @@ export function ShareThreadDialog({
                   maxLength={200}
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder={botName}
+                  placeholder={displayName}
                 />
               </div>
               <div className="grid min-w-0 gap-1.5">

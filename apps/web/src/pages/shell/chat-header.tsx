@@ -81,7 +81,7 @@ export function ChatHeader({
             </Button>
           </IconTooltip>
         ) : null}
-        {!inGroup && active && onShare ? (
+        {((!inGroup && active) || (inGroup && activeGroup)) && onShare ? (
           <IconTooltip label={t`Share conversation`}>
             <Button
               variant="floating"

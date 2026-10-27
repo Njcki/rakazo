@@ -410,6 +410,7 @@ msgstr "訂閱憑證已安全儲存。"
 msgid "About {label}"
 msgstr "關於 {label}"
 
+#: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "存取權杖（選填）"
@@ -2863,6 +2864,10 @@ msgstr "已完成。"
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 連線…"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "忘記密碼？"
@@ -3032,6 +3037,10 @@ msgstr "你會如何使用 Rakazo？"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "我做完了"
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4159,6 +4168,10 @@ msgstr "選填"
 msgid "Optional header value"
 msgstr "選填標頭值"
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
@@ -4256,6 +4269,14 @@ msgstr "貼上你的 API 金鑰"
 #: src/lib/model-connection-preflight.ts
 msgid "Paste your API key, then test again."
 msgstr "請貼上你的 API 金鑰，然後重新測試。"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "PAT or Bearer token — stored encrypted"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "PAT or Bearer token (GitHub MCP, etc.)"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/import-status.ts

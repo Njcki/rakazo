@@ -4,7 +4,7 @@
     "slug": "rakazo",
     "owner": "inbox-zero",
     "scheme": "rakazo",
-    "version": "1.0.5",
+    "version": "1.0.9",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -14,7 +14,10 @@
         {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#050506"
+          "backgroundColor": "#FCFCFC",
+          "dark": {
+            "backgroundColor": "#141414"
+          }
         }
       ],
       "expo-router",
@@ -52,7 +55,8 @@
       ],
       "expo-sharing",
       "./plugins/with-worklets-headers",
-      "./plugins/with-scene-lifecycle"
+      "./plugins/with-scene-lifecycle",
+      "./plugins/with-lan-cleartext"
     ],
     "ios": {
       "bundleIdentifier": "com.rakazo.app",

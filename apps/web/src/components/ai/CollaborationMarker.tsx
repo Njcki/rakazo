@@ -1,19 +1,25 @@
-import { BotAvatar, GroupAvatar, type GroupAvatarMember } from "@rakazo/ui-web";
-import { LoadingState } from "./primitives";
+import type { GroupAvatarMember } from "@rakazo/ui-web";
+import { BotAvatar, Button, GroupAvatar } from "@rakazo/ui-web";
+import { ChevronDown } from "lucide-react";
 
-/** Lightweight peer event shown without exposing the exchanged message body. */
+/**
+ * Lightweight peer event shown without exposing the exchanged message body. `replies` adds a
+ * toggle for the peer run's folded replies.
+ */
 export function CollaborationMarker({
   ariaLabel,
   color,
   identity,
   label,
   onClick,
+  replies,
 }: {
   ariaLabel: string;
   color: string;
   identity: string;
   label: string;
   onClick: () => void;
+  replies?: { expanded: boolean; label: string; onToggle: () => void };
 }) {
   return (
     <div className="flex justify-start">
@@ -29,14 +35,40 @@ export function CollaborationMarker({
           {label}
         </span>
       </button>
+      {replies ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          data-testid="peer-replies-toggle"
+          aria-expanded={replies.expanded}
+          aria-label={replies.label}
+          onClick={replies.onToggle}
+          className="rounded-full text-muted-foreground"
+        >
+          <ChevronDown
+            size={14}
+            strokeWidth={1.8}
+            className={
+              replies.expanded
+                ? "size-3.5 transition-transform"
+                : "size-3.5 -rotate-90 transition-transform"
+            }
+            aria-hidden="true"
+          />
+        </Button>
+      ) : null}
     </div>
   );
 }
 
+/** The working bot with what it is doing right now, such as its current tool call. */
 export function ActiveBotGlyph({ bots, label }: { bots: GroupAvatarMember[]; label: string }) {
   return (
-    <div className="flex min-h-10 items-center px-1">
-      <LoadingState indicator={<GroupAvatar members={bots} size={28} />} label={label} />
+    <div role="status" className="flex min-h-10 min-w-0 items-center gap-2.5 px-1">
+      <GroupAvatar members={bots} size={28} />
+      <span dir="auto" className="min-w-0 truncate text-[15px] text-muted-foreground text-shimmer">
+        {label}
+      </span>
     </div>
   );
 }

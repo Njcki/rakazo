@@ -1,28 +1,66 @@
+import { isSecretAskBlock } from "./action-approval.js";
+
 type AskSnapshot = {
   messages: readonly {
     id: string;
     runId?: string | null;
-    blocks: readonly { kind: string; status?: string }[];
+    blocks: readonly { kind: string; status?: string; input?: string; approvalEffectId?: string }[];
   }[];
-  run?: { id: string; status: string } | null;
-  activeRuns?: readonly { id: string; status: string }[];
+  run?: { id: string; status: string; userId?: string } | null;
+  activeRuns?: readonly { id: string; status: string; userId?: string }[];
 };
 
-export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): string | null {
-  if (!snapshot) return null;
+export function answerableAskMessageIds(snapshot: AskSnapshot | null): Set<string> {
+  const answerable = new Set<string>();
+  if (!snapshot) return answerable;
   const waitingRunIds = new Set(
     (snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []))
       .filter((run) => run.status === "waiting_input")
       .map((run) => run.id),
   );
-  for (let index = snapshot.messages.length - 1; index >= 0; index -= 1) {
-    const message = snapshot.messages[index];
-    if (!message?.runId || !waitingRunIds.has(message.runId)) continue;
+  for (const message of snapshot.messages) {
+    if (!message.runId || !waitingRunIds.has(message.runId)) continue;
     if (message.blocks.some((block) => block.kind === "ask" && block.status !== "answered")) {
-      return message.id;
+      answerable.add(message.id);
     }
   }
+  return answerable;
+}
+
+/** Newest answerable ask in the snapshot (messages are chronological). */
+export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): string | null {
+  const ids = answerableAskMessageIds(snapshot);
+  if (ids.size === 0 || !snapshot) return null;
+  for (let i = snapshot.messages.length - 1; i >= 0; i -= 1) {
+    const id = snapshot.messages[i]?.id;
+    if (id && ids.has(id)) return id;
+  }
   return null;
+}
+
+/** Secret requests can only be dismissed by the user of their run. */
+export function dismissableAskMessageIds(
+  snapshot: AskSnapshot | null,
+  userId?: string,
+): Set<string> {
+  const dismissable = new Set<string>();
+  if (!snapshot || !userId) return dismissable;
+  const runs = snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []);
+  const ownedRunIds = new Set(
+    runs
+      .filter((run) => run.status === "waiting_input" && run.userId === userId)
+      .map((run) => run.id),
+  );
+  for (const message of snapshot.messages) {
+    if (
+      message.runId &&
+      ownedRunIds.has(message.runId) &&
+      message.blocks.some((block) => isSecretAskBlock(block) && block.status !== "answered")
+    ) {
+      dismissable.add(message.id);
+    }
+  }
+  return dismissable;
 }
 
 export function selectedAskActionLabel(

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./math": "./src/math.ts",
+    "./mermaid": "./src/mermaid.ts",
     "./native": "./src/markdown.native.tsx",
     "./web": "./src/markdown.web.tsx"
   },
@@ -17,11 +18,13 @@
     "@rakazo/ui-tokens": "workspace:*",
     "@rakazo/ui-web": "workspace:*",
     "@ronradtke/react-native-markdown-display": "9.0.3",
-    "katex": "0.16.47",
     "linkify-it": "5.0.2",
+    "mermaid": "11.17.2",
+    "prism-react-renderer": "2.4.1",
     "react-markdown": "10.1.0",
-    "rehype-katex": "7.0.1",
     "remark-gfm": "4.0.1",
+    "katex": "0.16.47",
+    "rehype-katex": "7.0.1",
     "remark-math": "6.0.0"
   },
   "peerDependencies": {
@@ -44,6 +47,6 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }

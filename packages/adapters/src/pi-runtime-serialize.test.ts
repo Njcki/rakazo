@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializeToolResult } from "./pi-runtime.js";
+import { serializeToolResult } from "./pi-runtime-tools.js";
 
 describe("serializeToolResult", () => {
   const skill = {
@@ -16,6 +16,22 @@ describe("serializeToolResult", () => {
       const text = serializeToolResult(skill, strategy, "skill_read", { name: skill.name });
       expect(text.length).toBeGreaterThan(12_000);
       expect(JSON.parse(text)).toEqual(skill);
+    },
+  );
+
+  it.each(["current", "retrieval"] as const)(
+    "keeps a full child read and its version with %s context",
+    (strategy) => {
+      const listing = {
+        bot: { id: "child", instructionsVersion: "v2", instructions: "x".repeat(20_000) },
+        bots: [],
+        groups: [],
+        sections: [],
+        truncated: false,
+      };
+      expect(
+        JSON.parse(serializeToolResult(listing, strategy, "list_fleet", { bot_id: "child" })),
+      ).toEqual(listing);
     },
   );
 

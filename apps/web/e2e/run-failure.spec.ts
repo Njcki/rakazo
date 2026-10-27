@@ -1,4 +1,5 @@
-import { expect, type Locator, type Page, test } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openNewSpace, signup } from "./helpers";
 
 function isPresented(error: Locator) {
@@ -34,7 +35,16 @@ test("a failed run is visible once without returning after reload", async ({ pag
 
   const error = page.getByTestId("composer-error");
   await expect(error).toBeVisible({ timeout: 30_000 });
-  await expect(error).toContainText("Scripted run failure");
+  await expect(error).toContainText("The model provider returned an error.");
+  const details = error.locator("summary");
+  await details.focus();
+  await expect(details).toBeFocused();
+  await details.press("Enter");
+  await expect(error.locator("pre")).toBeVisible();
+  await expect(error.locator("pre")).toHaveText("Scripted run failure");
+  await captureScreenshot(page, testInfo, "run-error-details-expanded");
+  await details.click();
+  await expect(error.locator("pre")).toBeHidden();
   await captureScreenshot(page, testInfo, "new-run-error-visible");
 
   await page.reload();
@@ -48,7 +58,7 @@ test("a failed run is visible once without returning after reload", async ({ pag
   await page.getByPlaceholder(/^Message /).fill("fail this run");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(error).toBeVisible({ timeout: 30_000 });
-  await expect(error).toContainText("Scripted run failure");
+  await expect(error).toContainText("The model provider returned an error.");
 
   const dismissError = page.getByTestId("composer-error-dismiss");
   await dismissError.focus();
@@ -74,7 +84,7 @@ test("a covered run error is not remembered until it is presented", async ({ pag
   await sendButton.evaluate((button) => (button as HTMLButtonElement).click());
 
   const error = page.getByTestId("composer-error");
-  await expect(error).toContainText("Scripted run failure", { timeout: 30_000 });
+  await expect(error).toContainText("The model provider returned an error.", { timeout: 30_000 });
   expect(await isPresented(error)).toBe(false);
   await captureScreenshot(page, testInfo, "run-error-covered-by-mobile-navigation");
   await page.reload();
@@ -93,7 +103,7 @@ test("a covered run error is not remembered until it is presented", async ({ pag
   if (!nextSendButton) throw new Error("Send button not found");
   await page.getByRole("button", { name: "Open navigation" }).click();
   await nextSendButton.evaluate((button) => (button as HTMLButtonElement).click());
-  await expect(error).toContainText("Scripted run failure", { timeout: 30_000 });
+  await expect(error).toContainText("The model provider returned an error.", { timeout: 30_000 });
 
   await page.getByRole("button", { name: "Close navigation" }).click();
   await expect.poll(() => isPresented(error)).toBe(true);
@@ -116,7 +126,7 @@ test("a covered run error is not remembered until it is presented", async ({ pag
   const newSpaceDialog = page.getByRole("dialog", { name: "New space" });
   await expect(newSpaceDialog).toBeVisible();
   await modalSendButton.evaluate((button) => (button as HTMLButtonElement).click());
-  await expect(error).toContainText("Scripted run failure", { timeout: 30_000 });
+  await expect(error).toContainText("The model provider returned an error.", { timeout: 30_000 });
   expect(await isPresented(error)).toBe(false);
   await expect.poll(() => seenRunErrorCount(page)).toBe(recordedErrorCount + 1);
 
@@ -127,4 +137,133 @@ test("a covered run error is not remembered until it is presented", async ({ pag
   await page.reload();
   await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await expect(error).toBeHidden();
+});
+
+test("an overloaded provider is named instead of a generic error", async ({ page }, testInfo) => {
+  await signup(page, `overloaded-run-${Date.now()}@rakazo.test`, "password12", "Overloaded Run");
+  await completeOnboarding(page);
+
+  await page.getByPlaceholder(/^Message /).fill("fail this run as overloaded");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "Your model provider is overloaded right now. Try again in a moment.",
+    { timeout: 30_000 },
+  );
+  await expect(error).not.toContainText("The model provider returned an error.");
+  await expect(error.getByTestId("composer-error-action")).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "overloaded-run-error");
+});
+
+test("a model too small for required instructions offers a model change", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `context-run-${Date.now()}@rakazo.test`, "password12", "Context Run");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with fixed context");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "This model's context window is too small. Choose another model.",
+    { timeout: 30_000 },
+  );
+  await expect(error).not.toContainText("Start a new chat");
+  await expect(error.getByTestId("composer-error-action")).toHaveText("Choose a model");
+  await captureScreenshot(page, testInfo, "required-context-model-recovery");
+});
+
+test("a reply cut off at the output limit offers a model change", async ({ page }, testInfo) => {
+  await signup(page, `cut-reply-run-${Date.now()}@rakazo.test`, "password12", "Cut Reply Run");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with a cut reply");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText("The model hit its output limit before finishing its reply.", {
+    timeout: 30_000,
+  });
+  await expect(error.getByTestId("composer-error-action")).toHaveText("Choose a model");
+  await captureScreenshot(page, testInfo, "cut-reply-model-recovery");
+});
+
+test("a provider out of credits offers another model", async ({ page }, testInfo) => {
+  await signup(page, `credits-run-${Date.now()}@rakazo.test`, "password12", "Credits Run");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run out of credits");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText("Your model provider reached its credit limit.", {
+    timeout: 30_000,
+  });
+  const action = error.getByTestId("composer-error-action");
+  await expect(action).toHaveText("Choose a model");
+  await captureScreenshot(page, testInfo, "credit-limit-model-recovery");
+  await action.click();
+  await expect(page.getByTestId("bot-settings")).toBeVisible();
+});
+
+test("a rejected key opens the model connections", async ({ page }, testInfo) => {
+  await signup(page, `rejected-key-${Date.now()}@rakazo.test`, "password12", "Rejected Key");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with a rejected key");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "Your model provider rejected the API key. Check your connection settings.",
+    { timeout: 30_000 },
+  );
+  const action = error.getByTestId("composer-error-action");
+  await expect(action).toHaveText("Replace key");
+  await captureScreenshot(page, testInfo, "rejected-key-connection-recovery");
+  await action.click();
+  await expect(page.getByRole("button", { name: "Close model settings" })).toBeVisible();
+});
+
+test("an approved action the model did not run says so", async ({ page }, testInfo) => {
+  await signup(page, `unrun-approval-${Date.now()}@rakazo.test`, "password12", "Unrun Approval");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with an unrun approval");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText("The model did not run the approved action. Try again.", {
+    timeout: 30_000,
+  });
+  await expect(error).not.toContainText("The model provider returned an error.");
+  await captureScreenshot(page, testInfo, "approved-action-not-run");
+});
+
+test("a failed run explains that backup models also failed", async ({ page }, testInfo) => {
+  await signup(page, `backup-failure-${Date.now()}@rakazo.test`, "password12", "Backup Failure");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with exhausted backups");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "Your model provider is rate limiting requests. Try again shortly.",
+    { timeout: 30_000 },
+  );
+  await expect(error).toContainText("Your backup models also failed.");
+  await expect(error.locator("pre")).toBeHidden();
+  await captureScreenshot(page, testInfo, "backup-models-exhausted");
+});
+
+test("an unreachable provider is named instead of a generic error", async ({ page }, testInfo) => {
+  await signup(page, `unreachable-${Date.now()}@rakazo.test`, "password12", "Unreachable");
+  await completeOnboarding(page);
+  await page.getByPlaceholder(/^Message /).fill("fail this run with an unreachable provider");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  const error = page.getByTestId("composer-error");
+  await expect(error).toContainText(
+    "Your model provider couldn't be reached. Check that it's running.",
+    { timeout: 30_000 },
+  );
+  await expect(error).not.toContainText("The model provider returned an error.");
+  await captureScreenshot(page, testInfo, "unreachable-run-error");
 });

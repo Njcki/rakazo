@@ -16,8 +16,10 @@ import {
 } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import { useSideInsets } from "../lib/side-insets";
 
 export default function ServerScreen() {
+  const sideInsets = useSideInsets();
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const router = useRouter();
@@ -105,14 +107,14 @@ export default function ServerScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
+          style={sideInsets}
           contentInsetAdjustmentBehavior="automatic"
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={{ color: tokens.mutedForeground, fontSize: 15, lineHeight: 22 }}>
-            {t("Enter your Rakazo server address.")}
-          </Text>
           <TextInput
+            testID="server-address"
+            accessibilityLabel={t("Server")}
             autoCapitalize="none"
             autoComplete="off"
             autoCorrect={false}
@@ -126,7 +128,6 @@ export default function ServerScreen() {
             placeholderTextColor={tokens.mutedForeground}
             returnKeyType="go"
             style={{
-              marginTop: 20,
               backgroundColor: tokens.muted,
               borderRadius: 13,
               padding: 16,

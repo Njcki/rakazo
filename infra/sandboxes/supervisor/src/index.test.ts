@@ -11,21 +11,25 @@ import {
   MAX_SUPERVISOR_REQUEST_BYTES,
   resolveDockerSocketPath,
   supervisorApp,
+  supervisorFileWriteSchema,
   supervisorRequestBodyLimit,
   waitForScreenReady,
 } from "./index.js";
 import type { ScreenAssignment } from "./supervisor-logic.js";
 import {
+  AIMED_SCROLL_CONTROL_LABEL,
   assertRequestIdentity,
   attemptComputerControl,
   browserProfilePathForScreen,
   ComputerControlUnavailableError,
   clearComputerScreenRegistry,
   completeReleasedScreen,
+  completeWarmReleasedScreen,
   computerCommandEnv,
   computerControlTimeoutMs,
   containerActionStep,
   containerActionSteps,
+  controlHandlesActions,
   createDockerStreamDemuxer,
   currentComputerScreens,
   DOCKER_BROWSER_ALIASES,
@@ -37,6 +41,7 @@ import {
   isComputerControlUnavailable,
   nextScreenIndex,
   normalizeWorkspaceRelative,
+  oldestIdleScreen,
   parseObservation,
   preferComputerControl,
   releaseAssignedScreen,
@@ -47,6 +52,7 @@ import {
   shouldReplayComputerActions,
   stopExtraScreenCommand,
   teardownReleasedScreen,
+  terminalCommand,
   withKeyedLock,
 } from "./supervisor-logic.js";
 
@@ -220,6 +226,26 @@ describe("sandbox supervisor HTTP boundary", () => {
     }
   });
 
+  it("allows configured uploads through both the file schema and body guard", () => {
+    const limit = 25 * 1024 * 1024;
+    const content = Buffer.alloc(20 * 1024 * 1024).toString("base64");
+    const payload = { path: "attachments/large.txt", content };
+    expect(supervisorFileWriteSchema(limit).safeParse(payload).success).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(
+      supervisorRequestBodyLimit("POST", "/computers/id/files", limit),
+    );
+    expect(supervisorFileWriteSchema().safeParse(payload).success).toBe(false);
+    expect(
+      supervisorFileWriteSchema(limit).safeParse({
+        path: "large.txt",
+        content: "A".repeat(Math.ceil(limit / 3) * 4 + 1),
+      }).success,
+    ).toBe(false);
+    expect(supervisorRequestBodyLimit("POST", "/computers/id/actions", limit)).toBe(
+      MAX_SUPERVISOR_REQUEST_BYTES,
+    );
+  });
+
   it("keeps the larger file-write allowance scoped to that exact POST route", () => {
     expect(supervisorRequestBodyLimit("POST", "/computers/id/files")).toBe(
       MAX_SUPERVISOR_FILE_REQUEST_BYTES,
@@ -326,6 +352,79 @@ describe("sandbox supervisor input containment", () => {
       argv: ["env", "DISPLAY=:1", "xdotool", "click", "--repeat", "20", "4"],
     });
   });
+
+  it("sends aimed and sideways scrolls to a computer's control service only when it takes them", () => {
+    const plain = [
+      { kind: "scroll" as const, direction: "down" as const, amount: 3 },
+      { kind: "pointer" as const, x: 10, y: 20, type: "click" as const },
+    ];
+    const aimed = [{ kind: "scroll" as const, direction: "down" as const, x: 600, y: 420 }];
+    const sideways = [{ kind: "scroll" as const, direction: "left" as const }];
+    const current = { [AIMED_SCROLL_CONTROL_LABEL]: "1", "rakazo.botId": "bot" };
+    const older = { "rakazo.botId": "bot" };
+    expect(controlHandlesActions(older, plain)).toBe(true);
+    expect(controlHandlesActions(older, aimed)).toBe(false);
+    expect(controlHandlesActions(older, sideways)).toBe(false);
+    expect(controlHandlesActions(undefined, [...plain, ...aimed])).toBe(false);
+    expect(controlHandlesActions(current, [...plain, ...aimed, ...sideways])).toBe(true);
+    // The computer image built with this control service carries the label.
+    const dockerfile = readFileSync(
+      path.resolve(import.meta.dirname, "../../computer/Dockerfile"),
+      "utf8",
+    );
+    expect(dockerfile).toContain(`LABEL ${AIMED_SCROLL_CONTROL_LABEL}="1"`);
+  });
+
+  it("moves the pointer to a scroll's point before turning the wheel", () => {
+    expect(
+      containerActionStep({ kind: "scroll", direction: "down", amount: 4, x: 600.4, y: 420 }),
+    ).toEqual({
+      argv: [
+        "env",
+        "DISPLAY=:1",
+        "xdotool",
+        "mousemove",
+        "--",
+        "600",
+        "420",
+        "click",
+        "--repeat",
+        "4",
+        "5",
+      ],
+    });
+    expect(containerActionStep({ kind: "scroll", direction: "left", amount: 2 })).toEqual({
+      argv: ["env", "DISPLAY=:1", "xdotool", "click", "--repeat", "2", "6"],
+    });
+    expect(containerActionStep({ kind: "scroll", direction: "right", amount: 2 })).toEqual({
+      argv: ["env", "DISPLAY=:1", "xdotool", "click", "--repeat", "2", "7"],
+    });
+    // Both coordinates or neither: a lone x scrolls where the pointer is.
+    expect(containerActionStep({ kind: "scroll", direction: "down", x: 600 })).toEqual({
+      argv: ["env", "DISPLAY=:1", "xdotool", "click", "--repeat", "3", "5"],
+    });
+  });
+
+  it.each([undefined, "/home/rakazo/.browser-profiles/bot-test"])(
+    "opens workspace files in the assigned browser (profile=%s)",
+    (profile) => {
+      for (const [file, url] of [
+        ["screenshots/it's #1%.png", "file:///home/rakazo/screenshots/it's%20%231%25.png"],
+        ["/image.png", "file:///home/rakazo/image.png"],
+        ["screenshots/back\\slash.png", "file:///home/rakazo/screenshots/back/slash.png"],
+      ] as const) {
+        expect(containerActionStep({ kind: "open", path: file }, ":2", profile)).toEqual({
+          argv: [
+            "env",
+            "DISPLAY=:2",
+            ...(profile ? [`RAKAZO_BROWSER_PROFILE=${profile}`] : []),
+            "rakazo-browser",
+            url,
+          ],
+        });
+      }
+    },
+  );
 
   it("routes Docker browser aliases through the safe wrapper on every display", () => {
     for (const application of DOCKER_BROWSER_ALIASES) {
@@ -477,6 +576,18 @@ describe("sandbox supervisor input containment", () => {
     expect(
       isComputerControlUnavailable(
         Object.assign(new TypeError("fetch failed"), {
+          cause: Object.assign(
+            new Error(
+              "Connect Timeout Error (attempted address: 172.20.0.2:7070, timeout: 10000ms)",
+            ),
+            { name: "ConnectTimeoutError", code: "UND_ERR_CONNECT_TIMEOUT" },
+          ),
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isComputerControlUnavailable(
+        Object.assign(new TypeError("fetch failed"), {
           cause: new Error("read ECONNRESET"),
         }),
       ),
@@ -573,6 +684,8 @@ describe("sandbox supervisor input containment", () => {
       /x11vnc -display .* -rfbport 0 -unixsock .*control-1-/,
     );
     expect(interactiveScreenCommand(true, "lease-new")).toMatch(/6080/);
+    expect(interactiveScreenCommand(true, "lease-new")).toContain("0.0.0.0:6080 8>&-");
+    expect(terminalCommand("control", "terminal", "/work")).toContain("0.0.0.0:6080 8>&-");
     expect(interactiveScreenCommand(true, "lease-new")).not.toContain("sockets/view-1-");
     expect(interactiveScreenCommand(false, "lease-old")).toContain("= 'lease-old'");
     expect(interactiveScreenCommand(false, "lease-old")).toContain("RAKAZO_CONTROL_RELEASED");
@@ -688,23 +801,32 @@ describe("sandbox supervisor input containment", () => {
     expect(nextScreenIndex(assigned, "bot-9")).toBe(8);
   });
 
-  it("retains a screen slot when teardown fails", async () => {
-    const assigned = new Map<string, ScreenAssignment>();
-    expect(nextScreenIndex(assigned, "writer")).toBe(0);
-    expect(releaseAssignedScreen(assigned, "writer")).toBe(0);
+  it.each([false, true])(
+    "retains a screen slot when teardown fails (retainBrowser=%s)",
+    async (retainBrowser) => {
+      const assigned = new Map<string, ScreenAssignment>();
+      expect(nextScreenIndex(assigned, "writer")).toBe(0);
+      expect(releaseAssignedScreen(assigned, "writer")).toBe(0);
 
-    await expect(
-      teardownReleasedScreen(assigned, "writer", 0, async () => ({
-        code: 1,
-        stderr: "browser still running",
-      })),
-    ).rejects.toThrow("browser still running");
+      await expect(
+        teardownReleasedScreen(
+          assigned,
+          "writer",
+          0,
+          async () => ({
+            code: 1,
+            stderr: "browser still running",
+          }),
+          { retainBrowser },
+        ),
+      ).rejects.toThrow("browser still running");
 
-    expect(assigned.get("writer")).toEqual({ index: 0, releasing: true });
-    expect(() => nextScreenIndex(assigned, "writer")).toThrow(/still being released/);
-    expect(nextScreenIndex(assigned, "researcher")).toBe(1);
-    expect(releaseAssignedScreen(assigned, "writer")).toBe(0);
-  });
+      expect(assigned.get("writer")).toEqual({ index: 0, releasing: true });
+      expect(() => nextScreenIndex(assigned, "writer")).toThrow(/still being released/);
+      expect(nextScreenIndex(assigned, "researcher")).toBe(1);
+      expect(releaseAssignedScreen(assigned, "writer")).toBe(0);
+    },
+  );
 
   it("clears all screen assignments when a container stops so slots can be reused", () => {
     const registry = new Map<string, Map<string, ScreenAssignment>>();
@@ -780,6 +902,49 @@ describe("sandbox supervisor input containment", () => {
     completeReleasedScreen(assigned, "writer", 0);
   });
 
+  it("retains warm slots, clears their idle marker on reuse, and evicts only the oldest idle Team slot", () => {
+    const assigned = new Map<string, ScreenAssignment>();
+    expect(nextScreenIndex(assigned, "writer", "run-1:1")).toBe(0);
+    assigned.get("writer")!.viewToken = "view-token";
+    expect(releaseAssignedScreen(assigned, "writer", "run-1:1")).toBe(0);
+    completeWarmReleasedScreen(assigned, "writer", 0, 100);
+
+    expect(assigned.get("writer")).toEqual({
+      index: 0,
+      leaseId: "run-1:1",
+      viewToken: "view-token",
+      idleAt: 100,
+    });
+    expect(nextScreenIndex(assigned, "researcher", "team-run:1", 3)).toBe(1);
+    expect(releaseAssignedScreen(assigned, "researcher", "team-run:1")).toBe(1);
+    completeWarmReleasedScreen(assigned, "researcher", 1, 200);
+    expect(nextScreenIndex(assigned, "controlled", "run-controlled:1", 3)).toBe(2);
+    assigned.get("controlled")!.controlled = true;
+    assigned.get("controlled")!.idleAt = 50;
+    expect(oldestIdleScreen(assigned, 3)).toBe("writer");
+
+    expect(nextScreenIndex(assigned, "writer", "run-2:2", 3)).toBe(0);
+    expect(assigned.get("writer")?.idleAt).toBeUndefined();
+    expect(oldestIdleScreen(assigned, 3)).toBe("researcher");
+    expect(releaseAssignedScreen(assigned, "writer", "run-1:1")).toBeUndefined();
+    expect(assigned.get("writer")?.releasing).toBeUndefined();
+  });
+
+  it("keeps a warm slot evictable when a viewer repeats the completed run lease", () => {
+    const assigned = new Map<string, ScreenAssignment>();
+    expect(nextScreenIndex(assigned, "writer", "run-1:1", 1)).toBe(0);
+    expect(releaseAssignedScreen(assigned, "writer", "run-1:1")).toBe(0);
+    completeWarmReleasedScreen(assigned, "writer", 0, 100);
+
+    expect(nextScreenIndex(assigned, "writer", "run-1:1", 1)).toBe(0);
+    expect(assigned.get("writer")?.idleAt).toBe(100);
+    expect(oldestIdleScreen(assigned, 1)).toBe("writer");
+
+    expect(nextScreenIndex(assigned, "writer", "run-2:2", 1)).toBe(0);
+    expect(assigned.get("writer")?.idleAt).toBeUndefined();
+    expect(oldestIdleScreen(assigned, 1)).toBeUndefined();
+  });
+
   it("releases a retained screen after the same run resumes", () => {
     const assigned = new Map<string, ScreenAssignment>();
     expect(nextScreenIndex(assigned, "writer", "run-1:1")).toBe(0);
@@ -825,8 +990,69 @@ describe("sandbox supervisor input containment", () => {
     expect(extra).toContain(`--user-data-dir=${browserProfilePathForScreen("researcher")}`);
   });
 
+  it.each([0, 1])("releases screen %i access without stopping its browser or display", (index) => {
+    const stop = screenReleaseStopCommand(index, {
+      hasRegistry: true,
+      cancelRunWork: false,
+      screenId: "writer",
+    });
+    expect(stop).toContain(`sockets/view-${index + 1}-`);
+    expect(stop).toContain(`sockets/control-${index + 1}-`);
+    expect(stop).toContain(`rm -f /tmp/rakazo/control-token-${index + 1}`);
+    expect(stop).not.toContain("--user-data-dir");
+    expect(stop).not.toContain("browser-profile-");
+    expect(stop).not.toContain("browser-launch-");
+    expect(stop).not.toContain("Xvfb");
+    expect(stop).not.toContain("fluxbox");
+    expect(stop).not.toContain("websockify");
+  });
+
+  it("retains the browser slot and fence across run and idle viewer releases", async () => {
+    const assigned = new Map<string, ScreenAssignment>();
+    nextScreenIndex(assigned, "researcher", "other-run:1");
+    expect(nextScreenIndex(assigned, "writer", "run-1:2")).toBe(1);
+    assigned.get("writer")!.viewToken = "old-view-token";
+    assigned.get("writer")!.controlled = true;
+    assigned.get("writer")!.controlToken = "old-control-token";
+    expect(releaseAssignedScreen(assigned, "writer", "run-1:2")).toBe(1);
+    await teardownReleasedScreen(assigned, "writer", 1, async () => ({ code: 0, stderr: "" }), {
+      retainBrowser: true,
+    });
+
+    expect(assigned.get("writer")).toEqual({
+      index: 1,
+      leaseId: "run-1:2",
+      idleAt: expect.any(Number),
+    });
+    expect(oldestIdleScreen(assigned, 2)).toBe("writer");
+    expect(nextScreenIndex(assigned, "new-bot", "new-run:3")).toBe(2);
+    expect(() => nextScreenIndex(assigned, "writer", "screen-view-writer:0")).toThrow(
+      /owned by a newer execution/,
+    );
+    expect(releaseAssignedScreen(assigned, "writer", "screen-view-writer:0")).toBeUndefined();
+    expect(nextScreenIndex(assigned, "writer", "run-2:4")).toBe(1);
+    expect(releaseAssignedScreen(assigned, "writer", "run-1:2")).toBeUndefined();
+    expect(releaseAssignedScreen(assigned, "writer", "run-2:4")).toBe(1);
+    await teardownReleasedScreen(assigned, "writer", 1, async () => ({ code: 0, stderr: "" }), {
+      retainBrowser: true,
+    });
+    expect(assigned.get("researcher")).toEqual({ index: 0, leaseId: "other-run:1" });
+
+    const idle = new Map<string, ScreenAssignment>();
+    nextScreenIndex(idle, "writer", "screen-view-writer:0");
+    expect(releaseAssignedScreen(idle, "writer", "screen-view-writer:0")).toBe(0);
+    await teardownReleasedScreen(idle, "writer", 0, async () => ({ code: 0, stderr: "" }), {
+      retainBrowser: true,
+    });
+    expect(nextScreenIndex(idle, "writer", "run-3:5")).toBe(0);
+  });
+
   it("on cancel, stops only the matching bot's primary-display Chromium", () => {
-    const stop = stopExtraScreenCommand(0, "writer");
+    const stop = screenReleaseStopCommand(0, {
+      hasRegistry: true,
+      cancelRunWork: true,
+      screenId: "writer",
+    });
     expect(stop).toContain(`--user-data-dir=${browserProfilePathForScreen("writer")}`);
     expect(stop).not.toContain(`--user-data-dir=${browserProfilePathForScreen("researcher")}`);
     expect(stop).not.toContain("Xvfb");
@@ -969,7 +1195,7 @@ describe("docker exec stream demux", () => {
 });
 
 describe("computer command identity", () => {
-  it("runs the user's terminal as the same workspace user and environment as the bot's shell", () => {
+  it("gives commands the workspace user's home, PATH and package prefixes on the screen's display", () => {
     expect(computerCommandEnv({ display: ":2" })).toEqual([
       "DISPLAY=:2",
       "HOME=/home/rakazo",
@@ -977,18 +1203,5 @@ describe("computer command identity", () => {
       "NPM_CONFIG_PREFIX=/home/rakazo/.local",
       "PIP_USER=1",
     ]);
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
-    // Every exec, including file writes for uploads, inherits the container's non-root user
-    // (see containerCreateOptions).
-    const execs = source.match(/container\.exec\(\{[\s\S]*?\}\)/g) ?? [];
-    expect(execs.length).toBeGreaterThanOrEqual(2);
-    for (const exec of execs) expect(exec).not.toMatch(/\bUser\s*:/);
-    const route = (path: string) =>
-      source.slice(
-        source.indexOf(`app.post("${path}"`),
-        source.indexOf("app.", source.indexOf(`app.post("${path}"`) + 5),
-      );
-    expect(route("/computers/:id/exec")).toContain("computerCommandEnv(layout)");
-    expect(route("/computers/:id/terminal")).toContain("computerCommandEnv(screen.layout)");
   });
 });

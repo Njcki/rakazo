@@ -24,8 +24,13 @@ const INTERACTIVE_SELECTOR = [
   "[contenteditable='true']",
 ].join(",");
 
-/** Saved logins are typed only into these input types. Textareas stay out: a username is an input. */
-const LOGIN_FILL_INPUT_TYPES = new Set(["text", "email", "password", "tel"]);
+const REOPEN_SAVED_SITE = "Open the saved site with browser_navigate, then fill again.";
+
+/** Saved usernames are typed only into these input types. Textareas stay out: a username is an input. */
+const USERNAME_INPUT_TYPES = new Set(["text", "email", "tel"]);
+
+/** A saved-login fill declined before the page changed; reported as settled, not uncertain. */
+class FillRefused extends Error {}
 
 type DomWindow = JSDOM["window"];
 type DomElement = InstanceType<DomWindow["Element"]>;
@@ -104,7 +109,9 @@ export class PageBrowserSession {
           tree: snap.tree,
           elements: snap.elements,
           error: error instanceof Error ? error.message : String(error),
-          fallback: "computer_act",
+          ...(error instanceof FillRefused
+            ? { uncertain: false }
+            : { fallback: "computer_act" as const }),
         };
       }
       completed += 1;
@@ -122,6 +129,20 @@ export class PageBrowserSession {
 
   private applyAction(el: DomElement, action: BrowserActStep): void {
     const win = this.dom.window;
+    if (action.kind === "upload") {
+      if (!(el instanceof win.HTMLInputElement) || el.type !== "file") {
+        throw new Error("upload needs a file upload element from browser_snapshot");
+      }
+      if (action.paths.length > 1 && !el.multiple) {
+        throw new Error("This file upload accepts one file");
+      }
+      // jsdom cannot build a FileList, so page handlers get named, empty files instead.
+      const files = action.paths.map((path) => new win.File([], path.split("/").pop() ?? path));
+      Object.defineProperty(el, "files", { configurable: true, value: files });
+      el.dispatchEvent(new win.Event("input", { bubbles: true }));
+      el.dispatchEvent(new win.Event("change", { bubbles: true }));
+      return;
+    }
     if (action.kind === "click") {
       if (el instanceof win.HTMLAnchorElement && el.href) {
         const next = new URL(el.href, this.url);
@@ -148,30 +169,35 @@ export class PageBrowserSession {
         try {
           saved = new URL(action.origin);
         } catch {
-          throw new Error("Website logins can only be filled on HTTPS.");
+          throw new FillRefused(`Website logins can only be filled on HTTPS. ${REOPEN_SAVED_SITE}`);
         }
         // Private-LAN HTTP never qualifies, even when the page origin matches.
         if (saved.protocol !== "https:" || page.protocol !== "https:") {
-          throw new Error("Website logins can only be filled on HTTPS.");
+          throw new FillRefused(`Website logins can only be filled on HTTPS. ${REOPEN_SAVED_SITE}`);
         }
         if (page.origin !== saved.origin) {
-          throw new Error("The page is not on the site this login was saved for.");
+          throw new FillRefused(
+            `The page is not on the site this login was saved for. ${REOPEN_SAVED_SITE}`,
+          );
         }
         const inputType = el instanceof win.HTMLInputElement ? el.type : "";
-        if (!LOGIN_FILL_INPUT_TYPES.has(inputType)) {
-          throw new Error(
-            "A saved login can only be typed into a text, email, password, or telephone field.",
+        // A password goes only into a password field, which never displays it.
+        if (action.field !== "username" && inputType !== "password") {
+          throw new FillRefused("A saved password can only be typed into a password field.");
+        }
+        if (action.field === "username" && !USERNAME_INPUT_TYPES.has(inputType)) {
+          throw new FillRefused(
+            "A saved username can only be typed into a text, email, or telephone field.",
           );
         }
       }
       const text = action.text;
       const formField = el instanceof win.HTMLInputElement || el instanceof win.HTMLTextAreaElement;
       if (formField) {
-        // Only a plain fill replaces a saved login; typing appends to it.
+        // Fill and type both replace the field, and with it any saved login.
         if (action.origin) this.loginFilled.add(el);
-        else if (action.kind === "fill") this.loginFilled.delete(el);
-        if (action.kind === "fill") el.value = text;
-        else el.value = `${el.value}${text}`;
+        else this.loginFilled.delete(el);
+        el.value = text;
         el.dispatchEvent(new win.Event("input", { bubbles: true }));
         el.dispatchEvent(new win.Event("change", { bubbles: true }));
         return;
@@ -183,8 +209,7 @@ export class PageBrowserSession {
         return;
       }
       if (el.getAttribute("contenteditable") === "true") {
-        if (action.kind === "fill") el.textContent = text;
-        else el.textContent = `${el.textContent ?? ""}${text}`;
+        el.textContent = text;
         el.dispatchEvent(new win.Event("input", { bubbles: true }));
         return;
       }
@@ -220,11 +245,14 @@ export class PageBrowserSession {
 
 function isIgnored(win: DomWindow, el: DomElement): boolean {
   if (el instanceof win.HTMLInputElement && el.type === "hidden") return true;
-  if (el.getAttribute("aria-hidden") === "true") return true;
+  // Sites often aria-hide the real file input behind a styled button; it is still the upload target.
+  if (el.getAttribute("aria-hidden") === "true")
+    return !(el instanceof win.HTMLInputElement && el.type === "file");
   return false;
 }
 
 function roleFor(win: DomWindow, el: DomElement): string {
+  if (el instanceof win.HTMLInputElement && el.type === "file") return "file upload";
   const explicit = el.getAttribute("role");
   if (explicit) return explicit;
   const tag = el.tagName.toLowerCase();
@@ -260,6 +288,7 @@ function nameFor(win: DomWindow, el: DomElement): string {
 function valueFor(win: DomWindow, el: DomElement): string | undefined {
   if (el instanceof win.HTMLInputElement) {
     if (el.type === "checkbox" || el.type === "radio") return el.checked ? "checked" : "unchecked";
+    if (el.type === "file") return Array.from(el.files ?? [], (file) => file.name).join(", ");
     if (el.type === "password") return el.value ? "••••" : "";
     return el.value;
   }

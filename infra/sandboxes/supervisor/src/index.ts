@@ -10,22 +10,27 @@ import {
   boundedSandboxCommandTimeoutMs,
   readBoundedJsonResponse,
   resolveSupervisorToken,
+  uploadSizeFromEnv,
 } from "@rakazo/core";
 import { loadRootEnv } from "@rakazo/core/node/load-root-env";
 import { getLogger, SERVICE_NAMES } from "@rakazo/logging";
 import { createRootLogger } from "@rakazo/logging/axiom";
 import { requestLogging } from "@rakazo/logging/hono";
 import Docker from "dockerode";
-import { Hono, type MiddlewareHandler } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import type { ComputerEgressMode } from "./computer-spec.js";
 import {
   assertVolumeSubpathSupport,
   COMPUTER_GID,
   COMPUTER_IMAGE,
+  COMPUTER_IMAGE_CONTEXT_FILES,
   COMPUTER_UID,
   COMPUTER_USER,
   computerBridgeNameFor,
+  computerDnsMatches,
   computerHomeStorage,
   computerNetworkCreateOptions,
   computerNetworkNameFor,
@@ -40,6 +45,7 @@ import {
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
+  resolveComputerDns,
   resolveComputerEgressMode,
   resolveScreenNetworkMode,
   resolveScreenPublishTarget,
@@ -52,17 +58,21 @@ import {
   screenUrlWithToken,
   xdotoolCommand,
 } from "./computer-spec.js";
+import { EgressNotEnforced, verifyRestrictedEgress } from "./egress-probe.js";
 import { assertComputerHomeWritable } from "./home-ownership.js";
+import type { ScreenAssignment } from "./supervisor-logic.js";
 import {
   assertRequestIdentity,
   attemptComputerControl,
   browserProfilePathForScreen,
   ComputerControlUnavailableError,
   clearComputerScreenRegistry,
+  completeWarmReleasedScreen,
   computerActionSchema,
   computerCommandEnv,
   computerControlTimeoutMs,
   containerActionSteps,
+  controlHandlesActions,
   createDockerStreamDemuxer,
   currentComputerScreens,
   demuxDockerStream,
@@ -73,12 +83,12 @@ import {
   isComputerControlUnavailable,
   nextScreenIndex,
   normalizeWorkspaceRelative,
+  oldestIdleScreen,
   parseObservation,
   preferComputerControl,
   quiesceBrowserProfilesCommand,
   releaseAssignedScreen,
   resetManagedScreensCommand,
-  type ScreenAssignment,
   sandboxCommandTimedOut,
   sandboxTimeoutCommand,
   screenReleaseStopCommand,
@@ -105,7 +115,11 @@ let supervisorInfo: Docker.ContainerInspectInfo | undefined;
 let dockerApiVersion: string | undefined;
 const supervisorToken = resolveSupervisorToken(process.env);
 const screenNetworkMode = resolveScreenNetworkMode(process.env.SANDBOX_SCREEN_NETWORK);
-const computerEgressMode = resolveComputerEgressMode();
+const computerEgressSetting = resolveComputerEgressMode();
+// `auto` starts open and becomes restricted once the probe shows the host rules are in place.
+let computerEgressMode: ComputerEgressMode =
+  computerEgressSetting === "restricted" ? "restricted" : "open";
+const computerDns = resolveComputerDns();
 const teamScreenLimit = resolveTeamScreenLimit();
 // Host-run supervisors on Docker Desktop (macOS/Windows) cannot reach container
 // IPs, so computer control must use a published loopback port instead.
@@ -115,13 +129,33 @@ const computerScreens = new Map<string, Map<string, ScreenAssignment>>();
 const computerScreenBoots = new Map<string, string>();
 
 export const MAX_SUPERVISOR_REQUEST_BYTES = 1024 * 1024;
-export const MAX_SUPERVISOR_FILE_REQUEST_BYTES = 16 * 1024 * 1024 + 64 * 1024;
+const maxUploadSizeBytes = uploadSizeFromEnv(process.env);
 
-/** Keep normal control requests small while allowing the existing 16 MiB file payload. */
-export function supervisorRequestBodyLimit(method: string, pathname: string): number {
+function supervisorFileContentLimit(maxBytes: number): number {
+  // Preserve the internal workspace-write allowance as well as configured chat uploads.
+  return Math.max(16 * 1024 * 1024, Math.ceil(maxBytes / 3) * 4);
+}
+
+export const MAX_SUPERVISOR_FILE_REQUEST_BYTES =
+  supervisorFileContentLimit(maxUploadSizeBytes) + 64 * 1024;
+
+/** Keep normal control requests small; file writes also need a base64 JSON envelope. */
+export function supervisorRequestBodyLimit(
+  method: string,
+  pathname: string,
+  maxBytes = maxUploadSizeBytes,
+): number {
   return method === "POST" && /^\/computers\/[^/]+\/files\/?$/.test(pathname)
-    ? MAX_SUPERVISOR_FILE_REQUEST_BYTES
+    ? supervisorFileContentLimit(maxBytes) + 64 * 1024
     : MAX_SUPERVISOR_REQUEST_BYTES;
+}
+
+export function supervisorFileWriteSchema(maxBytes = maxUploadSizeBytes) {
+  return z.object({
+    path: z.string(),
+    content: z.string().max(supervisorFileContentLimit(maxBytes)),
+    executable: z.boolean().optional(),
+  });
 }
 
 const limitSupervisorRequestBody: MiddlewareHandler = async (c, next) => {
@@ -182,6 +216,7 @@ app.post("/computers", async (c) => {
     });
     return await withBotLifecycleLock(body.botId, async () => {
       await ensureComputerImage();
+      await ensureRestrictedEgressEnforced();
       const runtimeInfo = await inspectSupervisorContainer();
       const networkMode = computerNetworkName(body.botId, runtimeInfo);
       const networkOwner = computerNetworkOwnerFor(dataDir, runtimeInfo);
@@ -240,6 +275,8 @@ app.post("/computers", async (c) => {
               (reconnect || Boolean(info.NetworkSettings?.Networks?.[networkMode])))) &&
           restrictedBridgeOk &&
           info.Config.User === computerUser &&
+          // DNS is fixed when a container is created, so a changed setting replaces it.
+          computerDnsMatches(info.HostConfig.Dns, computerDns) &&
           controlPublishOk &&
           (!storage.homeVolume || homeVolumeMatches(info.HostConfig.Mounts, storage.homeVolume)) &&
           // A computer that cannot rejoin its network is replaced below instead.
@@ -310,6 +347,7 @@ app.post("/computers", async (c) => {
               networkMode,
               controlToken: randomUUID(),
               publishControlPort: controlViaLoopback,
+              dns: computerDns,
             }),
           );
           await container.start();
@@ -382,6 +420,8 @@ app.post("/computers/:id/exec", async (c) => {
       c.req.header("x-rakazo-bot-id"),
       c.req.header("x-rakazo-space-id"),
     );
+    // Docker would fail the exec inside the stream; answer up front so the caller can boot it.
+    if (!managed.info.State.Running) return c.json({ error: "computer is not running" }, 409);
     container = managed.container;
     const screenId = c.req.header("x-rakazo-screen-id") || c.req.header("x-rakazo-bot-id") || id;
     const screenIndex = computerScreens.get(id)?.get(screenId)?.index ?? 0;
@@ -501,11 +541,21 @@ app.post("/computers/:id/browser", async (c) => {
             z.discriminatedUnion("kind", [
               z.object({ kind: z.literal("click"), ref: z.string().min(1).max(200) }),
               z.object({
-                kind: z.enum(["fill", "type"]),
+                kind: z.literal("upload"),
                 ref: z.string().min(1).max(200),
-                text: z.string().max(32_000),
-                origin: z.string().url().max(2048).optional(),
+                paths: z.array(z.string().min(1).max(1024)).min(1).max(10),
+                roots: z.array(z.string().min(1).max(1024)).max(2).optional(),
               }),
+              z
+                .object({
+                  kind: z.enum(["fill", "type"]),
+                  ref: z.string().min(1).max(200),
+                  text: z.string().max(32_000),
+                  origin: z.string().url().max(2048).optional(),
+                  field: z.enum(["username", "password"]).optional(),
+                })
+                // The field decides which input types the helper accepts for a saved login.
+                .refine((step) => !step.origin || step.field, "A saved login fill needs its field"),
             ]),
           )
           .min(1)
@@ -541,6 +591,9 @@ app.post("/computers/:id/browser", async (c) => {
           "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
           "RAKAZO_BROWSER_WATCH_STDIN=1",
           "RAKAZO_BROWSER_ARGS_STDIN=1",
+          ...(process.env.RAKAZO_BROWSER_UPLOAD_MAX_BYTES !== undefined
+            ? [`RAKAZO_BROWSER_UPLOAD_MAX_BYTES=${process.env.RAKAZO_BROWSER_UPLOAD_MAX_BYTES}`]
+            : []),
         ],
         timeoutMs: 25_000,
         signal,
@@ -549,7 +602,15 @@ app.post("/computers/:id/browser", async (c) => {
     );
     // A nonzero exit or malformed output cannot establish which mutations ran.
     if (result.code !== 0 || Buffer.byteLength(result.stdout) > 512 * 1024) {
-      throw new Error("Page browser unavailable or interrupted");
+      throw new Error(
+        /command timed out/.test(result.stderr)
+          ? `Page browser timed out; the page may be busy or blocked by a dialog. ${
+              body.command === "act"
+                ? "Inspect the screen before continuing."
+                : "Retry once before using other tools."
+            }`
+          : "Page browser unavailable or interrupted",
+      );
     }
     return c.json(JSON.parse(result.stdout));
   } catch (error) {
@@ -616,7 +677,9 @@ app.post("/computers/:id/actions", async (c) => {
       c.req.header("x-rakazo-screen-id"),
       c.req.header("x-rakazo-screen-lease-id"),
     );
-    const control = computerControlEndpoint(info);
+    const endpoint = computerControlEndpoint(info);
+    const control =
+      endpoint && controlHandlesActions(info.Config.Labels, body.actions) ? endpoint : undefined;
     const attempt = await attemptComputerControl(
       control
         ? () =>
@@ -714,13 +777,7 @@ app.get("/computers/:id/files", async (c) => {
 });
 
 app.post("/computers/:id/files", async (c) => {
-  const body = z
-    .object({
-      path: z.string(),
-      content: z.string().max(16 * 1024 * 1024),
-      executable: z.boolean().optional(),
-    })
-    .parse(await c.req.json());
+  const body = supervisorFileWriteSchema().parse(await c.req.json());
   try {
     const { container } = await managedContainer(
       c.req.param("id"),
@@ -750,6 +807,7 @@ app.get("/computers/:id/screen", async (c) => {
       c.req.header("x-rakazo-space-id"),
       c.req.header("x-rakazo-screen-id"),
       c.req.header("x-rakazo-screen-lease-id"),
+      false,
     );
     const screenUrl = await publishedScreenUrl(container, info, layout.viewPort);
     return c.redirect(screenUrlWithToken(screenUrl, viewToken));
@@ -780,9 +838,31 @@ app.post("/computers/:id/screen-mode", async (c) => {
     const screenLeaseId = c.req.header("x-rakazo-screen-lease-id");
     const { container, info } = await managedContainer(id, botId, spaceId);
     const { layout, viewToken } = await withComputerScreenLock(id, async () => {
-      const screen = await ensureManagedScreen(id, container, botId, screenId, screenLeaseId);
+      const screen = await ensureManagedScreen(
+        id,
+        container,
+        botId,
+        screenId,
+        screenLeaseId,
+        !body.interactive && body.revokeControl === false,
+      );
       if (body.interactive || body.revokeControl !== false) {
-        await setInteractiveScreen(container, body.interactive, body.controlToken, screen.layout);
+        const changed = await setInteractiveScreen(
+          container,
+          body.interactive,
+          body.controlToken,
+          screen.layout,
+        );
+        const slot = computerScreens.get(id)?.get(screen.screenKey);
+        if (slot && changed) {
+          if (body.interactive) {
+            slot.controlled = true;
+            slot.controlToken = body.controlToken;
+          } else {
+            delete slot.controlled;
+            delete slot.controlToken;
+          }
+        }
       }
       return screen;
     });
@@ -824,6 +904,7 @@ app.post("/computers/:id/terminal", async (c) => {
         botId,
         c.req.header("x-rakazo-screen-id"),
         c.req.header("x-rakazo-screen-lease-id"),
+        false,
       );
       const result = await runContainerCommand(
         container,
@@ -905,6 +986,7 @@ app.delete("/computers/:id/screen", async (c) => {
     containerFound = true;
     const screenId = c.req.header("x-rakazo-screen-id") || c.req.header("x-rakazo-bot-id") || id;
     const cancelRunWork = c.req.header("x-rakazo-cancel-run-work") === "1";
+    const keepScreenWarm = c.req.header("x-rakazo-preserve-screen") === "1" && !cancelRunWork;
     const screenLeaseId = c.req.header("x-rakazo-screen-lease-id");
     await withComputerScreenLock(id, async () => {
       const info = await container.inspect();
@@ -915,21 +997,53 @@ app.delete("/computers/:id/screen", async (c) => {
         info.State?.StartedAt,
       );
       const index = assigned ? releaseAssignedScreen(assigned, screenId, screenLeaseId) : undefined;
-      const stop = screenReleaseStopCommand(index, {
-        hasRegistry: Boolean(assigned),
-        cancelRunWork,
-        screenId,
-      });
-      if (assigned && index !== undefined) {
-        await teardownReleasedScreen(assigned, screenId, index, () =>
-          runContainerCommand(container, ["bash", "-c", stop]),
-        );
-      } else if (stop) {
-        const result = await runContainerCommand(container, ["bash", "-c", stop]);
-        if (result.code !== 0) {
-          throw new Error(result.stderr || "computer screen failed to stop");
+      if (keepScreenWarm) {
+        if (assigned && index !== undefined) {
+          let controlReleased = false;
+          try {
+            const control = await runContainerCommand(container, [
+              "bash",
+              "-c",
+              interactiveScreenCommand(false, undefined, screenPorts(index)),
+            ]);
+            controlReleased = control.code === 0;
+          } catch {
+            // If revocation is uncertain, full teardown is safer than retaining control.
+          }
+          if (controlReleased) {
+            completeWarmReleasedScreen(assigned, screenId, index, Date.now());
+          } else {
+            await teardownReleasedScreen(assigned, screenId, index, () =>
+              runContainerCommand(container, [
+                "bash",
+                "-c",
+                stopExtraScreenCommand(index, screenId),
+              ]),
+            );
+          }
+        }
+      } else {
+        const stop = screenReleaseStopCommand(index, {
+          hasRegistry: Boolean(assigned),
+          cancelRunWork,
+          screenId,
+        });
+        if (assigned && index !== undefined) {
+          await teardownReleasedScreen(
+            assigned,
+            screenId,
+            index,
+            () => runContainerCommand(container, ["bash", "-c", stop]),
+            { retainBrowser: !cancelRunWork },
+          );
+        } else if (stop) {
+          const result = await runContainerCommand(container, ["bash", "-c", stop]);
+          if (result.code !== 0) {
+            throw new Error(result.stderr || "computer screen failed to stop");
+          }
         }
       }
+      // Ordinary release retains the browser's slot; cancellation can empty the registry.
       // Keep an emptied registry. A missing one means the supervisor lost track of the
       // container, and the next screen request then resets every desktop process in it.
     });
@@ -1018,12 +1132,17 @@ function startSupervisor() {
   // and pass its healthcheck, then fail the first POST /computers with a 500 that reads like a
   // Docker problem. Failing here names the variable while the deployment is still coming up.
   computerResourceLimits();
-  if (computerEgressMode === "restricted") {
-    // Enforcement is host-side (DOCKER-USER/INPUT on rakazo-c* bridges); the flag
-    // only names the interfaces. Without the host script, egress stays open.
-    logger.warn(
-      "SANDBOX_COMPUTER_EGRESS=restricted requires the host firewall rules from infra/compose/restrict-computer-egress.sh (see docs/self-host.md)",
-    );
+  if (computerEgressSetting === "auto" && screenNetworkMode !== "internal") {
+    // Settle the mode before the first provision rather than on it.
+    void ensureComputerImage()
+      .then(ensureRestrictedEgressEnforced)
+      .catch((error) => logger.error("computer egress probe failed", error));
+  } else if (computerEgressMode === "restricted" && screenNetworkMode !== "internal") {
+    // Report a missing host ruleset at startup too, not only on the first provision.
+    void ensureComputerImage()
+      .then(ensureRestrictedEgressEnforced)
+      .then(() => logger.info("restricted computer egress verified"))
+      .catch((error) => logger.error("restricted computer egress unavailable", error));
   }
   void reclaimIdleComputerNetworks().catch((error) => {
     logger.error("computer network reclaim failed", error);
@@ -1078,22 +1197,7 @@ async function ensureComputerImage() {
       const stream = await docker.buildImage(
         {
           context: computerContext,
-          src: [
-            "Dockerfile",
-            "start.sh",
-            "user-env.sh",
-            "control.py",
-            "xcapture.c",
-            "rakazo-browser",
-            "rakazo-page-browser",
-            "rakazo-browser.desktop",
-            "embed.html",
-            "clipboard-bridge.js",
-            "mobile-keyboard.js",
-            "fluxbox.init",
-            "fluxbox.apps",
-            "fluxbox.menu",
-          ],
+          src: [...COMPUTER_IMAGE_CONTEXT_FILES],
         },
         { t: COMPUTER_IMAGE },
       );
@@ -1104,6 +1208,42 @@ async function ensureComputerImage() {
     })();
   }
   await imageReady;
+}
+
+// Enforcement is host-side (DOCKER-USER/INPUT on rakazo-c* bridges); the flag only
+// names the interfaces. Refuse restricted computers until a probe shows the host
+// rules are in place. Only success is cached, so installing the rules needs no restart.
+// `auto` keeps the first answer a completed probe gives: restricted when the rules are in place,
+// otherwise open with a warning, which is how computers ran before the rules existed. A probe
+// that could not finish decides nothing: the provision fails and the next one probes again.
+let restrictedEgressVerified: Promise<void> | undefined;
+let autoEgressSettled: Promise<void> | undefined;
+async function ensureRestrictedEgressEnforced() {
+  if (screenNetworkMode === "internal") return;
+  if (computerEgressSetting === "auto") {
+    autoEgressSettled ??= verifyRestrictedEgress(docker, COMPUTER_IMAGE).then(
+      () => {
+        computerEgressMode = "restricted";
+        getLogger().info("restricted computer egress verified");
+      },
+      (error) => {
+        if (!(error instanceof EgressNotEnforced)) {
+          autoEgressSettled = undefined;
+          throw error;
+        }
+        getLogger().warn("computer egress is open: the host firewall rules are not installed", {
+          error: error.message,
+        });
+      },
+    );
+    return autoEgressSettled;
+  }
+  if (computerEgressMode !== "restricted") return;
+  restrictedEgressVerified ??= verifyRestrictedEgress(docker, COMPUTER_IMAGE).catch((error) => {
+    restrictedEgressVerified = undefined;
+    throw error;
+  });
+  await restrictedEgressVerified;
 }
 
 async function findBotContainer(botId: string, spaceId: string) {
@@ -1178,10 +1318,11 @@ async function managedScreen(
   spaceId: string | undefined,
   screenId: string | undefined,
   screenLeaseId: string | undefined,
+  restoreControl = true,
 ) {
   const { container } = await managedContainer(id, botId, spaceId);
   return withComputerScreenLock(id, () =>
-    ensureManagedScreen(id, container, botId, screenId, screenLeaseId),
+    ensureManagedScreen(id, container, botId, screenId, screenLeaseId, restoreControl),
   );
 }
 
@@ -1191,14 +1332,27 @@ async function ensureManagedScreen(
   botId: string | undefined,
   screenId: string | undefined,
   screenLeaseId: string | undefined,
+  restoreControl = true,
 ) {
   // Docker can restart independently of the supervisor's screen lock.
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const screen = await ensureManagedScreenAttempt(id, container, botId, screenId, screenLeaseId);
+    const screen = await ensureManagedScreenAttempt(
+      id,
+      container,
+      botId,
+      screenId,
+      screenLeaseId,
+      restoreControl,
+    );
     const info = await container.inspect();
     if (info.State?.StartedAt === screen.info.State?.StartedAt) {
       // Confirm the pending boot marker only after setup completes against the same boot.
       if (info.State?.StartedAt) computerScreenBoots.set(id, info.State.StartedAt);
+      try {
+        await rejoinComputerNetwork(info);
+      } catch (error) {
+        getLogger().error("computer network rejoin failed", error);
+      }
       return { ...screen, info };
     }
     clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
@@ -1212,6 +1366,7 @@ async function ensureManagedScreenAttempt(
   botId: string | undefined,
   screenId: string | undefined,
   screenLeaseId: string | undefined,
+  restoreControl = true,
 ) {
   // Callers hold the screen lock: an inspection before waiting can describe an older boot.
   const info = await container.inspect();
@@ -1234,6 +1389,28 @@ async function ensureManagedScreenAttempt(
     if (info.State?.StartedAt) computerScreenBoots.set(id, info.State.StartedAt);
   }
   const screenKey = screenId || botId || id;
+  if (!assigned.has(screenKey)) {
+    const usedIndexes = new Set([...assigned.values()].map((slot) => slot.index));
+    const hasFreeIndex = Array.from({ length: teamScreenLimit }, (_, index) => index).some(
+      (index) => !usedIndexes.has(index),
+    );
+    if (!hasFreeIndex) {
+      const evictedScreenId = oldestIdleScreen(assigned, teamScreenLimit);
+      const evicted = evictedScreenId ? assigned.get(evictedScreenId) : undefined;
+      if (evictedScreenId && evicted) {
+        const evictedIndex = releaseAssignedScreen(assigned, evictedScreenId, evicted.leaseId);
+        if (evictedIndex !== undefined) {
+          await teardownReleasedScreen(assigned, evictedScreenId, evictedIndex, () =>
+            runContainerCommand(container, [
+              "bash",
+              "-c",
+              stopExtraScreenCommand(evictedIndex, evictedScreenId),
+            ]),
+          );
+        }
+      }
+    }
+  }
   const index = nextScreenIndex(assigned, screenKey, screenLeaseId, teamScreenLimit);
   const layout = screenPorts(index);
   const slot = assigned.get(screenKey)!;
@@ -1257,6 +1434,10 @@ async function ensureManagedScreenAttempt(
     if (assigned.size === 0) clearComputerScreenRegistry(computerScreens, computerScreenBoots, id);
     const detail = [ensured.stderr, browserLog.stdout].filter(Boolean).join("\n").trim();
     throw new Error(detail || `computer screen ${layout.display} failed to start`);
+  }
+  // Ensuring the view must also recover an active human lease after its VNC process dies.
+  if (restoreControl && slot.controlToken) {
+    await setInteractiveScreen(container, true, slot.controlToken, layout);
   }
   return {
     container,
@@ -1419,6 +1600,17 @@ async function publishedScreenUrl(
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("computer screen port was not published");
+}
+
+// Control and observe address the computer on its own network. A recreated
+// supervisor container comes back on the Compose network only, and screen setup
+// (publishedScreenUrl) may never run again for an already-running computer, so
+// rejoin here before every use. Idempotent: one network inspect when attached.
+async function rejoinComputerNetwork(info: Docker.ContainerInspectInfo) {
+  if (screenNetworkMode !== "isolated") return;
+  const runtime = supervisorInfo ?? (await inspectSupervisorContainer());
+  const networkName = info.HostConfig.NetworkMode;
+  if (runtime && networkName) await connectComposeScreenPeers(networkName, runtime);
 }
 
 async function setInteractiveScreen(

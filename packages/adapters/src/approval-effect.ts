@@ -1,15 +1,22 @@
 import type { AgentToolExecutionResult } from "@rakazo/adapter-kit";
+import { ModelOutputError } from "@rakazo/adapter-kit";
+import { FLEET_WRITE_TOOL_NAMES } from "@rakazo/contracts";
+import { APPROVED_ACTION_NOT_RUN_ERROR } from "@rakazo/core";
+import { argumentGiven } from "./update-bot-patch.js";
 
 export type ApprovalPausedToolResult = AgentToolExecutionResult & { terminate: true };
 
 export interface ApprovedEffectReplay {
   kind: string;
   request: unknown;
+  /** The approved row's key: a replay claims that row instead of deriving a new key. */
+  idempotencyKey?: string;
 }
 
 export interface ApprovedEffectReplayQueue {
   nextToolName(): string | undefined;
   nextRequest(): unknown;
+  nextIdempotencyKey(): string | undefined;
   take(toolName: string): unknown;
   assertDrained(): void;
 }
@@ -26,6 +33,9 @@ export function createApprovedEffectReplayQueue(
     nextRequest() {
       return pending[0]?.request;
     },
+    nextIdempotencyKey() {
+      return pending[0]?.idempotencyKey;
+    },
     take(toolName) {
       const next = pending[0];
       if (!next || next.kind !== toolName) return undefined;
@@ -33,11 +43,22 @@ export function createApprovedEffectReplayQueue(
       return next.request;
     },
     assertDrained() {
-      if (pending.length > 0) {
-        throw new Error("Approved tool requests were not fully replayed");
-      }
+      // Only reachable when no saved turn could be restored and the model, asked in text,
+      // did not call the approved request again.
+      if (pending.length > 0) throw new ModelOutputError(APPROVED_ACTION_NOT_RUN_ERROR);
     },
   };
+}
+
+/**
+ * The occurrence an approved row's key encodes for a call whose occurrence-0 key is
+ * `baseKey`, or undefined when the row was keyed another way.
+ */
+export function approvedEffectOccurrence(approvedKey: string, baseKey: string): number | undefined {
+  if (approvedKey === baseKey) return 0;
+  if (!approvedKey.startsWith(`${baseKey}:`)) return undefined;
+  const suffix = approvedKey.slice(baseKey.length + 1);
+  return /^[1-9]\d*$/.test(suffix) ? Number(suffix) : undefined;
 }
 
 export function approvedCatalogReplay(
@@ -384,9 +405,26 @@ export function resolveDuplicateEffectGate(
 
 export type UncertainEffectResult = { error: string; uncertain: true };
 
-export function uncertainEffectResult(toolName: string): UncertainEffectResult {
+/** Fleet writes, including `update_bot` on a child, are checked with list_fleet. */
+function changesTheFleet(toolName: string, args: Record<string, unknown> | undefined): boolean {
+  return (
+    (FLEET_WRITE_TOOL_NAMES as readonly string[]).includes(toolName) ||
+    (toolName === "update_bot" && argumentGiven(args?.bot_id))
+  );
+}
+
+export function uncertainEffectResult(
+  toolName: string,
+  args?: Record<string, unknown>,
+): UncertainEffectResult {
+  const verify =
+    toolName === "set_child_bot_model" || toolName === "create_child_routine"
+      ? "Ask the owner to verify the outcome before proposing another change; do not retry automatically."
+      : changesTheFleet(toolName, args)
+        ? "Call list_fleet to check whether it happened before retrying."
+        : "Verify the destination before proposing another action.";
   return {
-    error: `The earlier ${toolName} execution was interrupted, so its outcome is unknown. It was not replayed to avoid a duplicate side effect. Verify the destination before proposing another action.`,
+    error: `The earlier ${toolName} execution was interrupted, so its outcome is unknown. It was not replayed to avoid a duplicate side effect. ${verify}`,
     uncertain: true,
   };
 }
@@ -405,8 +443,9 @@ export async function settleUncertainEffect(
   },
   effectId: string,
   toolName: string,
+  args?: Record<string, unknown>,
 ): Promise<unknown> {
-  const result = uncertainEffectResult(toolName);
+  const result = uncertainEffectResult(toolName, args);
   const settled = await store.externalEffect.updateMany({
     where: { id: effectId, status: "executing" },
     data: { status: "uncertain", result },

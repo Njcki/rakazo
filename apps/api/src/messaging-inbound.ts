@@ -1,7 +1,18 @@
-import type { JobPublisher, MessagingInboundMessage } from "@rakazo/adapter-kit";
+import type {
+  JobPublisher,
+  MessagingInboundAttachment,
+  MessagingInboundMessage,
+} from "@rakazo/adapter-kit";
 import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
 import type { MessageBlock } from "@rakazo/contracts";
-import { parseMessagingCommand, sanitizeMessagingLabel } from "@rakazo/core";
+import { ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
+import {
+  displayName,
+  messageBlockForArtifact,
+  parseMessagingCommand,
+  promptTextForAttachments,
+  sanitizeMessagingLabel,
+} from "@rakazo/core";
 import type {
   MessagingIdentityRequest,
   Prisma,
@@ -12,10 +23,12 @@ import type {
 } from "@rakazo/db";
 import {
   createThreadMessage,
+  crossSpaceCommunicationAllowed,
   normalizeMessagingLinkCode,
   redeemMessagingLinkCode,
 } from "@rakazo/db";
 import { getLogger } from "@rakazo/logging";
+import type { MessagingReceipts } from "./messaging-receipts.js";
 import {
   MESSAGE_ROUTING_REARMED_REASON,
   MESSAGE_ROUTING_REASON,
@@ -42,11 +55,16 @@ export interface MessagingInboundDeps {
    */
   openSignup: boolean;
   signupPolicy: SignupPolicyEnv;
-  /**
-   * Best-effort "…" bubbles shown to a 1:1 sender while their run executes.
-   * Cosmetic only — callers must catch failures; groups never get it.
-   */
-  typing?: (threadId: string) => Promise<void>;
+  acknowledge?: MessagingReceipts["acknowledge"];
+  /** Stores a platform file (Telegram photo, voice note, …) as a thread artifact. */
+  storeAttachment?: (input: {
+    spaceId: string;
+    userId: string;
+    botId: string;
+    attachment: MessagingInboundAttachment;
+    clientNonce: string;
+    downloadDeadline?: number;
+  }) => Promise<{ id: string; name: string; mimeType: string; size: number }>;
 }
 
 type IdentityRow = {
@@ -79,12 +97,15 @@ async function handleDirectEvent(
   deps: MessagingInboundDeps,
   event: MessagingInboundMessage,
 ): Promise<void> {
-  // Inbound media arrives as a CDN URL (often expiring); no artifact
-  // ingestion in v1, so it rides along as text.
+  // Media that only the provider can download (Telegram file_id fetches) rides
+  // along in event.attachments; CDN media keeps riding along as text.
+  const attachments = event.attachments ?? [];
   const text = [event.content, event.mediaUrl].filter(Boolean).join("\n");
 
   const where = { provider_address: { provider: event.provider, address: event.from } } as const;
   const existing = await deps.prisma.messagingIdentity.findUnique({ where });
+  if (existing && event.installationSpaceId && existing.spaceId !== event.installationSpaceId)
+    return;
   if (existing) {
     // Any reply — even a content-free reaction — ends the consecutive-
     // outbound streak, but only real text wakes the bot. The conversation
@@ -93,7 +114,7 @@ async function handleDirectEvent(
       where: { id: existing.id },
       data: { outboundSinceInbound: 0, lastInboundAt: new Date(), dmThreadId: event.threadId },
     });
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     // Owner commands are only parsed in the verified 1:1 conversation.
     const command = parseMessagingCommand(event.content);
     if (command && (await applyOwnerCommand(deps, existing, command))) return;
@@ -105,8 +126,8 @@ async function handleDirectEvent(
     // account and bot; otherwise the line is silent unless the deployment
     // explicitly runs as an open Poke-style signup line.
     if (await tryRedeemLinkCode(deps, event)) return;
-    if (!deps.openSignup) return;
-    // Never provision a full account for a reaction or empty payload.
+    if (!deps.openSignup || event.installationSpaceId) return;
+    // Media-only delivery is for linked identities; retain text-based signup.
     if (!text) return;
   }
 
@@ -135,33 +156,96 @@ async function handleDirectEvent(
     );
   }
 
+  const stored = await storeInboundMedia(deps, ids, event);
+
   // Message-trigger routines own the delivery when configured. Do not also
   // start a normal messaging continue for the same inbound handle.
-  if (await wakeMessageRoutines(deps, ids, event)) return;
-
+  if (
+    await wakeMessageRoutines(deps, ids, event, {
+      artifacts: stored.artifacts,
+      unavailable: stored.unavailable,
+    })
+  )
+    return;
+  const body = [text, ...stored.unavailable].filter(Boolean).join("\n");
   const sent = await deps.events.sendUserMessage({
     spaceId: ids.spaceId,
     threadId: ids.threadId,
     botId: ids.botId,
     userId: ids.userId,
-    blocks: [{ kind: "text", text }],
-    prompt: text,
+    blocks: [
+      ...(body ? [{ kind: "text" as const, text: body }] : []),
+      ...stored.artifacts.map((artifact) => messageBlockForArtifact(artifact)),
+    ],
+    prompt: promptTextForAttachments(body, stored.artifacts),
     trigger: "messaging",
     clientNonce: `messaging:${event.provider}:${event.handle}`,
   });
   if (sent.runId) {
-    // Typing bubbles only make sense once a reply is actually coming. Fire
-    // before the enqueue so they land ahead of a fast reply, and never await:
-    // a stalled vendor typing call must not hold the webhook open. The bubbles
-    // clear on their own after a short display window or when the reply
-    // arrives, so long runs simply outlive them.
-    void deps.typing?.(event.threadId).catch((error) => {
-      getLogger().error("messaging typing indicator error", error);
+    const runId = sent.runId;
+    deps.acknowledge?.(event.threadId, event.handle, async () => {
+      const run = await deps.prisma.run.findUnique({
+        where: { id: runId },
+        select: { status: true, messagingMirroredAt: true },
+      });
+      if (!run) return false;
+      // A failed or cancelled run may never be mirrored, and no reply is coming.
+      if (run.status === "failed" || run.status === "cancelled") return true;
+      if (!run.messagingMirroredAt) return false;
+      // Mirroring only queues the reply in the outbox. It has gone out once
+      // none of this run's queued rows are still waiting to be sent.
+      const replies = await deps.prisma.message.findMany({
+        where: { runId, role: "bot" },
+        select: { id: true },
+      });
+      if (replies.length === 0) return true;
+      const unsent = await deps.prisma.messagingOutbound.count({
+        where: {
+          sourceMessageId: { in: replies.map((reply) => reply.id) },
+          status: { not: "sent" },
+        },
+      });
+      return unsent === 0;
     });
     await deps.jobs.enqueue(runContinueJob(sent.runId)).catch((error) => {
       getLogger().error("messaging inbound run enqueue error", error);
     });
   }
+}
+
+/** Download provider-held files into thread artifacts, mirroring the team-chat path. */
+async function storeInboundMedia(
+  deps: MessagingInboundDeps,
+  ids: ProvisionedMessagingIdentity,
+  event: MessagingInboundMessage,
+) {
+  const artifacts: Array<{ id: string; name: string; mimeType: string; size: number }> = [];
+  const unavailable: string[] = [];
+  const downloadDeadline = Date.now() + 2_000;
+  for (const [index, attachment] of (event.attachments ?? []).entries()) {
+    if (!deps.storeAttachment || index >= ATTACHMENT_MAX_COUNT) {
+      unavailable.push(`[file: ${sanitizeMessagingLabel(attachment.name)} (unavailable)]`);
+      continue;
+    }
+    try {
+      artifacts.push(
+        await deps.storeAttachment({
+          spaceId: ids.spaceId,
+          userId: ids.userId,
+          botId: ids.botId,
+          attachment,
+          clientNonce: `messaging-attachment:${event.provider}:${event.handle}:${index}`,
+          downloadDeadline,
+        }),
+      );
+    } catch (error) {
+      getLogger().warn("messaging attachment was not stored", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      unavailable.push(`[file: ${sanitizeMessagingLabel(attachment.name)} (unavailable)]`);
+    }
+  }
+  return { artifacts, unavailable };
 }
 
 /** Wake provider-neutral message routines through the same approval boundary as webhooks. */
@@ -176,6 +260,8 @@ export async function wakeMessageRoutines(
      * the inbound event.provider differs (e.g. teamchat-emulator).
      */
     deliveryProvider?: string;
+    artifacts?: Array<{ id: string; name: string; mimeType: string; size: number }>;
+    unavailable?: string[];
     /**
      * TeamChat external message id. When set, atomically reassert routine
      * ownership before creating a run so a concurrent TeamChat agent claim
@@ -238,6 +324,16 @@ export async function wakeMessageRoutines(
     channelName: event.channelName,
     content: event.content,
     mediaUrl: event.mediaUrl,
+    ...(options?.unavailable?.length ? { unavailable: options.unavailable } : {}),
+    ...(event.attachments?.length
+      ? {
+          files: event.attachments.map(({ name, mimeType, size }) => ({
+            name,
+            mimeType,
+            size,
+          })),
+        }
+      : {}),
   });
   await deliverWebhookEvent(
     { events: deps.events, jobs: deps.jobs },
@@ -247,6 +343,7 @@ export async function wakeMessageRoutines(
     },
     {
       prompt,
+      artifacts: options?.artifacts,
       routines,
       source: "messaging",
       idempotencyKey: messagingWakeIdempotencyKey(
@@ -315,6 +412,8 @@ async function tryRedeemLinkCode(
     provider: event.provider,
     address: event.from,
     dmThreadId: event.threadId,
+    spaceId: event.installationSpaceId,
+    installationId: event.installationId,
   });
   if (!redeemed) return false;
   const bot = await deps.prisma.bot.findUnique({
@@ -413,6 +512,11 @@ async function applyOwnerCommand(
   const claimed = await deps.prisma.$transaction(async (tx) => {
     // The claim holds the connection row lock through commit, so a revoke
     // can never interleave with the confirmation writes.
+    if (
+      approved &&
+      !(await crossSpaceCommunicationAllowed(tx, target.connection.requesterBotId, identity.botId))
+    )
+      return false;
     const { count } = await tx.agentConnection.updateMany({
       where: { id: target.connection.id, status: "pending" },
       data: { status: approved ? "approved" : "declined" },
@@ -683,6 +787,6 @@ async function ownerFirstName(
   fallback: string,
 ): Promise<string> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
-  const first = user?.name.trim().split(/\s+/)[0];
+  const first = displayName(user?.name, "").split(/\s+/)[0];
   return first ? sanitizeMessagingLabel(first) : fallback;
 }

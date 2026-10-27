@@ -1,6 +1,7 @@
-import { readBoundedResponseBytes } from "@rakazo/core";
+import { cancelResponseBody, readJsonObjectWithin, speechLocaleTag, withAbort } from "@rakazo/core";
+import { getActiveUiLocale } from "./i18n.js";
 import { selectedSpaceId, withSpaceHeaders } from "./rpc.js";
-import { errorText } from "./user-error.js";
+import { errorText, voiceAccountErrorText } from "./user-error.js";
 
 export type DictationMode = "hold" | "endpoint";
 
@@ -58,6 +59,21 @@ function electronSpeechHost(): boolean {
   return typeof agent === "string" && agent.includes("Electron");
 }
 
+/**
+ * Phones cannot hold a speech session open: `start()` replays the system tone on every
+ * restart and the session ends at each pause, so Web Speech there means one beep per
+ * phrase and a transcript that keeps getting cut. Server transcription records silently,
+ * so prefer it on mobile browsers wherever a provider can transcribe.
+ */
+export function prefersServerDictation(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const agent = typeof navigator.userAgent === "string" ? navigator.userAgent : "";
+  if (/android|iphone|ipod|ipad|mobile/i.test(agent)) return true;
+  // iPadOS 13+ reports a desktop Safari user agent, so fall back to touch support.
+  const touchPoints = typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0;
+  return touchPoints > 1 && /macintosh/i.test(agent);
+}
+
 /** Connected server transcription should take over after Web Speech cannot run. */
 export function webSpeechNeedsServerFallback(
   error: string | undefined,
@@ -78,6 +94,29 @@ const RESTART_BACKOFF_MS = 900;
 const RESTART_GIVE_UP_AFTER = 4;
 const RESTART_GIVE_UP_ERROR =
   "The browser keeps dropping the microphone. Start dictation again to retry.";
+
+/**
+ * The language the recognizer listens in: the app's own language when the UI is
+ * in another one, and the browser's otherwise.
+ *
+ * English is also the app's fallback for a browser language it ships no catalog
+ * for, so an Italian browser would lose its Italian recognition by following the
+ * app. The browser's language stays in that case.
+ */
+export function recognitionLanguage(): string {
+  const browser = navigator.language || "en-US";
+  const tag = speechLocaleTag(getActiveUiLocale());
+  return tag && tag !== "en-US" ? tag : browser;
+}
+
+/**
+ * Language hint for server transcription: the primary subtag of the app's own locale
+ * (`es`, `pt`, `zh`). Undefined leaves detection to the provider.
+ */
+export function transcriptionLanguage(): string | undefined {
+  const tag = speechLocaleTag(getActiveUiLocale());
+  return tag ? tag.split("-")[0]?.toLowerCase() : undefined;
+}
 
 function normalizedTranscript(text: string): string {
   return text.trim().replace(/\s+/g, " ");
@@ -208,6 +247,12 @@ export class Dictation {
     this.onFinal = opts.onFinal;
     this.set({ status: "listening", transcript: "" });
     const transcribe = Boolean(opts.transcribe);
+    // An unknown capability is not a refusal: a device whose browser cannot hold the
+    // microphone open goes to the server even before the voice status has loaded.
+    if (prefersServerDictation() && opts.transcribe !== false) {
+      await this.listenRecorder(mine, opts.mode, opts.endpointMs ?? ENDPOINT_SILENCE_MS, spaceId);
+      return;
+    }
     if (webSpeechAvailable()) {
       this.listenWebSpeech(
         opts.mode,
@@ -242,7 +287,7 @@ export class Dictation {
     let live = true;
     rec.continuous = true;
     rec.interimResults = true;
-    rec.lang = navigator.language || "en-US";
+    rec.lang = recognitionLanguage();
     // Chrome numbers results per session, so a restart starts over: keep the earlier text.
     let carried = "";
     let sessionStartedAt = Date.now();
@@ -515,19 +560,26 @@ export class Dictation {
           method: "POST",
           headers: withSpaceHeaders({ "content-type": "application/json" }, spaceId),
           credentials: "include",
-          body: JSON.stringify({ audioBase64, mimeType: blob.type }),
+          body: JSON.stringify({
+            audioBase64,
+            mimeType: blob.type,
+            language: transcriptionLanguage(),
+          }),
           signal: abort.signal,
         }),
         abort.signal,
       );
       if (this.token !== mine) {
-        cancelResponse(res);
+        cancelResponseBody(res);
         return;
       }
       const body = await readTranscriptionBody(res, abort.signal);
       if (this.token !== mine) return;
       if (!res.ok) {
-        this.failListening(mine, body.error ?? "Could not transcribe that recording.");
+        this.failListening(
+          mine,
+          voiceAccountErrorText(body) ?? body.error ?? "Could not transcribe that recording.",
+        );
         return;
       }
       // The recorder captures fresh audio, so matching words are intentional repetitions.
@@ -593,55 +645,12 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-async function readTranscriptionBody(
-  response: Response,
-  signal: AbortSignal,
-): Promise<{ text?: string; error?: string }> {
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > MAX_TRANSCRIPTION_RESPONSE_BYTES) {
-    cancelResponse(response);
-    throw new Error("Transcription response is too large.");
-  }
-  const bytes = await readBoundedResponseBytes(response, {
+function readTranscriptionBody(response: Response, signal: AbortSignal) {
+  return readJsonObjectWithin<{ text?: string; error?: string; code?: string }>(response, {
     maxBytes: MAX_TRANSCRIPTION_RESPONSE_BYTES,
     tooLargeMessage: "Transcription response is too large.",
-    read: (operation) => withAbort(operation(), signal),
+    signal,
   });
-  try {
-    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as { text?: string; error?: string })
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function withAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Request aborted."));
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason ?? new Error("Request aborted."));
-    signal.addEventListener("abort", onAbort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener("abort", onAbort);
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.removeEventListener("abort", onAbort);
-        // Prefer abort reason over a bare AbortError from fetch/read.
-        reject(signal.aborted ? (signal.reason ?? error) : error);
-      },
-    );
-  });
-}
-
-function cancelResponse(response: Response): void {
-  try {
-    void Promise.resolve(response.body?.cancel()).catch(() => undefined);
-  } catch {
-    // Response cleanup is best-effort.
-  }
 }
 
 export const dictation = new Dictation();

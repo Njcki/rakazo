@@ -1,21 +1,35 @@
+import type { TelegramBotCredentials } from "@rakazo/adapters";
 import {
+  boatApiKeyFromEnv,
+  boatApiUrlFromEnv,
+  mcpStdioOptionsFromEnv,
   resolveCloudAgentProvider,
   resolveDeploymentModel,
   resolveSandboxProvider,
   secretStoreOptionsFromEnv,
+  telegramBotsFromEnv,
 } from "@rakazo/adapters";
 import type { OidcConfig } from "@rakazo/auth";
+import type { MinimumClientBuilds, NavLink } from "@rakazo/contracts";
+import { parseMinimumClientBuilds, parseNavLinks } from "@rakazo/contracts";
+import { parseCrispWebsiteId } from "@rakazo/contracts/content-security-policy";
 import {
+  phoneCallSettings,
   resolveAuthSecret,
+  resolveContentEncryption,
   resolveEncryptionKey,
   resolveScreenProxySecret,
   resolveSupervisorToken,
+  uploadSizeFromEnv,
 } from "@rakazo/core";
+import { monitoringPseudonymSecret } from "@rakazo/logging";
 
 export { resolveCloudAgentProvider, resolveSandboxProvider } from "@rakazo/adapters";
 
 export interface AppEnv {
   passwordAuth?: boolean;
+  /** Opt-in Have I Been Pwned check for new passwords. Default off: it calls an outside service. */
+  breachedPasswordCheck?: boolean;
   oidc?: OidcConfig;
   nodeEnv: string;
   desktopStackToken?: string;
@@ -24,16 +38,36 @@ export interface AppEnv {
   authSecret: string;
   authUrl: string;
   webOrigin: string;
+  /** `<TEAM_ID>.<bundle id>` of iOS apps that may use this domain's passkeys. */
+  passkeyAppleAppIds: string[];
+  /** SHA-256 signing certificate fingerprints of Android apps that may use this domain's passkeys. */
+  passkeyAndroidCertFingerprints: string[];
   privacyPolicyUrl?: string;
   apiUrl: string;
   apiHost: string;
+  /** Proxies whose forwarded client address is believed; empty means local networks. */
+  trustedProxies: string[];
+  /** The header those proxies set. */
+  clientIpHeader: string;
   signupsEnabled: string | undefined;
   signupAllowlist: string | undefined;
   encryptionKey: string;
+  /** CONTENT_ENCRYPTION: whether new content is encrypted at rest. */
+  contentEncryption: boolean;
   dataDir: string;
   /** Opt-in Pi JSONL session recording under DATA_DIR/pi-sessions. Default off. */
   piSessionRecording: boolean;
   ticketBoardEnabled: boolean;
+  /** USER_DEVICES_ENABLED=false stops users connecting their own computers. Default on. */
+  userDevicesEnabled: boolean;
+  /** Operator menu links that frame a same-origin page (RAKAZO_NAV_LINKS). */
+  navLinks?: NavLink[];
+  phoneCallsEnabled: boolean;
+  phoneCallRingSeconds: number;
+  phoneCallCooldownMinutes: number;
+  maxUploadSizeBytes: number;
+  /** Bot replies longer than this are read aloud as a summary; unset reads every reply in full. */
+  voiceSummaryMinChars: number | undefined;
   sandboxSupervisorUrl: string;
   sandboxSupervisorToken: string | undefined;
   screenProxySecret: string;
@@ -51,8 +85,8 @@ export interface AppEnv {
   daytonaApiKey: string | undefined;
   daytonaApiUrl: string | undefined;
   daytonaTarget: string | undefined;
-  boxApiKey: string | undefined;
-  boxApiUrl: string | undefined;
+  boatApiKey: string | undefined;
+  boatApiUrl: string | undefined;
   composioApiKey: string | undefined;
   /** Optional integrations.sh-compatible catalog base URL. */
   integrationsCatalogUrl: string | undefined;
@@ -64,13 +98,18 @@ export interface AppEnv {
   sendblueApiSecret: string | undefined;
   sendblueSigningSecret: string | undefined;
   sendbluePhoneNumber: string | undefined;
+  expoAccessToken: string | undefined;
   smtpUrl: string | undefined;
+  emailProvider?: string;
+  emailApiKey?: string;
   emailFrom: string | undefined;
   /** Billing turns on only when all three are set; self-hosted installs leave them unset. */
   stripeSecretKey: string | undefined;
   stripeWebhookSecret: string | undefined;
   stripePriceId: string | undefined;
   emailEmulator: boolean;
+  slackClientId?: string;
+  slackClientSecret?: string;
   slackBotToken: string | undefined;
   slackSigningSecret: string | undefined;
   whatsappAccessToken: string | undefined;
@@ -79,6 +118,8 @@ export interface AppEnv {
   whatsappVerifyToken: string | undefined;
   telegramBotToken: string | undefined;
   telegramWebhookSecret: string | undefined;
+  /** Extra named Telegram bots (TELEGRAM_BOT_TOKEN_<NAME>), e.g. one per space. */
+  telegramBots?: TelegramBotCredentials[];
   larkAppId: string | undefined;
   larkAppSecret: string | undefined;
   larkVerificationToken: string | undefined;
@@ -96,16 +137,20 @@ export interface AppEnv {
   wakeupDriver: string;
   mcpStdioEnabled: boolean;
   mcpStdioAllowedCommands: string[];
+  /** Package dir, install/startup timeouts and idle reaping for stdio MCP servers. */
+  mcpStdio: ReturnType<typeof mcpStdioOptionsFromEnv>;
   /** Deployment-owner escape for remote MCP on RFC1918 / Docker-network hosts. */
   mcpAllowPrivateEndpoint: boolean;
   port: number;
   gitSha: string | undefined;
-  /** Private Compose control-network URL for the opt-in updater sidecar. */
-  updaterUrl: string | undefined;
-  /** Bearer shared with the updater; never sent to the browser. */
-  updaterToken: string | undefined;
-  /** Current application image tag; used for compose manual-upgrade command selection. */
-  imageTag: string | undefined;
+  /** Oldest client build per kind the API still serves (RAKAZO_MIN_CLIENT_BUILD). */
+  minimumClientBuilds?: MinimumClientBuilds;
+  /** Browser error reporting, served to the web app at runtime. The DSN is public by design. */
+  browserMonitoring:
+    | { dsn: string; environment?: string; release?: string; pseudonymSecret?: string }
+    | undefined;
+  /** Crisp chat on the paywall, for the hosted service; self-hosted installs leave it unset. */
+  crispWebsiteId?: string | null;
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
@@ -128,7 +173,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       throw new Error("OIDC_ISSUER must be an HTTPS issuer URL");
     }
   }
-  for (const key of ["AUTH_PASSWORD_ENABLED", "OIDC_ALLOW_SIGNUP_BYPASS"]) {
+  for (const key of [
+    "AUTH_PASSWORD_ENABLED",
+    "AUTH_BREACHED_PASSWORD_CHECK_ENABLED",
+    "OIDC_ALLOW_SIGNUP_BYPASS",
+  ]) {
     const value = source[key];
     if (value && !["true", "false"].includes(value))
       throw new Error(`${key} must be true or false`);
@@ -153,10 +202,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);
   const deploymentModel = resolveDeploymentModel(source);
-  const updaterUrl = optional(source.RAKAZO_UPDATER_URL);
-  const updaterToken = optional(source.RAKAZO_UPDATER_TOKEN);
   return {
     passwordAuth,
+    breachedPasswordCheck: source.AUTH_BREACHED_PASSWORD_CHECK_ENABLED === "true",
     oidc,
     nodeEnv: source.NODE_ENV ?? "",
     databaseUrl: required(source, "DATABASE_URL"),
@@ -165,15 +213,28 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     authSecret,
     authUrl: source.BETTER_AUTH_URL ?? source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
     webOrigin: source.WEB_ORIGIN ?? "http://127.0.0.1:5173",
+    passkeyAppleAppIds: list(source.PASSKEY_APPLE_APP_IDS),
+    passkeyAndroidCertFingerprints: androidCertFingerprints(source.PASSKEY_ANDROID_CERT_SHA256),
     privacyPolicyUrl: optional(source.PRIVACY_POLICY_URL),
     apiUrl: source.API_URL ?? "http://127.0.0.1:3100",
     apiHost: source.API_HOST ?? "127.0.0.1",
+    trustedProxies: (source.TRUSTED_PROXIES ?? "")
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+    clientIpHeader: optional(source.CLIENT_IP_HEADER)?.toLowerCase() ?? "x-forwarded-for",
     signupsEnabled: source.SIGNUPS_ENABLED,
     signupAllowlist: source.SIGNUP_ALLOWLIST,
     encryptionKey: resolveEncryptionKey(source),
+    contentEncryption: resolveContentEncryption(source),
     dataDir: source.DATA_DIR ?? "./data",
     piSessionRecording: source.PI_SESSION_RECORDING === "true",
     ticketBoardEnabled: source.TICKET_BOARD_ENABLED === "true",
+    userDevicesEnabled: source.USER_DEVICES_ENABLED !== "false",
+    navLinks: parseNavLinks(source.RAKAZO_NAV_LINKS),
+    ...phoneCallSettings(source),
+    maxUploadSizeBytes: uploadSizeFromEnv(source),
+    voiceSummaryMinChars: voiceSummaryMinCharsFromEnv(source.VOICE_SUMMARY_MIN_CHARS),
     sandboxSupervisorUrl: source.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
     sandboxSupervisorToken:
       sandboxProvider === "docker" ? resolveSupervisorToken(source) : undefined,
@@ -191,8 +252,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     daytonaApiKey: source.DAYTONA_API_KEY,
     daytonaApiUrl: source.DAYTONA_API_URL,
     daytonaTarget: source.DAYTONA_TARGET,
-    boxApiKey: source.BOX_API_KEY,
-    boxApiUrl: source.BOX_API_URL ?? source.BOX_BASE_URL,
+    boatApiKey: boatApiKeyFromEnv(source),
+    boatApiUrl: boatApiUrlFromEnv(source),
     composioApiKey: source.COMPOSIO_API_KEY,
     integrationsCatalogUrl: optional(source.INTEGRATIONS_CATALOG_URL),
     pipedreamClientId: optional(source.PIPEDREAM_CLIENT_ID),
@@ -204,12 +265,17 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     sendblueApiSecret: optional(source.SENDBLUE_API_SECRET),
     sendblueSigningSecret: optional(source.SENDBLUE_SIGNING_SECRET),
     sendbluePhoneNumber: optional(source.SENDBLUE_PHONE_NUMBER),
+    expoAccessToken: optional(source.EXPO_ACCESS_TOKEN),
     smtpUrl: optional(source.SMTP_URL),
+    emailProvider: optional(source.EMAIL_PROVIDER),
+    emailApiKey: optional(source.EMAIL_API_KEY),
     emailFrom: optional(source.EMAIL_FROM),
     stripeSecretKey: optional(source.STRIPE_SECRET_KEY),
     stripeWebhookSecret: optional(source.STRIPE_WEBHOOK_SECRET),
     stripePriceId: optional(source.STRIPE_PRICE_ID),
     emailEmulator: source.EMAIL_EMULATOR === "true" && source.NODE_ENV !== "production",
+    slackClientId: optional(source.SLACK_CLIENT_ID),
+    slackClientSecret: optional(source.SLACK_CLIENT_SECRET),
     slackBotToken: optional(source.SLACK_BOT_TOKEN),
     slackSigningSecret: optional(source.SLACK_SIGNING_SECRET),
     whatsappAccessToken: optional(source.WHATSAPP_ACCESS_TOKEN),
@@ -218,6 +284,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     whatsappVerifyToken: optional(source.WHATSAPP_VERIFY_TOKEN),
     telegramBotToken: optional(source.TELEGRAM_BOT_TOKEN),
     telegramWebhookSecret: optional(source.TELEGRAM_WEBHOOK_SECRET_TOKEN),
+    telegramBots: telegramBotsFromEnv(source),
     larkAppId: optional(source.LARK_APP_ID),
     larkAppSecret: optional(source.LARK_APP_SECRET),
     larkVerificationToken: optional(source.LARK_VERIFICATION_TOKEN),
@@ -235,12 +302,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
+    mcpStdio: mcpStdioOptionsFromEnv(source),
     mcpAllowPrivateEndpoint: source.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
     port: Number(source.API_PORT ?? 3100),
     gitSha: optional(source.GIT_SHA) ?? optional(source.RAKAZO_GIT_SHA),
-    updaterUrl,
-    updaterToken,
-    imageTag: optional(source.RAKAZO_IMAGE_TAG),
+    minimumClientBuilds: parseMinimumClientBuilds(source.RAKAZO_MIN_CLIENT_BUILD),
+    browserMonitoring: browserMonitoringFromEnv(source),
+    crispWebsiteId: parseCrispWebsiteId(source.CRISP_WEBSITE_ID),
   };
 }
 
@@ -250,7 +318,43 @@ function required(source: NodeJS.ProcessEnv, key: string): string {
   return value;
 }
 
+function browserMonitoringFromEnv(source: NodeJS.ProcessEnv): AppEnv["browserMonitoring"] {
+  const dsn = optional(source.SENTRY_BROWSER_DSN);
+  if (!dsn) return undefined;
+  const sha = optional(source.GIT_SHA);
+  return {
+    dsn,
+    environment: optional(source.SENTRY_ENVIRONMENT),
+    release: optional(source.SENTRY_RELEASE) ?? (sha === "unknown" ? undefined : sha),
+    pseudonymSecret: monitoringPseudonymSecret(source),
+  };
+}
+
+function voiceSummaryMinCharsFromEnv(value: string | undefined): number | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) === 0) {
+    throw new Error("VOICE_SUMMARY_MIN_CHARS must be a positive whole number of characters");
+  }
+  return Number(raw);
+}
+
 function optional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed || undefined;
+}
+
+function list(value: string | undefined): string[] {
+  return (value ?? "").split(/[\s,]+/).filter(Boolean);
+}
+
+/** SHA-256 signing certificate fingerprints, normalized to the `AA:BB:…` form Digital Asset Links uses. */
+function androidCertFingerprints(value: string | undefined): string[] {
+  return list(value).map((fingerprint) => {
+    const hex = fingerprint.replace(/:/g, "");
+    if (!/^[0-9a-f]{64}$/i.test(hex)) {
+      throw new Error("PASSKEY_ANDROID_CERT_SHA256 must list SHA-256 fingerprints");
+    }
+    return hex.toUpperCase().match(/../g)!.join(":");
+  });
 }

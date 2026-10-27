@@ -1,10 +1,12 @@
+import { ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
 import { describe, expect, it, vi } from "vitest";
+import type { MessagingInboundDeps } from "./messaging-inbound.js";
 import {
   createMessagingInboundHandler,
-  type MessagingInboundDeps,
   teamChatSenderCanWakeMessageRoutines,
   wakeMessageRoutines,
 } from "./messaging-inbound.js";
+import type { MessagingReceipts } from "./messaging-receipts.js";
 import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "./webhook-inbound.js";
 
 const signupPolicy = { signupsEnabled: undefined, signupAllowlist: undefined };
@@ -18,6 +20,7 @@ function createDeps(
     approvedMember?: unknown;
     sendResult?: { messageId: string; runId: string | null; seq: number };
     routines?: Array<{ id: string; name: string; prompt: string }>;
+    storeAttachment?: MessagingInboundDeps["storeAttachment"];
   } = {},
 ) {
   const identity =
@@ -42,7 +45,11 @@ function createDeps(
   );
   const notify = vi.fn(async () => undefined);
   const enqueue = vi.fn(async () => undefined);
-  const typing = vi.fn(async (_threadId: string) => undefined);
+  const acknowledge = vi.fn<MessagingReceipts["acknowledge"]>();
+  const runs = new Map<string, { status: string; messagingMirroredAt: Date | null }>([
+    ["run-1", { status: "running", messagingMirroredAt: null }],
+  ]);
+  const botReplies: Array<{ id: string; runId: string }> = [];
   const provision = vi.fn(async (request: { provider: string; address: string }) => ({
     provider: request.provider,
     address: request.address,
@@ -118,6 +125,14 @@ function createDeps(
     },
     messagingLinkCode,
     bot: { findUnique: vi.fn(async () => ({ name: "Chief" })) },
+    run: {
+      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => runs.get(where.id) ?? null),
+    },
+    message: {
+      findMany: vi.fn(async ({ where }: { where: { runId: string } }) =>
+        botReplies.filter((reply) => reply.runId === where.runId).map(({ id }) => ({ id })),
+      ),
+    },
     routine: { findMany: vi.fn(async () => overrides.routines ?? []) },
     thread: { findFirst: vi.fn(async () => ({ id: "thread-1" })) },
     messagingChannel: {
@@ -197,6 +212,18 @@ function createDeps(
       ),
     },
     messagingOutbound: {
+      count: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { sourceMessageId: { in: string[] }; status: { not: string } };
+        }) =>
+          outboundRows.filter(
+            (row) =>
+              where.sourceMessageId.in.includes(row.sourceMessageId as string) &&
+              (row.status ?? "pending") !== where.status.not,
+          ).length,
+      ),
       createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
         let count = 0;
         for (const item of data) {
@@ -231,6 +258,14 @@ function createDeps(
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         ...txMock,
+        $queryRaw: vi.fn(async () =>
+          ["bot-1", "bot-9"].map((id) => ({
+            id,
+            spaceId: id,
+            crossSpaceCommunication: true,
+            archivedAt: null,
+          })),
+        ),
         agentConnection: prisma.agentConnection,
         messagingChannelMember: prisma.messagingChannelMember,
         messagingOutbound: prisma.messagingOutbound,
@@ -246,7 +281,10 @@ function createDeps(
     provision,
     openSignup: true,
     signupPolicy,
-    typing,
+    acknowledge,
+    storeAttachment: overrides.storeAttachment,
+    runs,
+    botReplies,
     sendUserMessage,
     notify,
     enqueue,
@@ -258,7 +296,9 @@ function createDeps(
     sendUserMessage: ReturnType<typeof vi.fn>;
     notify: ReturnType<typeof vi.fn>;
     enqueue: ReturnType<typeof vi.fn>;
-    typing: ReturnType<typeof vi.fn>;
+    acknowledge: typeof acknowledge;
+    runs: typeof runs;
+    botReplies: typeof botReplies;
     provision: ReturnType<typeof vi.fn>;
     outboundRows: Array<Record<string, unknown>>;
     members: Array<Record<string, unknown>>;
@@ -316,6 +356,274 @@ describe("createMessagingInboundHandler DM routing", () => {
     expect(deps.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
     );
+  });
+
+  it("stores a photo-only DM as an image artifact instead of dropping it", async () => {
+    const storeAttachment = vi.fn(
+      async ({ attachment }: { attachment: { name: string; mimeType: string } }) => ({
+        id: "artifact-1",
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: 42,
+      }),
+    );
+    const deps = createDeps({ storeAttachment });
+    const handle = createMessagingInboundHandler(deps);
+    await handle({
+      ...dmEvent,
+      content: "",
+      attachments: [
+        {
+          name: "photo.jpg",
+          mimeType: "image/jpeg",
+          size: 42,
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+
+    expect(storeAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: "ws-1",
+        userId: "user-1",
+        botId: "bot-1",
+        clientNonce: "messaging-attachment:sendblue:handle-1:0",
+      }),
+    );
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          { kind: "image", artifactId: "artifact-1", mimeType: "image/jpeg", name: "photo.jpg" },
+        ],
+        prompt: "See attached files.",
+      }),
+    );
+    expect(deps.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
+    );
+  });
+
+  it("delivers a caption alongside the stored attachment", async () => {
+    const storeAttachment = vi.fn(
+      async ({ attachment }: { attachment: { name: string; mimeType: string } }) => ({
+        id: "artifact-2",
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: 10,
+      }),
+    );
+    const deps = createDeps({ storeAttachment });
+    const handle = createMessagingInboundHandler(deps);
+    await handle({
+      ...dmEvent,
+      content: "what is this?",
+      attachments: [
+        {
+          name: "voice.oga",
+          mimeType: "audio/ogg",
+          size: 10,
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          { kind: "text", text: "what is this?" },
+          {
+            kind: "file",
+            artifactId: "artifact-2",
+            mimeType: "audio/ogg",
+            name: "voice.oga",
+            size: 10,
+          },
+        ],
+        prompt: 'what is this?\n\nUser attached file "voice.oga" (audio/ogg, 10 bytes).',
+      }),
+    );
+  });
+
+  it("keeps a media-only DM deliverable when the download fails", async () => {
+    const storeAttachment = vi.fn(async () => {
+      throw new Error("download failed");
+    });
+    const deps = createDeps({ storeAttachment });
+    const handle = createMessagingInboundHandler(deps);
+    await handle({
+      ...dmEvent,
+      content: "",
+      attachments: [
+        {
+          name: "voice.oga",
+          mimeType: "audio/ogg",
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [{ kind: "text", text: "[file: voice.oga (unavailable)]" }],
+        prompt: "[file: voice.oga (unavailable)]",
+      }),
+    );
+  });
+
+  it("lists attachment names in the routine wake payload", async () => {
+    const deps = createDeps({
+      routines: [{ id: "routine-1", name: "Triage", prompt: "Look at this" }],
+    });
+    const handle = createMessagingInboundHandler(deps);
+    await handle({
+      ...dmEvent,
+      content: "",
+      attachments: [
+        {
+          name: "photo.jpg",
+          mimeType: "image/jpeg",
+          size: 42,
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+
+    const prompt = deps.sendUserMessage.mock.calls[0]?.[0]?.prompt as string;
+    expect(prompt).toContain('"files"');
+    expect(prompt).toContain('"photo.jpg"');
+  });
+
+  it.each([
+    ["photo.jpg", "image/jpeg", "image"],
+    ["voice.oga", "audio/ogg", "file"],
+  ])(
+    "attaches stored %s to routine deliveries and reuses retry nonces",
+    async (name, mimeType, kind) => {
+      const storeAttachment = vi.fn(async () => ({ id: "artifact-1", name, mimeType, size: 42 }));
+      const deps = createDeps({
+        storeAttachment,
+        routines: [{ id: "routine-1", name: "Triage", prompt: "Review" }],
+      });
+      const handle = createMessagingInboundHandler(deps);
+      const event = {
+        ...dmEvent,
+        content: "",
+        attachments: [
+          {
+            name,
+            mimeType,
+            size: 42,
+            fetch: async () => new Uint8Array([1]),
+          },
+        ],
+      };
+      await handle(event);
+      await handle(event);
+      expect(storeAttachment).toHaveBeenCalledTimes(2);
+      expect(storeAttachment.mock.invocationCallOrder[0]).toBeLessThan(
+        deps.sendUserMessage.mock.invocationCallOrder[0]!,
+      );
+      const calls = storeAttachment.mock.calls as unknown as Array<[{ clientNonce: string }]>;
+      expect(calls[0]![0].clientNonce).toBe(calls[1]![0].clientNonce);
+      const deliveries = deps.sendUserMessage.mock.calls as unknown as Array<
+        [{ blocks: unknown[]; prompt: string; trigger: string; clientNonce: string }]
+      >;
+      expect(deliveries[0]![0]).toMatchObject({
+        trigger: "webhook",
+        blocks: [
+          { kind: "text", text: expect.stringContaining("<untrusted_delivery_payload>") },
+          { kind, artifactId: "artifact-1", name, mimeType },
+        ],
+      });
+      expect(deliveries[0]![0].clientNonce).toBe(deliveries[1]![0].clientNonce);
+      expect(deps.enqueue).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("caps stored attachments and shares one download deadline", async () => {
+    const storeAttachment = vi.fn<NonNullable<MessagingInboundDeps["storeAttachment"]>>(
+      async ({ attachment }) => ({
+        id: attachment.name,
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: 1,
+      }),
+    );
+    const deps = createDeps({ storeAttachment });
+    const before = Date.now();
+    await createMessagingInboundHandler(deps)({
+      ...dmEvent,
+      attachments: Array.from({ length: ATTACHMENT_MAX_COUNT + 1 }, (_, index) => ({
+        name: `photo-${index}.jpg`,
+        mimeType: "image/jpeg",
+        fetch: async () => new Uint8Array([1]),
+      })),
+    });
+    expect(storeAttachment).toHaveBeenCalledTimes(ATTACHMENT_MAX_COUNT);
+    const deadlines = storeAttachment.mock.calls.map(([input]) => input.downloadDeadline);
+    expect(new Set(deadlines).size).toBe(1);
+    expect(deadlines[0]).toBeGreaterThanOrEqual(before + 2_000);
+    expect(deadlines[0]).toBeLessThanOrEqual(Date.now() + 2_000);
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: expect.arrayContaining([
+          {
+            kind: "text",
+            text: `hello bot\n[file: photo-${ATTACHMENT_MAX_COUNT}.jpg (unavailable)]`,
+          },
+        ]),
+      }),
+    );
+  });
+
+  it("sanitizes unavailable file labels and keeps routine failure metadata fenced", async () => {
+    const deps = createDeps({ routines: [{ id: "routine-1", name: "Triage", prompt: "Review" }] });
+    await createMessagingInboundHandler(deps)({
+      ...dmEvent,
+      attachments: [
+        {
+          name: "bad]\n[instructions].oga",
+          mimeType: "audio/ogg",
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+    const prompt = deps.sendUserMessage.mock.calls[0]?.[0]?.prompt as string;
+    expect(prompt).toContain('"unavailable": [\n    "[file: bad instructions .oga (unavailable)]"');
+    expect(prompt.indexOf('"unavailable"')).toBeGreaterThan(
+      prompt.indexOf("<untrusted_delivery_payload>"),
+    );
+    expect(prompt.indexOf('"unavailable"')).toBeLessThan(
+      prompt.indexOf("</untrusted_delivery_payload>"),
+    );
+  });
+
+  it("does not provision or download for an unlinked media-only sender", async () => {
+    const storeAttachment = vi.fn();
+    const deps = createDeps({ identity: null, storeAttachment });
+    await createMessagingInboundHandler(deps)({
+      ...dmEvent,
+      content: "",
+      attachments: [
+        {
+          name: "photo.jpg",
+          mimeType: "image/jpeg",
+          fetch: async () => new Uint8Array([1]),
+        },
+      ],
+    });
+    expect(deps.provision).not.toHaveBeenCalled();
+    expect(storeAttachment).not.toHaveBeenCalled();
+    expect(deps.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("still ignores a truly empty DM", async () => {
+    const deps = createDeps();
+    const handle = createMessagingInboundHandler(deps);
+    await handle({ ...dmEvent, content: "" });
+
+    expect(deps.sendUserMessage).not.toHaveBeenCalled();
+    expect(deps.enqueue).not.toHaveBeenCalled();
   });
 
   it("provisions on first contact and uses the new identity", async () => {
@@ -576,13 +884,59 @@ describe("createMessagingInboundHandler DM routing", () => {
   });
 });
 
-describe("typing indicators", () => {
-  it("shows typing bubbles in the sender's thread once their DM run is enqueued", async () => {
+describe("inbound receipt", () => {
+  it("acknowledges the DM in the sender's thread once their run is enqueued", async () => {
     const deps = createDeps();
     const handle = createMessagingInboundHandler(deps);
     await handle(dmEvent);
 
-    expect(deps.typing).toHaveBeenCalledWith("sendblue:dm-1");
+    expect(deps.acknowledge.mock.calls).toEqual([
+      ["sendblue:dm-1", "handle-1", expect.any(Function)],
+    ]);
+  });
+
+  it("reports the DM handled once its own run's reply is mirrored out", async () => {
+    const deps = createDeps({ sendResult: { messageId: "msg-2", runId: "run-2", seq: 3 } });
+    deps.runs.set("run-2", { status: "running", messagingMirroredAt: null });
+    const handle = createMessagingInboundHandler(deps);
+    await handle(dmEvent);
+    const handled = deps.acknowledge.mock.calls[0]![2];
+
+    deps.runs.get("run-1")!.messagingMirroredAt = new Date("2026-01-01T00:00:00Z");
+    await expect(handled()).resolves.toBe(false);
+    deps.runs.get("run-2")!.messagingMirroredAt = new Date("2026-01-01T00:00:00Z");
+    await expect(handled()).resolves.toBe(true);
+  });
+
+  it("waits for the mirrored reply to actually go out", async () => {
+    const deps = createDeps();
+    const handle = createMessagingInboundHandler(deps);
+    await handle(dmEvent);
+    const handled = deps.acknowledge.mock.calls[0]![2];
+
+    deps.botReplies.push({ id: "reply-1", runId: "run-1" });
+    deps.outboundRows.push({
+      idempotencyKey: "msg:reply-1",
+      sourceMessageId: "reply-1",
+      status: "pending",
+    });
+    deps.runs.get("run-1")!.messagingMirroredAt = new Date("2026-01-01T00:00:00Z");
+    await expect(handled()).resolves.toBe(false);
+
+    deps.outboundRows[0]!.status = "sent";
+    await expect(handled()).resolves.toBe(true);
+  });
+
+  it("treats a failed or cancelled run as handled even before mirroring", async () => {
+    const deps = createDeps();
+    const handle = createMessagingInboundHandler(deps);
+    await handle(dmEvent);
+    const handled = deps.acknowledge.mock.calls[0]![2];
+
+    deps.runs.get("run-1")!.status = "failed";
+    await expect(handled()).resolves.toBe(true);
+    deps.runs.get("run-1")!.status = "cancelled";
+    await expect(handled()).resolves.toBe(true);
   });
 
   it("stays silent when the message produced no run", async () => {
@@ -590,7 +944,7 @@ describe("typing indicators", () => {
     const handle = createMessagingInboundHandler(deps);
     await handle(dmEvent);
 
-    expect(deps.typing).not.toHaveBeenCalled();
+    expect(deps.acknowledge).not.toHaveBeenCalled();
   });
 
   it("stays silent for owner commands, which get a text confirmation instead", async () => {
@@ -600,39 +954,25 @@ describe("typing indicators", () => {
     const handle = createMessagingInboundHandler(deps);
     await handle({ ...dmEvent, content: "YES" });
 
-    expect(deps.typing).not.toHaveBeenCalled();
+    expect(deps.acknowledge).not.toHaveBeenCalled();
   });
 
-  it("never shows typing in groups", async () => {
+  it("never acknowledges in groups", async () => {
     const deps = createDeps();
     const handle = createMessagingInboundHandler(deps);
     await handle(groupEvent);
 
-    expect(deps.typing).not.toHaveBeenCalled();
+    expect(deps.acknowledge).not.toHaveBeenCalled();
   });
 
-  it("starts typing before enqueueing the run, so the bubbles beat the reply", async () => {
+  it("acknowledges before enqueueing the run, so the receipt beats the reply", async () => {
     const deps = createDeps();
     const handle = createMessagingInboundHandler(deps);
     await handle(dmEvent);
 
-    expect(deps.typing.mock.invocationCallOrder[0]!).toBeLessThan(
+    expect(deps.acknowledge.mock.invocationCallOrder[0]!).toBeLessThan(
       deps.enqueue.mock.invocationCallOrder[0]!,
     );
-  });
-
-  it("still delivers the run when the typing call fails", async () => {
-    const deps = createDeps();
-    deps.typing.mockRejectedValue(new Error("messaging provider down"));
-    const handle = createMessagingInboundHandler(deps);
-    await handle(dmEvent);
-    // The rejection is caught inside the handler; give the fire-and-forget
-    // promise a tick to settle so a bad catch surfaces here, not as an
-    // unhandled rejection after the test.
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(deps.enqueue).toHaveBeenCalled();
-    expect(deps.sendUserMessage).toHaveBeenCalled();
   });
 });
 
@@ -893,6 +1233,28 @@ describe("createMessagingInboundHandler channel routing", () => {
       ([job]: [{ name: string }]) => job.name === "run.continue",
     );
     expect(runJobs).toHaveLength(2);
+  });
+
+  it("labels a sender with a placeholder account name by their address", async () => {
+    const deps = createDeps({
+      members: [
+        {
+          id: "cm-1",
+          channelId: "ch-1",
+          address: "+15551111111",
+          identityId: "mi-1",
+          status: "approved",
+        },
+      ],
+    });
+    deps.prisma.user.findUnique = vi.fn(async () => ({ id: "user-1", name: "__PrbLMrkR__" }));
+    const handle = createMessagingInboundHandler(deps);
+    await handle(groupEvent);
+
+    const [input] = deps.sendUserMessage.mock.calls.map(([call]) => call) as Array<{
+      blocks: Array<{ fromLabel?: string }>;
+    }>;
+    expect(input?.blocks[0]?.fromLabel).toBe(groupEvent.from);
   });
 
   it("wakes matching routines only after a channel member is approved", async () => {
@@ -1219,6 +1581,14 @@ describe("createMessagingInboundHandler confirmation atomicity", () => {
     });
     deps.prisma.$transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
+        $queryRaw: vi.fn(async () =>
+          ["bot-1", "bot-9"].map((id) => ({
+            id,
+            spaceId: id,
+            crossSpaceCommunication: true,
+            archivedAt: null,
+          })),
+        ),
         agentConnection: deps.prisma.agentConnection,
         messagingOutbound: {
           createMany: txCreateMany,

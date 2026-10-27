@@ -2,13 +2,20 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, ProcessEvent, SandboxProvider } from "@rakazo/adapter-kit";
-import { describe, expect, it, vi } from "vitest";
-import { BoxSandboxEmulator } from "./box-emulator.js";
-import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  fakeBoatProvider as fakeBoat,
+  routeFakeBoatDownloads,
+} from "./boat-sandbox.test-support.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
-import { ManagedSandboxEmulator } from "./e2b-emulator.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
-import { provisionPrepared } from "./sandbox-test-support.js";
+import { assertSandboxWorkspaceContract, provisionPrepared } from "./sandbox-test-support.js";
+
+let restoreFetch: () => void;
+beforeAll(() => {
+  restoreFetch = routeFakeBoatDownloads();
+});
+afterAll(() => restoreFetch());
 
 const ctx = {
   operationId: "1",
@@ -28,41 +35,26 @@ async function drain(provider: SandboxProvider, computer: ComputerRef) {
 }
 
 describe("sandbox conformance", () => {
-  it("runs the same graphical command across fake, managed-provider emulators, and desktop", async () => {
+  it("runs the same graphical command across fake, Boat, and desktop", async () => {
     const fake = new FakeSandboxProvider();
-    const managed = new ManagedSandboxEmulator();
-    const daytona = new DaytonaSandboxEmulator();
-    const box = new BoxSandboxEmulator();
+    const boat = fakeBoat();
     const desktop = new DesktopSandboxProvider();
     const a = await provisionPrepared(fake, { botId: "bot-a", homePath: "/tmp/a" }, ctx);
-    const b = await provisionPrepared(managed, { botId: "bot-b", homePath: "/tmp/b" }, ctx);
-    const c = await provisionPrepared(daytona, { botId: "bot-c", homePath: "/tmp/c" }, ctx);
-    const d = await provisionPrepared(box, { botId: "bot-d", homePath: "/tmp/d" }, ctx);
-    const e = await provisionPrepared(desktop, { botId: "bot-e", homePath: "/tmp/e" }, ctx);
-    const outA = await drain(fake, a);
-    const outB = await drain(managed, b);
-    const outC = await drain(daytona, c);
-    const outD = await drain(box, d);
-    const outE = await drain(desktop, e);
-    expect(outA).toContain("graphical-ok");
-    expect(outB).toContain("graphical-ok");
-    expect(outC).toContain("graphical-ok");
-    expect(outD).toContain("graphical-ok");
-    expect(outE).toContain("graphical-ok");
-    expect(new Set([a.id, b.id, c.id, d.id, e.id]).size).toBe(5);
+    const b = await provisionPrepared(boat, { botId: "bot-b", homePath: "/tmp/b" }, ctx);
+    const c = await provisionPrepared(desktop, { botId: "bot-c", homePath: "/tmp/c" }, ctx);
+    expect(await drain(fake, a)).toContain("graphical-ok");
+    expect(await drain(boat, b)).toContain("graphical-ok");
+    expect(await drain(desktop, c)).toContain("graphical-ok");
+    expect(new Set([a.id, b.id, c.id]).size).toBe(3);
     await fake.destroy(a, ctx);
-    await managed.destroy(b, ctx);
-    await daytona.destroy(c, ctx);
-    await box.destroy(d, ctx);
-    await desktop.destroy(e, ctx);
+    await boat.destroy(b, ctx);
+    await desktop.destroy(c, ctx);
   });
 
   it("offers the same observation, action, and workspace contract across providers", async () => {
     const providers: SandboxProvider[] = [
       new FakeSandboxProvider(),
-      new ManagedSandboxEmulator(),
-      new DaytonaSandboxEmulator(),
-      new BoxSandboxEmulator(),
+      fakeBoat(),
       new DesktopSandboxProvider(),
     ];
     for (const [index, provider] of providers.entries()) {
@@ -71,48 +63,7 @@ describe("sandbox conformance", () => {
         { botId: `portable-${index}`, homePath: `/tmp/portable-${index}` },
         ctx,
       );
-      await provider.prepare(computer, ctx);
-      await provider.writeFile(
-        computer,
-        { path: "notes/result.txt", content: new TextEncoder().encode("portable") },
-        ctx,
-      );
-      expect(await provider.listFiles(computer, "notes", ctx)).toEqual([
-        { path: "notes/result.txt", kind: "file", size: 8 },
-      ]);
-      expect(
-        new TextDecoder().decode(await provider.readFile(computer, "notes/result.txt", ctx)),
-      ).toBe("portable");
-      const binary = Uint8Array.from([0, 255, 1, 128]);
-      await provider.writeFile(
-        computer,
-        { path: "bin/tool", content: binary, executable: true },
-        ctx,
-      );
-      expect(await provider.readFile(computer, "bin/tool", ctx)).toEqual(binary);
-      expect(await provider.listFiles(computer, "bin", ctx)).toEqual([
-        { path: "bin/tool", kind: "file", size: 4, executable: true },
-      ]);
-      const acted = await provider.act(
-        computer,
-        {
-          actions: [
-            { kind: "clipboard", text: "visible" },
-            { kind: "focus", application: "xterm" },
-          ],
-          observe: true,
-        },
-        ctx,
-      );
-      expect(acted.completed).toBe(2);
-      expect(acted.observation?.image.byteLength).toBeGreaterThan(0);
-      const exported = [];
-      for await (const file of provider.exportWorkspace(computer, ctx)) exported.push(file);
-      expect(exported.map((file) => file.path)).toContain("notes/result.txt");
-      expect(exported.find((file) => file.path === "bin/tool")).toMatchObject({
-        content: binary,
-        executable: true,
-      });
+      await assertSandboxWorkspaceContract(provider, computer, ctx);
       await provider.destroy(computer, ctx);
     }
   });
@@ -121,9 +72,7 @@ describe("sandbox conformance", () => {
     const root = mkdtempSync(path.join(tmpdir(), "rakazo-unset-env-"));
     const providers: SandboxProvider[] = [
       new FakeSandboxProvider(),
-      new ManagedSandboxEmulator(),
-      new DaytonaSandboxEmulator(),
-      new BoxSandboxEmulator(),
+      fakeBoat(),
       new DesktopSandboxProvider({ root }),
     ];
     vi.stubEnv("RAKAZO_COMMAND_UNSET_TEST", "fake-host-value");
@@ -291,9 +240,7 @@ describe("sandbox conformance", () => {
     const root = mkdtempSync(path.join(tmpdir(), "rakazo-destroy-idempotent-"));
     const providers: SandboxProvider[] = [
       new FakeSandboxProvider(),
-      new ManagedSandboxEmulator(),
-      new DaytonaSandboxEmulator(),
-      new BoxSandboxEmulator(),
+      fakeBoat(),
       new DesktopSandboxProvider({ root }),
     ];
     for (const [index, provider] of providers.entries()) {

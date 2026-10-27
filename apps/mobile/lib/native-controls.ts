@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import type { ColorValue, StyleProp, ViewStyle } from "react-native";
+import type { ColorValue, StyleProp, ViewProps, ViewStyle } from "react-native";
 import { Platform } from "react-native";
 import type { NativeSymbol } from "../components/native-symbol";
 
@@ -11,14 +11,23 @@ export function iosAtLeast(major: number) {
   return Number.isFinite(parsed) && parsed >= major;
 }
 
+/** Height of an iOS 26 glass bar button; custom header titles match it. */
+export const HEADER_CONTROL_SIZE = 44;
+/** Header titles stop growing at Dynamic Type xxxLarge so they keep that height. */
+export const HEADER_TITLE_MAX_FONT_SCALE = 1.35;
+
 export type ActionProminence = "primary" | "secondary" | "plain" | "quiet" | "destructive";
 
 export type NativeActionButtonProps = {
+  accessibilityActions?: ViewProps["accessibilityActions"];
+  onAccessibilityAction?: ViewProps["onAccessibilityAction"];
   onPress: () => void;
   disabled?: boolean;
   /** Disables the control. Android shows a spinner; iOS keeps the label on a disabled native button. */
   busy?: boolean;
   prominence?: ActionProminence;
+  /** Flat recovery controls and text actions, without native glass styling. */
+  variant?: "rectangular" | "text";
   /** Small native control, without the default filled button minimum height. */
   size?: "default" | "compact";
   /** Optional latched state; false is regular, true is prominent. */
@@ -54,11 +63,11 @@ export type NativeSwitchProps = {
   disabled?: boolean;
   accessibilityLabel: string;
   accessibilityHint?: string;
-  /** Android track colors. Ignored by the iOS switch, which uses `tintColor`. */
+  /** Android track colors. Defaults the ON track to system green and OFF to platform grey. Ignored on iOS. */
   trackColor?: { false?: ColorValue; true?: ColorValue };
   /** Android thumb color. Ignored on iOS. */
   thumbColor?: ColorValue;
-  /** iOS on-state tint. Omitted switches use the system tint. */
+  /** On-state tint (also the Android track fallback). iOS uses system green by default. */
   tintColor?: ColorValue;
 };
 

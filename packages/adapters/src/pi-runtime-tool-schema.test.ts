@@ -1,9 +1,38 @@
+import {
+  FLEET_TOOL_NAMES,
+  TICKET_COMMENT_MAX_LENGTH,
+  TICKET_DESCRIPTION_MAX_LENGTH,
+  TICKET_TITLE_MAX_LENGTH,
+} from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { parseConnectorToolArgs } from "./lazy-tool-catalog.js";
-import { jsonSchemaParameters, parametersFor } from "./pi-runtime.js";
+import {
+  jsonSchemaParameters,
+  parametersFor,
+  prepareFleetArguments,
+} from "./pi-runtime-tool-parameters.js";
 
 describe("jsonSchemaParameters", () => {
+  it.each([
+    ["ticket_create", "title", TICKET_TITLE_MAX_LENGTH, { title: "Ship" }],
+    ["ticket_create", "description", TICKET_DESCRIPTION_MAX_LENGTH, { title: "Ship" }],
+    ["ticket_update", "title", TICKET_TITLE_MAX_LENGTH, { id: "t1" }],
+    ["ticket_update", "description", TICKET_DESCRIPTION_MAX_LENGTH, { id: "t1" }],
+    ["ticket_comment", "body", TICKET_COMMENT_MAX_LENGTH, { id: "t1", body: "Ready" }],
+  ] as const)("preserves the %s %s length limit on the model wire", (name, field, limit, base) => {
+    const tool = builtinAgentTools.find((entry) => entry.name === name)!;
+    const wire = JSON.parse(JSON.stringify(parametersFor(tool)));
+    for (const schema of [tool.inputSchema, wire]) {
+      expect(schema).toMatchObject({ properties: { [field]: { maxLength: limit } } });
+      const input = { ...base, [field]: "x".repeat(limit) };
+      expect(parseConnectorToolArgs(schema, input)).toEqual(input);
+      expect(() =>
+        parseConnectorToolArgs(schema, { ...base, [field]: "x".repeat(limit + 1) }),
+      ).toThrow();
+    }
+  });
+
   it("exposes fields from a locally referenced allOf branch", () => {
     const tool = {
       name: "catalog_search",
@@ -277,5 +306,68 @@ describe("update_bot parameters", () => {
       artifact_id: "art-1",
       use_attached_image: true,
     });
+  });
+});
+
+describe("bot management tool parameters", () => {
+  const wireFor = (name: string) => {
+    const tool = builtinAgentTools.find((entry) => entry.name === name);
+    if (!tool) throw new Error(`missing ${name}`);
+    return JSON.parse(JSON.stringify(parametersFor(tool))) as Record<string, unknown>;
+  };
+
+  it.each([...FLEET_TOOL_NAMES])(
+    "%s serializes as one object schema without a root union",
+    (name) => {
+      const wire = wireFor(name);
+      expect(wire.type).toBe("object");
+      expect(wire.properties).toBeTruthy();
+      for (const key of ["oneOf", "anyOf", "allOf"]) expect(wire).not.toHaveProperty(key);
+    },
+  );
+
+  it("organize_bot clears a section only through clear_section", () => {
+    expect(
+      parseConnectorToolArgs(wireFor("organize_bot"), { bot_name: "Scout", clear_section: true }),
+    ).toEqual({ bot_name: "Scout", clear_section: true });
+    expect((wireFor("organize_bot").properties as Record<string, unknown>).section).toMatchObject({
+      type: "string",
+    });
+  });
+
+  it("create_child_routine carries the target and the timing fields", () => {
+    const props = Object.keys(wireFor("create_child_routine").properties as object);
+    expect(props).toEqual(
+      expect.arrayContaining(["bot_id", "bot_name", "name", "prompt", "cron", "delaySeconds"]),
+    );
+  });
+
+  it("update_bot carries bot_id for a child and never instructions", () => {
+    const props = Object.keys(wireFor("update_bot").properties as object);
+    expect(props).toContain("bot_id");
+    expect(props).not.toContain("instructions");
+    expect(props).not.toContain("expected_version");
+    expect(Object.keys(wireFor("set_child_instructions").properties as object).sort()).toEqual([
+      "bot_id",
+      "bot_name",
+      "expected_version",
+      "instructions",
+    ]);
+  });
+
+  it.each([...FLEET_TOOL_NAMES, "update_bot"])(
+    "%s leaves null and blank optional values out instead of sending text",
+    (name) => {
+      const keys = Object.keys(wireFor(name).properties as object);
+      for (const blank of [null, "", "  "]) {
+        const raw = Object.fromEntries(keys.map((key) => [key, blank]));
+        expect(prepareFleetArguments(name, raw), JSON.stringify(blank)).toEqual({});
+      }
+    },
+  );
+
+  it("keeps the instruction text exactly as sent", () => {
+    const args = { bot_id: "b1", instructions: "  Keep\n spacing ", expected_version: "v1" };
+    expect(prepareFleetArguments("set_child_instructions", args)).toEqual(args);
   });
 });

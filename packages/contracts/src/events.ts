@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { AgentImportSetupItemSchema } from "./agent-import-setup.js";
 import { botSecretDestinationSchema } from "./bot-secrets.js";
 import { Id } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
@@ -18,6 +19,7 @@ export const ProductEventType = z.enum([
   "thread.cloud_agent",
   "thread.call.ended",
   "run.started",
+  "run.steering.claimed",
   "run.checkpointed",
   "run.waiting_input",
   "run.completed",
@@ -102,7 +104,17 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("ask"),
     text: z.string(),
     approvalEffectId: Id.optional(),
+    instructionUpdate: z
+      .object({
+        botId: Id,
+        before: z.string(),
+        after: z.string(),
+        reason: z.string(),
+        undoVersionId: Id.optional(),
+      })
+      .optional(),
     detail: z.string().optional(),
+    detailFormat: z.enum(["text", "code"]).optional(),
     input: z.enum(["text", "secret"]).optional(),
     /** Why the secret is needed; drives field label on the masked card. */
     purpose: SecretAskPurpose.optional(),
@@ -110,8 +122,12 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     // an ask persisted before an owner toggles the private-HTTP flag still
     // validates on replay.
     credential: botSecretDestinationSchema({ allowPrivateHttpOrigin: true }).optional(),
+    /** On a fetch approval, the site an "always" answer allows. */
+    site: z.string().optional(),
     status: z.enum(["pending", "answered"]).optional(),
     answer: z.string().optional(),
+    /** A secret request the user dismissed instead of answering. */
+    dismissed: z.literal(true).optional(),
     actions: z
       .array(
         z.object({
@@ -160,6 +176,21 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     callId: z.string().optional(),
     title: z.string(),
     farewell: z.string(),
+    /** Connected time the caller's client measured; absent when the bot hung up. */
+    durationSeconds: z.number().int().nonnegative().optional(),
+  }),
+  z.object({
+    /** The bot is calling the user; the card tracks the call from ringing to its outcome. */
+    kind: z.literal("call_request"),
+    callId: z.string(),
+    /** Why the bot is calling, shown on the incoming call. */
+    reason: z.string(),
+    /** The bot's first spoken sentence once the user answers. */
+    opening: z.string(),
+    status: z.enum(["ringing", "answered", "declined", "missed"]),
+    expiresAt: z.string(),
+    /** Connected time the user's client measured after answering. */
+    durationSeconds: z.number().int().nonnegative().optional(),
   }),
   z.object({ kind: z.literal("meta"), text: z.string() }),
   z.object({
@@ -195,7 +226,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("cloud_agent"),
     agentId: z.string(),
     title: z.string(),
-    status: z.enum(["running", "finished", "failed", "cancelled"]),
+    status: z.enum(["running", "finished", "failed", "cancelled", "expired"]),
     url: z.string(),
     branch: z.string().optional(),
     prUrl: z.string().optional(),
@@ -231,7 +262,15 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     status: z.enum(["pending", "connected", "dismissed"]).default("pending"),
   }),
   z.object({
+    kind: z.literal("import_setup"),
+    items: z.array(AgentImportSetupItemSchema),
+    /** Set by Undo, which also empties `items`; the checklist is then hidden. */
+    undone: z.boolean().optional(),
+  }),
+  z.object({
     kind: z.literal("image"),
+    /** Explicit visual input requested by a confirmation-aware client. */
+    imageHandling: z.literal("confirm").optional(),
     artifactId: Id,
     mimeType: z.string(),
     name: z.string(),

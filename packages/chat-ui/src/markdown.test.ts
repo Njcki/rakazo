@@ -3,17 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
-  linkedImageFile,
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
+  markdownMentionId,
   plainTextLinkParts,
-  sameDocumentOrigin,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
-  separateGluedImageText,
+  withBlockMentions,
+  withMentions,
 } from "./markdown";
 
 type Token = { type: string; attrGet(name: string): string | null; children: Token[] | null };
@@ -206,48 +206,6 @@ describe("markdownLinkDisplayParts", () => {
   });
 });
 
-describe("separateGluedImageText", () => {
-  it("splits a sentence glued onto an image URL", () => {
-    const source =
-      "https://rakazo.example/download/scritta.pngL'ambiente circostante resta visibile.";
-    expect(separateGluedImageText(source)).toBe(
-      "https://rakazo.example/download/scritta.png L'ambiente circostante resta visibile.",
-    );
-  });
-
-  it("leaves a query string on the image URL", () => {
-    expect(separateGluedImageText("https://rakazo.example/a.png?w=10 next")).toBe(
-      "https://rakazo.example/a.png?w=10 next",
-    );
-  });
-});
-
-describe("linkedImageFile", () => {
-  it("drops sentence text glued onto the path", () => {
-    expect(linkedImageFile("https://rakazo.example/download/scritta.pngL'ambiente")?.href).toBe(
-      "https://rakazo.example/download/scritta.png",
-    );
-  });
-
-  it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
-    expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
-      href: "https://rakazo.example/download/foyer.jpg",
-      host: "rakazo.example",
-    });
-    expect(linkedImageFile("https://rakazo.example/a.PNG?x=1")?.href).toContain(".PNG");
-    expect(linkedImageFile("https://rakazo.example/a.svg")).toBeUndefined();
-    expect(linkedImageFile("https://rakazo.example/a.jpg.exe")).toBeUndefined();
-    expect(linkedImageFile("javascript:alert(1)")).toBeUndefined();
-  });
-
-  it("matches only the page that is already open", () => {
-    expect(
-      sameDocumentOrigin("https://rakazo.example/download/a.jpg", "https://rakazo.example"),
-    ).toBe(true);
-    expect(sameDocumentOrigin("https://cdn.example/a.jpg", "https://rakazo.example")).toBe(false);
-  });
-});
-
 describe("sanitizeMarkdownImageUrl", () => {
   it("allows absolute http(s) image sources", () => {
     expect(sanitizeMarkdownImageUrl(" https://example.test/a.png ")).toBe(
@@ -387,5 +345,62 @@ it("highlights the destination host after userinfo containing the same host text
     before: "https://docs.example:docs.example@",
     host: "docs.example",
     after: "/a",
+  });
+});
+
+describe("withMentions", () => {
+  const planner = { id: "bot-1", name: "Planner" };
+  const link = "[Planner](rakazo-mention:bot-1)";
+
+  it("links the first appearance of the name across the message", () => {
+    expect(
+      withMentions(["Working.", "Planner is ready. Ask Planner.", "Planner again."], [planner]),
+    ).toEqual(["Working.", `${link} is ready. Ask Planner.`, "Planner again."]);
+  });
+
+  it("puts the mention once at the start when the message does not name it", () => {
+    expect(withMentions(["Ready when you are.", "Done."], [planner])).toEqual([
+      `${link} Ready when you are.`,
+      "Done.",
+    ]);
+    expect(withMentions(["- first step"], [planner])).toEqual([`${link}\n\n- first step`]);
+  });
+
+  it("leaves code, links, and longer words alone", () => {
+    const text =
+      "`Planner` [Planner](https://example.test) Planners\n\n```\nPlanner\n```\n\n    Planner\n\nPlanner is ready.";
+    expect(withMentions([text], [planner])).toEqual([
+      text.replace("Planner is ready.", `${link} is ready.`),
+    ]);
+  });
+
+  it("keeps a mention link already in the text as its name", () => {
+    expect(withMentions(["[Planner](rakazo-mention:bot-1) is ready."], [planner])).toEqual([
+      `${link} is ready.`,
+    ]);
+    const code = "`[Planner](rakazo-mention:bot-1)`\n\n```\n[Planner](rakazo-mention:bot-1)\n```";
+    expect(withMentions([code], [planner])).toEqual([`${link} ${code}`]);
+  });
+
+  it("escapes markdown in the name and encodes the id", () => {
+    expect(withMentions(["hi"], [{ id: "a/b", name: "[x]_y" }])).toEqual([
+      "[\\[x\\]\\_y](rakazo-mention:a%2Fb) hi",
+    ]);
+    expect(markdownMentionId("rakazo-mention:a%2Fb")).toBe("a/b");
+    expect(markdownMentionId("https://example.test")).toBeUndefined();
+  });
+
+  it("rewrites only prose blocks", () => {
+    const blocks = withBlockMentions(
+      [
+        { kind: "progress", text: "Planner tool", activity: true },
+        { kind: "text", text: "Planner is ready." },
+      ],
+      [planner],
+    );
+    expect(blocks).toEqual([
+      { kind: "progress", text: "Planner tool", activity: true },
+      { kind: "text", text: `${link} is ready.` },
+    ]);
   });
 });

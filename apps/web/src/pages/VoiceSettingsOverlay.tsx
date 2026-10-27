@@ -1,6 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   SettingsScope,
+  ThinkingLevel,
   VoiceCatalogEntry,
   VoiceCredential,
   VoiceInfo,
@@ -28,10 +29,14 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { thinkingLevelLabel } from "../lib/model-catalog";
 import { useSpaceQueries } from "../lib/query";
+import { rpc as accountRpc } from "../lib/rpc";
 import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
 import { speaker } from "../lib/tts";
 import { errorText } from "../lib/user-error";
+
+const VOICE_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export function VoiceSettingsOverlay({
   onClose,
@@ -104,6 +109,9 @@ export function VoiceSettingsOverlay({
   const [pending, setPending] = useState<"connect" | "disconnect" | "voice" | "test" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [callThinking, setCallThinking] = useState("");
+  const [callThinkingBusy, setCallThinkingBusy] = useState(false);
+  const callThinkingId = useId();
 
   const busy = pending !== null;
 
@@ -205,6 +213,30 @@ export function VoiceSettingsOverlay({
   // Connections are managed from the account; a Space can still connect one it lacks.
   const managesConnection = scope === "account" || !credential;
   const canConnect = selfHosted ? Boolean(baseUrl.trim()) : apiKey.trim().length >= 8;
+
+
+  useEffect(() => {
+    if (scope !== "account") return;
+    void accountRpc.voice
+      .callThinking()
+      .then((result) => setCallThinking(result.thinkingLevel ?? ""))
+      .catch(() => undefined);
+  }, [scope]);
+
+  async function chooseCallThinking(next: string) {
+    setCallThinking(next);
+    setCallThinkingBusy(true);
+    setError(null);
+    try {
+      await accountRpc.voice.setCallThinking({
+        thinkingLevel: (next || null) as ThinkingLevel | null,
+      });
+    } catch (err) {
+      setError(errorText(err, t`Could not save the call thinking level`));
+    } finally {
+      setCallThinkingBusy(false);
+    }
+  }
 
   async function connectKey() {
     if (!selected || !canConnect) return;
@@ -356,6 +388,28 @@ export function VoiceSettingsOverlay({
           </NativeSelect>
         </Field>
       ) : null}
+      {scope === "account" ? (
+        <Field className="mt-4">
+          <FieldLabel htmlFor={callThinkingId}>
+            <Trans>Thinking in calls</Trans>
+          </FieldLabel>
+          <NativeSelect
+            id={callThinkingId}
+            className="mt-2 w-full"
+            value={callThinking}
+            disabled={busy || callThinkingBusy || loading}
+            onChange={(event) => void chooseCallThinking(event.target.value)}
+          >
+            <NativeSelectOption value="">{t`Default (low)`}</NativeSelectOption>
+            {VOICE_THINKING_LEVELS.map((level) => (
+              <NativeSelectOption key={level} value={level}>
+                {thinkingLevelLabel(level)}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+      ) : null}
+
       {hiddenSelfHosted && scope === "account" ? (
         <Button
           variant="ghost"

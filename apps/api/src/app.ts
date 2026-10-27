@@ -604,7 +604,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     phoneCallRingSeconds: env.phoneCallRingSeconds,
     phoneCallCooldownMinutes: env.phoneCallCooldownMinutes,
     messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
-    web: createWebProvider(),
+    web: createCountingWebProvider(prisma),
     cloudAgent,
     userDevices: userDevicesOverride ?? userDevices,
     shutdownSignal: shutdown.signal,

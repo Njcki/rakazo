@@ -512,6 +512,7 @@ export async function synthesizeVoice(
     text: string;
     voiceId?: string;
     botId?: string;
+    language?: string;
     scope?: SettingsScope;
     signal?: AbortSignal;
   },
@@ -529,6 +530,7 @@ export async function synthesizeVoice(
       voiceId: target.voiceId,
       apiKey: target.apiKey,
       model: target.cred.speechModel || undefined,
+      language: input.language,
       signal: input.signal,
     },
     voiceContext(actor, input.signal),

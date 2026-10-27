@@ -6,7 +6,8 @@ import {
   isAutoReviewCheckerConfigured,
   PushSessionEndedError,
 } from "@rakazo/adapters";
-import type { ActionApprovalRule, Actor, Me, SettingsScope } from "@rakazo/contracts";
+import type {
+  ThinkingLevel, ActionApprovalRule, Actor, Me, SettingsScope } from "@rakazo/contracts";
 import { approvalModeFromPreference, approvalPreferenceFromMode } from "@rakazo/core";
 import {
   findAutoReviewPreference,
@@ -286,6 +287,20 @@ export function accountRoutes(ctx: RouterContext) {
       prepare: authed.voice.prepare.handler(async ({ context, input }) =>
         prepareVoice(deps, context.actor, { ...input, signal: context.signal }),
       ),
+      callThinking: authed.voice.callThinking.handler(async ({ context }) => {
+        const user = await deps.prisma.user.findUnique({
+          where: { id: context.actor.userId },
+          select: { voiceCallThinkingLevel: true },
+        });
+        return { thinkingLevel: (user?.voiceCallThinkingLevel ?? null) as ThinkingLevel | null };
+      }),
+      setCallThinking: authed.voice.setCallThinking.handler(async ({ context, input }) => {
+        await deps.prisma.user.update({
+          where: { id: context.actor.userId },
+          data: { voiceCallThinkingLevel: input.thinkingLevel },
+        });
+        return { thinkingLevel: input.thinkingLevel };
+      }),
     },
   };
 }

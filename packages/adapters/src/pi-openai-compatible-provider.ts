@@ -198,29 +198,17 @@ export function createOpenAiCompatibleFetch(
       );
     }
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
-    // Patch 0029: an endpoint that just failed to connect (home PC off,
-    // Tailscale peer offline) fails fast for a short while so the backup
-    // model takes over at once instead of waiting a connect timeout per try.
-    throwIfModelServerMarkedOffline(url);
-    const connectTimeoutMs = openAiCompatibleConnectTimeoutMs();
-    // An IP host only gets a dispatcher when this package's fetch drives it;
-    // a caller-supplied fetch (tests, emulators) cannot accept a package Agent.
-    const ownsTransport = fetchPairedWithDispatcher(baseFetch) === dispatcherFetch;
-    const dispatcher =
-      isIP(hostname) === 0 || (connectTimeoutMs !== undefined && ownsTransport)
-        ? new Agent({
-            connect: {
-              ...(isIP(hostname) === 0
-                ? { lookup: createOpenAiCompatibleLookup(url, resolve) }
-                : {}),
-              // Bounds only the TCP/TLS handshake, never a streaming answer.
-              ...(connectTimeoutMs !== undefined ? { timeout: connectTimeoutMs } : {}),
-            },
-          })
-        : undefined;
-    // Node's fetch rejects this package Agent. Pair them only when the
-    // dispatcher is attached; a caller-supplied fetch stays in charge.
-    const transport = dispatcher ? fetchPairedWithDispatcher(baseFetch) : baseFetch;
+    const dispatcher = new Agent({
+      connect: {
+        timeout: MODEL_CONNECT_TIMEOUT_MS,
+        ...(ipVersion(hostname) === 0
+          ? { lookup: createOpenAiCompatibleLookup(url, resolve, opts) }
+          : {}),
+      },
+    });
+    // Node's fetch rejects this package Agent. Use its matching fetch;
+    // a caller-supplied fetch stays in charge.
+    const transport = fetchPairedWithDispatcher(baseFetch);
     try {
       const requestInit = await requestInitFor(input, init);
       let headers = requestInit.headers;
@@ -233,106 +221,14 @@ export function createOpenAiCompatibleFetch(
         ...requestInit,
         headers,
         redirect: "error",
-        ...(dispatcher ? { dispatcher } : {}),
-      } as RequestInit & { dispatcher?: Agent });
-      clearModelServerOffline(url);
-      return dispatcher ? await closeDispatcherWithResponse(response, dispatcher) : response;
+        dispatcher,
+      } as RequestInit & { dispatcher: Agent });
+      return await closeDispatcherWithResponse(response, dispatcher);
     } catch (error) {
-      await dispatcher?.close().catch(() => undefined);
-      if (isModelServerConnectFailure(error)) markModelServerOffline(url);
+      await dispatcher.destroy().catch(() => undefined);
       throw error;
     }
   };
-}
-
-/** Connect (TCP/TLS handshake) budget for OpenAI-compatible model servers.
- * undici's default is 10 s per attempt; with one retry an offline home server
- * cost ~20 s before the backup model ran. 0 or unset-invalid keeps undici's
- * default. */
-export const OPENAI_COMPATIBLE_CONNECT_TIMEOUT_ENV = "OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS";
-export const DEFAULT_OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS = 5_000;
-/** How long an endpoint that failed to connect is skipped (re-probed after). */
-export const OPENAI_COMPATIBLE_OFFLINE_TTL_ENV = "OPENAI_COMPATIBLE_OFFLINE_TTL_MS";
-export const DEFAULT_OPENAI_COMPATIBLE_OFFLINE_TTL_MS = 60_000;
-
-function envMs(name: string, fallback: number, max: number): number | undefined {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-  const value = Number(raw);
-  if (!Number.isSafeInteger(value) || value < 0 || value > max) return fallback;
-  return value === 0 ? undefined : value;
-}
-
-export function openAiCompatibleConnectTimeoutMs(): number | undefined {
-  return envMs(
-    OPENAI_COMPATIBLE_CONNECT_TIMEOUT_ENV,
-    DEFAULT_OPENAI_COMPATIBLE_CONNECT_TIMEOUT_MS,
-    120_000,
-  );
-}
-
-function openAiCompatibleOfflineTtlMs(): number | undefined {
-  return envMs(
-    OPENAI_COMPATIBLE_OFFLINE_TTL_ENV,
-    DEFAULT_OPENAI_COMPATIBLE_OFFLINE_TTL_MS,
-    3_600_000,
-  );
-}
-
-const offlineUntil = new Map<string, number>();
-
-/** Test seam: forget every cached offline endpoint. */
-export function resetOpenAiCompatibleOfflineCache(): void {
-  offlineUntil.clear();
-}
-
-const CONNECT_FAILURE_CODES = new Set([
-  "UND_ERR_CONNECT_TIMEOUT",
-  "ECONNREFUSED",
-  "EHOSTUNREACH",
-  "EHOSTDOWN",
-  "ENETUNREACH",
-  "ETIMEDOUT",
-]);
-
-/** True only for failures before any byte was exchanged (no socket). */
-export function isModelServerConnectFailure(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth++) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && CONNECT_FAILURE_CODES.has(code)) return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
-}
-
-function markModelServerOffline(url: URL): void {
-  const ttl = openAiCompatibleOfflineTtlMs();
-  if (ttl === undefined) return;
-  offlineUntil.set(url.origin, Date.now() + ttl);
-}
-
-function clearModelServerOffline(url: URL): void {
-  offlineUntil.delete(url.origin);
-}
-
-function throwIfModelServerMarkedOffline(url: URL): void {
-  const until = offlineUntil.get(url.origin);
-  if (until === undefined) return;
-  if (Date.now() >= until) {
-    // TTL over: let this request re-probe the server for real.
-    offlineUntil.delete(url.origin);
-    return;
-  }
-  // Shaped like undici's own failure so the OpenAI SDK classifies it as a
-  // connection timeout ("Request timed out.") and the fallback chain advances.
-  const cause = Object.assign(
-    new Error(
-      `Model server connect timed out recently; skipping it for ${Math.ceil((until - Date.now()) / 1000)}s`,
-    ),
-    { name: "ConnectTimeoutError", code: "UND_ERR_CONNECT_TIMEOUT" },
-  );
-  throw new TypeError("fetch failed", { cause });
 }
 
 /** The base fetch comes from the undici package, which recognizes only its own

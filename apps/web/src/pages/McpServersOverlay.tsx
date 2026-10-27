@@ -107,6 +107,8 @@ export function McpServersOverlay({
   const [saving, setSaving] = useState(false);
   const [oauthPending, setOauthPending] = useState<string | null>(null);
   const [testingIds, setTestingIds] = useState<Set<string>>(() => new Set());
+  /** Mobile: keep Add form collapsed when servers already exist (avoids overlap with the list). */
+  const [addFormOpen, setAddFormOpen] = useState(false);
   const queries = useSpaceQueries();
   const queryClient = useQueryClient();
   const serversOptions = queries.mcp.servers.list.queryOptions();
@@ -195,6 +197,7 @@ export function McpServersOverlay({
 
   function resetForm() {
     setEditing(null);
+    setAddFormOpen(false);
     if (!stdioEnabled) setTransport("streamable_http");
     setName("");
     setEndpoint("");
@@ -216,6 +219,7 @@ export function McpServersOverlay({
   function startEditing(server: McpServer) {
     resetForm();
     setError(null);
+    setAddFormOpen(true);
     setEditing(server);
     setName(server.name);
     setTransport(server.transport);
@@ -472,12 +476,29 @@ export function McpServersOverlay({
             {shownError}
           </p>
         ) : null}
-        <div className="rk-scroll grid min-h-0 grid-cols-1 gap-5 overflow-y-auto p-6 lg:grid-cols-2">
-          <Card className="self-start">
-            <CardHeader>
+        <div className="rk-scroll flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain p-4 sm:p-6 lg:grid lg:grid-cols-2 lg:items-start">
+          <section
+            className={
+              editing || addFormOpen || servers.length === 0
+                ? "min-w-0 order-1 lg:order-1"
+                : "min-w-0 order-2 lg:order-1"
+            }
+          >
+            {!editing && servers.length > 0 && !addFormOpen ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setAddFormOpen(true)}
+              >
+                <Trans>Add server</Trans>
+              </Button>
+            ) : (
+          <Card className="self-start overflow-hidden bg-card">
+            <CardHeader className="border-b border-border pb-3">
               <CardTitle>{editing ? editing.name : <Trans>Add server</Trans>}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <FieldGroup className="gap-4">
                 <Field>
                   <FieldLabel htmlFor="mcp-name">
@@ -490,18 +511,23 @@ export function McpServersOverlay({
                     placeholder="e.g. Mobbin"
                   />
                 </Field>
-                <Tabs
-                  value={transport}
-                  onValueChange={(value) => setTransport(value as McpTransport)}
-                >
-                  <TabsList className="w-full">
-                    <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
-                    <TabsTrigger value="sse">SSE</TabsTrigger>
-                    {stdioEnabled || editing?.transport === "stdio" ? (
-                      <TabsTrigger value="stdio">STDIO</TabsTrigger>
-                    ) : null}
-                  </TabsList>
-                </Tabs>
+                <Field>
+                  <FieldTitle>
+                    <Trans>Transport</Trans>
+                  </FieldTitle>
+                  <Tabs
+                    value={transport}
+                    onValueChange={(value) => setTransport(value as McpTransport)}
+                  >
+                    <TabsList className="relative z-0 w-full">
+                      <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
+                      <TabsTrigger value="sse">SSE</TabsTrigger>
+                      {stdioEnabled || editing?.transport === "stdio" ? (
+                        <TabsTrigger value="stdio">STDIO</TabsTrigger>
+                      ) : null}
+                    </TabsList>
+                  </Tabs>
+                </Field>
                 {transport === "stdio" ? (
                   <>
                     <Field>
@@ -819,7 +845,7 @@ export function McpServersOverlay({
                   <Trans>Add server</Trans>
                 )}
               </Button>
-              {editing ? (
+              {editing || (addFormOpen && servers.length > 0) ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -832,7 +858,15 @@ export function McpServersOverlay({
               ) : null}
             </CardContent>
           </Card>
-          <div>
+            )}
+          </section>
+          <section
+            className={
+              editing || addFormOpen || servers.length === 0
+                ? "min-w-0 order-2 lg:order-2"
+                : "min-w-0 order-1 lg:order-2"
+            }
+          >
             <h2 className="text-[15px] font-medium text-foreground">
               <Trans>Configured servers</Trans>
             </h2>
@@ -866,6 +900,15 @@ export function McpServersOverlay({
                           >
                             {statusText}
                           </p>
+                        ) : null}
+                        {server.transport !== "stdio" ? (
+                          <div className="mt-3">
+                            <McpAuthHelp
+                              endpoint={server.endpoint}
+                              name={server.name}
+                              defaultOpen={server.oauthStatus === "reconnect"}
+                            />
+                          </div>
                         ) : null}
                         <div className="mt-3 flex flex-wrap items-center gap-1.5">
                           <span className="text-[11px] text-muted-foreground">
@@ -961,7 +1004,7 @@ export function McpServersOverlay({
                 })
               )}
             </div>
-          </div>
+          </section>
         </div>
       </DialogContent>
     </Dialog>

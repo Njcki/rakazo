@@ -5901,6 +5901,10 @@ msgstr "Trascrizione"
 msgid "Transcription model"
 msgstr "Modello di trascrizione"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Transport"
+msgstr "Trasporto"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "Trattalo come una persona"

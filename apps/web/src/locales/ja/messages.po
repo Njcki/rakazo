@@ -5900,6 +5900,10 @@ msgstr "文字起こし"
 msgid "Transcription model"
 msgstr "文字起こしモデル"
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Transport"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "人と同じように扱う"

@@ -414,6 +414,10 @@ msgstr "Over {label}"
 msgid "Access token (optional)"
 msgstr "Toegangstoken (optioneel)"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Access token + Save for a PAT or API key. Advanced client ID/secret + Connect OAuth when the provider needs an app. On self-hosted installs, allowlist the redirect URI below."
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
 msgstr "Account"
@@ -578,6 +582,10 @@ msgstr "Server toevoegen"
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add server URL"
 msgstr "Server-URL toevoegen"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Add this exact URL to the provider app redirect allowlist."
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Add to an existing bot"
@@ -1032,6 +1040,10 @@ msgstr "Bots met een eigen computer en browser"
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Breinlabel"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Browse catalog"
+msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
@@ -1638,12 +1650,14 @@ msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
 msgstr "Gekopieerd"
 
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
@@ -2186,9 +2200,17 @@ msgstr "Aanmaken"
 msgid "Create a section and move {0} into it."
 msgstr "Maak een sectie aan en verplaats {0} erin."
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create access token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "Account aanmaken"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create an app in the developer portal, allowlist the redirect URI below, then put the client ID and secret under Advanced and use Connect OAuth."
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
@@ -2196,6 +2218,10 @@ msgstr "Groep aanmaken"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Create link"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create OAuth app"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -2430,6 +2456,10 @@ msgstr "Desktopupdate"
 msgid "Details"
 msgstr "Details"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Developer portal"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "Een tool uitschakelen"
@@ -2583,6 +2613,10 @@ msgstr "Eerst bewerken"
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
 msgstr "Profiel bewerken"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Either paste an API token in Access token and Save, or use Connect OAuth (Advanced client fields if redirect is rejected)."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2864,7 +2898,7 @@ msgid "Finishing MCP connection…"
 msgstr "MCP-verbinding afronden…"
 
 #: src/pages/McpServersOverlay.tsx
-msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgid "For a PAT or API key, paste it here and Save. Bearer is added automatically when needed — skip Connect OAuth on self-hosted installs that block OAuth."
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -3028,6 +3062,10 @@ msgstr "Hoe vaak"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "Hoe te controleren"
+
+#: src/components/McpAuthHelp.tsx
+msgid "How to get a token or OAuth app"
+msgstr ""
 
 #: src/components/SignupSurvey.tsx
 msgid "How will you use Rakazo?"
@@ -4030,6 +4068,10 @@ msgstr "Nu"
 msgid "OAuth authorization was cancelled."
 msgstr "De OAuth-autorisatie is geannuleerd."
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth callback URL"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth client ID (optional)"
 msgstr "OAuth-client-ID (optioneel)"
@@ -4052,9 +4094,17 @@ msgstr "OAuth-verbinding mislukt"
 msgid "OAuth expired"
 msgstr "OAuth verlopen"
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth redirect URI"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/model-catalog.ts
 msgid "Off"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Official docs"
 msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
@@ -4247,6 +4297,10 @@ msgstr "Wachtwoorden komen niet overeen"
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Past due"
 msgstr "Achterstallig"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Paste a personal access token in Access token, then Save. Do not use Connect OAuth for this provider on self-hosted installs."
+msgstr ""
 
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -5111,6 +5165,10 @@ msgstr "Instellingen: gebruik"
 msgid "Setup complete"
 msgstr "Instellen voltooid"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Setup for {title}"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Setup help"
 msgstr "Installatiehulp"
@@ -5863,6 +5921,10 @@ msgstr "Proefperiode eindigt op {day}"
 msgid "Try again"
 msgstr "Opnieuw proberen"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Try Connect OAuth first. If you get an invalid redirect URI error, create an app and allowlist the redirect URI below, then fill Advanced client ID and secret."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Try the test again."
 msgstr "Probeer de test opnieuw."
@@ -5903,6 +5965,10 @@ msgstr "Import ongedaan maken?"
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
 msgstr "Verwijderen"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Unknown provider — check the catalog for auth details, then use Access token or Advanced OAuth as above."
+msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"

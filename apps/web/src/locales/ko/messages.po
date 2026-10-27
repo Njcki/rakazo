@@ -414,6 +414,10 @@ msgstr "{label} 정보"
 msgid "Access token (optional)"
 msgstr "액세스 토큰(선택 사항)"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Access token + Save for a PAT or API key. Advanced client ID/secret + Connect OAuth when the provider needs an app. On self-hosted installs, allowlist the redirect URI below."
+msgstr ""
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
 msgstr "계정"
@@ -577,6 +581,10 @@ msgstr "서버 추가"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Add server URL"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Add this exact URL to the provider app redirect allowlist."
 msgstr ""
 
 #: src/pages/shell/agent-import.tsx
@@ -1031,6 +1039,10 @@ msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Browse catalog"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -1638,12 +1650,14 @@ msgstr ""
 
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Copied"
 msgstr "복사됨"
 
+#: src/components/McpAuthHelp.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/message-hover-actions.tsx
@@ -2186,9 +2200,17 @@ msgstr "만들기"
 msgid "Create a section and move {0} into it."
 msgstr "새 섹션을 만들고 {0}을 옮깁니다."
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create access token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "계정 만들기"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create an app in the developer portal, allowlist the redirect URI below, then put the client ID and secret under Advanced and use Connect OAuth."
+msgstr ""
 
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
@@ -2196,6 +2218,10 @@ msgstr "그룹 만들기"
 
 #: src/pages/shell/share-thread-dialog.tsx
 msgid "Create link"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create OAuth app"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -2430,6 +2456,10 @@ msgstr ""
 msgid "Details"
 msgstr "세부 정보"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Developer portal"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "도구 비활성화"
@@ -2583,6 +2613,10 @@ msgstr "수정 후 보내기"
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
 msgstr "Bot 정보 수정"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Either paste an API token in Access token and Save, or use Connect OAuth (Advanced client fields if redirect is rejected)."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2864,7 +2898,7 @@ msgid "Finishing MCP connection…"
 msgstr "MCP 연결을 마무리하는 중…"
 
 #: src/pages/McpServersOverlay.tsx
-msgid "For GitHub MCP paste a personal access token here. Bearer is added automatically — skip Connect OAuth on self-hosted installs."
+msgid "For a PAT or API key, paste it here and Save. Bearer is added automatically when needed — skip Connect OAuth on self-hosted installs that block OAuth."
 msgstr ""
 
 #: src/pages/Auth.tsx
@@ -3028,6 +3062,10 @@ msgstr "실행 주기"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "How to check"
 msgstr "완료 확인 방법"
+
+#: src/components/McpAuthHelp.tsx
+msgid "How to get a token or OAuth app"
+msgstr ""
 
 #: src/components/SignupSurvey.tsx
 msgid "How will you use Rakazo?"
@@ -4030,6 +4068,10 @@ msgstr "지금"
 msgid "OAuth authorization was cancelled."
 msgstr "OAuth 인증이 취소되었습니다."
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth callback URL"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth client ID (optional)"
 msgstr "OAuth 클라이언트 ID(선택 사항)"
@@ -4052,9 +4094,17 @@ msgstr "OAuth 연결 실패"
 msgid "OAuth expired"
 msgstr "OAuth 만료됨"
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth redirect URI"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/model-catalog.ts
 msgid "Off"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Official docs"
 msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
@@ -4246,6 +4296,10 @@ msgstr "비밀번호가 일치하지 않습니다"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Past due"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Paste a personal access token in Access token, then Save. Do not use Connect OAuth for this provider on self-hosted installs."
 msgstr ""
 
 #: src/pages/model-settings/connection-controls.tsx
@@ -5111,6 +5165,10 @@ msgstr "설정: 사용량"
 msgid "Setup complete"
 msgstr "설정 완료"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Setup for {title}"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Setup help"
 msgstr "설정 도움말"
@@ -5863,6 +5921,10 @@ msgstr ""
 msgid "Try again"
 msgstr "다시 시도"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Try Connect OAuth first. If you get an invalid redirect URI error, create an app and allowlist the redirect URI below, then fill Advanced client ID and secret."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Try the test again."
 msgstr "테스트를 다시 시도하세요."
@@ -5902,6 +5964,10 @@ msgstr "가져오기를 취소할까요?"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Uninstall"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Unknown provider — check the catalog for auth details, then use Access token or Advanced OAuth as above."
 msgstr ""
 
 #: src/pages/MessagingSettingsPanel.tsx

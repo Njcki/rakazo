@@ -6,6 +6,7 @@ import { useState } from "react";
 import { connectMcpOauth } from "../../lib/mcp-connect";
 import { rpc } from "../../lib/rpc";
 import { errorText } from "../../lib/user-error";
+import { McpAuthHelp } from "../McpAuthHelp";
 
 /** Personal MCP connections never configure deployment-wide provider credentials. */
 export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId?: string }) {
@@ -38,9 +39,7 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
     } catch (err) {
       const message = errorText(err, t`Could not connect`);
       const hint =
-        /dynamic.?client|registration|oauth|authorization.?header|invalid.?redirect/i.test(
-          message,
-        )
+        /dynamic.?client|registration|oauth|authorization.?header|invalid.?redirect/i.test(message)
           ? t`If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again.`
           : "";
       setError(`${message}${hint}`);
@@ -126,6 +125,7 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
         </p>
       ) : null}
       <FieldAccessToken accessToken={accessToken} setAccessToken={setAccessToken} />
+      <McpAuthHelp endpoint={endpoint || remoteResults[0]?.endpoint} name={query} />
       <Disclosure className="text-sm text-muted-foreground" summary={<Trans>Add server URL</Trans>}>
         <div className="mt-3 space-y-3">
           <Input
@@ -176,8 +176,8 @@ function FieldAccessToken({
       />
       <p className="text-xs text-muted-foreground">
         <Trans>
-          Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal
-          access token here instead of Connect OAuth.
+          Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access
+          token here instead of Connect OAuth.
         </Trans>
       </p>
     </div>

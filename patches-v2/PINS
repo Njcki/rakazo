@@ -1,10 +1,8 @@
 # Tip-as-base after cutover 2026-10-27 (Europe/Rome).
 # Image in production: rakazo-app-nk:rebase-7c1067d (built from REBASE_TIP, not pin+series).
 #
-# IT: Non usare `update-rakazo-v2.sh build|cutover` finché lo script calcola ancora
-#     TAG="${UPSTREAM_COMMIT:0:7}-nk${NSERIES}" — con series vuota darebbe un tag sbagliato.
-# EN: Do not run `update-rakazo-v2.sh build|cutover` while the script still derives
-#     TAG="${UPSTREAM_COMMIT:0:7}-nk${NSERIES}" — an empty series would mint the wrong tag.
+# IT: update-rakazo-v2.sh legge CURRENT_TAG / REBASE_TIP (pin mode tip-as-base).
+# EN: update-rakazo-v2.sh reads CURRENT_TAG / REBASE_TIP (pin mode tip-as-base).
 #
 # Upstream tip at the rebase merge (elie222/rakazo main):
 UPSTREAM_COMMIT=a0e57811172f5286d3d113e3117470d3762e2b99

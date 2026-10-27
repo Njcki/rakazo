@@ -1,9 +1,19 @@
 # update-rakazo-v2.sh and tip-as-base
 
-**IT:** Lo script su host (`update-rakazo-v2.sh`) calcola ancora  
-`TAG="${UPSTREAM_COMMIT:0:7}-nk${NSERIES}"` e fa `build` applicando `series/` sul digest in `PINS`.  
-Con tip-as-base e `series/` vuota **non** lanciare `build`/`cutover` finché lo script non legge `CURRENT_TAG` / `REBASE_TIP`.
+**IT:** Lo script risolve il tag così:
 
-**EN:** The host script (`update-rakazo-v2.sh`) still derives  
-`TAG="${UPSTREAM_COMMIT:0:7}-nk${NSERIES}"` and `build`s by applying `series/` onto the pinned digest.  
-With tip-as-base and an empty `series/`, **do not** run `build`/`cutover` until the script honours `CURRENT_TAG` / `REBASE_TIP`.
+1. Se `CURRENT_TAG` è impostato → `TAG=$CURRENT_TAG` (mode `tip-as-base`)
+2. Altrimenti se `REBASE_TIP` → `TAG=rebase-<7 hex>` (mode `tip-as-base`)
+3. Altrimenti legacy → `TAG=<UPSTREAM:0:7>-nk<N>` (mode `pin-series`)
+
+Con `series/` vuota, `build` verifica che `rakazo-app-nk:$TAG` esista in locale (no-op).  
+Con patch in `series/`, `build` fa `FROM` quell’immagine tip e applica le patch.
+
+**EN:** Tag resolution:
+
+1. `CURRENT_TAG` set → `TAG=$CURRENT_TAG` (`tip-as-base`)
+2. Else `REBASE_TIP` → `TAG=rebase-<7 hex>` (`tip-as-base`)
+3. Else legacy → `TAG=<UPSTREAM:0:7>-nk<N>` (`pin-series`)
+
+Empty `series/`: `build` checks the local tip tag (no-op).  
+Non-empty `series/`: `build` uses that tip image as `BASE` and applies patches.

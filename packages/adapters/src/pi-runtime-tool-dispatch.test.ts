@@ -15,14 +15,7 @@ const fakeAgentState = vi.hoisted(() => ({
     | "ask-pause"
     | "nested-ask-pause"
     | "tools-then-empty-failure"
-    | "tools-then-final-text"
-    | "dangling-narration"
-    | "steer-status",
-  /** Text-only replies after one tool turn; each later one needs a new follow-up. */
-  danglingReplies: [] as string[],
-  /** Text the no-tools wrap-up call answers with (patch 0026). */
-  wrapUpText: undefined as string | undefined,
-  wrapUpPrompts: [] as string[],
+    | "tools-then-final-text",
   terminalMessage: undefined as
     | {
         role: "assistant";
@@ -63,7 +56,6 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
     state = {
       errorMessage: undefined as string | undefined,
       messages: [] as unknown[],
-      tools: [] as unknown[],
     };
     private readonly tools: typeof fakeAgentState.tools;
     private readonly listeners: Array<(event: Record<string, unknown>) => void> = [];
@@ -79,7 +71,6 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       }) => Promise<{ context?: { messages: unknown[] } } | undefined>;
     }) {
       this.tools = options.initialState.tools;
-      this.state.tools = this.tools;
       this.prepareNextTurnWithContext = options.prepareNextTurnWithContext;
       fakeAgentState.tools = this.tools;
       fakeAgentState.initialMessages = options.initialState.messages;
@@ -92,83 +83,6 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
     async prompt(prompt: string, images?: unknown[]) {
       fakeAgentState.promptInputs.push(prompt);
       fakeAgentState.promptImages.push(images ?? []);
-      if (this.state.tools !== this.tools) {
-        // PiAgentRuntime replaced the tools: this is the no-tools wrap-up call.
-        fakeAgentState.wrapUpPrompts.push(prompt);
-        this.aborted = false;
-        const text = fakeAgentState.wrapUpText;
-        if (text === undefined) return;
-        const message = { role: "assistant", content: [{ type: "text", text }] };
-        this.emit({ type: "message_start", message });
-        this.emit({
-          type: "message_update",
-          assistantMessageEvent: { type: "text_delta", delta: text },
-        });
-        this.emit({ type: "message_end", message });
-        this.emit({ type: "turn_end", message, toolResults: [] });
-        return;
-      }
-      if (fakeAgentState.mode === "steer-status") {
-        const target =
-          this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
-        if (!target) throw new Error("expected tool was not exposed");
-        const args =
-          target.prepareArguments?.(fakeAgentState.invoke.args) ?? fakeAgentState.invoke.args;
-        this.emit({ type: "tool_execution_start", toolName: target.name, args });
-        await target.execute("call-1", args);
-        this.emit({
-          type: "turn_end",
-          message: {
-            role: "assistant",
-            content: [{ type: "toolCall", id: "call-1", name: target.name, arguments: args }],
-          },
-          toolResults: [{ toolCallId: "call-1", result: { ok: true } }],
-        });
-        // Next turn boundary: the runtime claims the mid-run message here.
-        await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
-        for (const [index, text] of fakeAgentState.danglingReplies.entries()) {
-          if (index > 0 && fakeAgentState.followUpMessages.length < index) break;
-          const message = { role: "assistant", content: [{ type: "text", text }] };
-          this.emit({ type: "message_start", message });
-          this.emit({
-            type: "message_update",
-            assistantMessageEvent: { type: "text_delta", delta: text },
-          });
-          this.emit({ type: "message_end", message });
-          this.emit({ type: "turn_end", message, toolResults: [] });
-        }
-        return;
-      }
-      if (fakeAgentState.mode === "dangling-narration") {
-        const target =
-          this.tools.find((tool) => tool.name === fakeAgentState.invoke.name) ?? this.tools[0];
-        if (!target) throw new Error("expected tool was not exposed");
-        const args =
-          target.prepareArguments?.(fakeAgentState.invoke.args) ?? fakeAgentState.invoke.args;
-        this.emit({ type: "tool_execution_start", toolName: target.name, args });
-        await target.execute("call-1", args);
-        this.emit({
-          type: "turn_end",
-          message: {
-            role: "assistant",
-            content: [{ type: "toolCall", id: "call-1", name: target.name, arguments: args }],
-          },
-          toolResults: [{ toolCallId: "call-1", result: { ok: true } }],
-        });
-        for (const [index, text] of fakeAgentState.danglingReplies.entries()) {
-          if (index > 0 && fakeAgentState.followUpMessages.length < index) break;
-          const message = { role: "assistant", content: [{ type: "text", text }] };
-          this.state.messages.push(message);
-          this.emit({ type: "message_start", message });
-          this.emit({
-            type: "message_update",
-            assistantMessageEvent: { type: "text_delta", delta: text },
-          });
-          this.emit({ type: "message_end", message });
-          this.emit({ type: "turn_end", message, toolResults: [] });
-        }
-        return;
-      }
       if (fakeAgentState.mode === "empty" || fakeAgentState.mode === "two-boundaries") {
         await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
         if (fakeAgentState.mode === "two-boundaries") {
@@ -473,16 +387,11 @@ vi.mock("./pi-openai-compatible-provider.js", () => ({
   registerOpenAiCompatibleRuntime: (models: unknown) => models,
 }));
 
-import { toolCompletionAuditPayload } from "./executor.js";
-import { frameMidRunSteering, MID_RUN_STEERING_NOTE } from "./final-answer-guard.js";
-import {
-  MISSING_TOOL_FINAL_RESPONSE_ERROR,
-  maxToolCallsPerTurn,
-  PiAgentRuntime,
-  providerFailureText,
-} from "./pi-runtime.js";
+import { MISSING_TOOL_FINAL_RESPONSE_ERROR, PiAgentRuntime } from "./pi-runtime.js";
+import { providerFailureText } from "./pi-runtime-errors.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
-import { frameQuickAckedSteering } from "./quick-reply.js";
+import { maxToolCallsPerTurn } from "./pi-runtime-tools.js";
+import { toolCompletionAuditPayload } from "./tool-completion-audit.js";
 
 const destinationTool: ConnectorTool = {
   name: "destination.write",
@@ -564,12 +473,6 @@ describe("Pi connector tool dispatch", () => {
     fakeAgentState.promptInputs = [];
     fakeAgentState.promptImages = [];
     fakeAgentState.toolResult = undefined;
-    fakeAgentState.danglingReplies = [];
-    fakeAgentState.wrapUpText = undefined;
-    fakeAgentState.wrapUpPrompts = [];
-    delete process.env.DANGLING_NARRATION_NUDGES;
-    delete process.env.TOOL_BUDGET_FINAL_SUMMARY;
-    delete process.env.STEERING_CONTINUE_NOTE;
     fakeAgentState.invoke = {
       name: "destination_write",
       args: { collection: "notes", title: "Result", body: "Done" },
@@ -621,11 +524,11 @@ describe("Pi connector tool dispatch", () => {
     expect(fakeAgentState.preparedMessages).toEqual([
       expect.objectContaining({
         role: "user",
-        content: frameMidRunSteering("Use the newer customer totals."),
+        content: "Use the newer customer totals.",
       }),
       expect.objectContaining({
         role: "user",
-        content: frameMidRunSteering("Keep the original date range."),
+        content: "Keep the original date range.",
       }),
     ]);
   });
@@ -675,8 +578,8 @@ describe("Pi connector tool dispatch", () => {
     expect(claimSteering).toHaveBeenNthCalledWith(2, []);
     expect(claimSteering).toHaveBeenNthCalledWith(3, ["steering-1"]);
     expect(fakeAgentState.preparedMessages).toEqual([
-      expect.objectContaining({ content: frameMidRunSteering("First boundary context.") }),
-      expect.objectContaining({ content: frameMidRunSteering("Next boundary context.") }),
+      expect.objectContaining({ content: "First boundary context." }),
+      expect.objectContaining({ content: "Next boundary context." }),
     ]);
   });
 
@@ -795,7 +698,7 @@ describe("Pi connector tool dispatch", () => {
     expect(fakeAgentState.steeredMessages).toContainEqual({
       role: "user",
       content: [
-        { type: "text", text: frameMidRunSteering("Compare the second image.") },
+        { type: "text", text: "Compare the second image." },
         { type: "image", data: "BAUG", mimeType: "image/png" },
       ],
       timestamp: expect.any(Number),
@@ -2381,308 +2284,5 @@ describe("Pi connector tool dispatch", () => {
       undefined,
       { onShellStillRunning: expect.any(Function) },
     );
-  });
-
-  describe("final-answer guard (patch 0026)", () => {
-    const DANGLING =
-      "Leggiamo la sezione `## 8. Tabella riassuntiva` per integrare i 26 profili.call:default_api:shell{command:ls}";
-    const SUMMARY =
-      "Ho aggiornato 24 profili su 26; mancano Soubre e Van Neck. Scrivi «continua» per proseguire.";
-
-    async function runDangling(overrides: Record<string, unknown> = {}) {
-      fakeAgentState.mode = "dangling-narration";
-      const runtime = new PiAgentRuntime();
-      const events: unknown[] = [];
-      for await (const event of runtime.run(
-        {
-          botId: "b",
-          threadId: "t",
-          runId: `dangling-${Math.random()}`,
-          prompt: "update the dossier",
-          instructions: "Use the destination tool.",
-          history: [],
-          tools: [destinationTool],
-          model: { provider: "test", id: "dispatch-test-model" },
-          executeTool: vi.fn(async () => ({ ok: true })),
-          ...overrides,
-        },
-        {
-          operationId: "dangling",
-          traceId: "dangling",
-          spaceId: "w",
-          userId: "u",
-          signal: new AbortController().signal,
-        },
-      )) {
-        events.push(event);
-      }
-      return events;
-    }
-
-    it("nudges once when the post-tool reply only announces the next step", async () => {
-      fakeAgentState.danglingReplies = [DANGLING, SUMMARY];
-      const events = await runDangling();
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(1);
-      expect(fakeAgentState.followUpMessages[0]).toEqual(
-        expect.objectContaining({
-          role: "user",
-          content: expect.stringContaining("did not call any tool"),
-        }),
-      );
-      const done = events.at(-1) as { type: string; text?: string };
-      expect(done.type).toBe("done");
-      expect(done.text?.endsWith(SUMMARY)).toBe(true);
-    });
-
-    it("does not nudge a concluding answer", async () => {
-      fakeAgentState.danglingReplies = [SUMMARY];
-      const events = await runDangling();
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-      expect(events.at(-1)).toEqual({ type: "done", text: SUMMARY });
-    });
-
-    it("caps nudges per run so a stubborn model cannot loop", async () => {
-      fakeAgentState.danglingReplies = [
-        "Let me read the file next.",
-        "Now I will open section 8:",
-        "Verifico il file.",
-        "Never reached.",
-      ];
-      const events = await runDangling();
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(2);
-      const done = events.at(-1) as { type: string; text?: string };
-      expect(done.text?.endsWith("Verifico il file.")).toBe(true);
-      expect(done.text).not.toContain("Never reached.");
-    });
-
-    it("honors DANGLING_NARRATION_NUDGES=0", async () => {
-      process.env.DANGLING_NARRATION_NUDGES = "0";
-      fakeAgentState.danglingReplies = [DANGLING, SUMMARY];
-      const events = await runDangling();
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-      expect(events.at(-1)).toEqual({ type: "done", text: DANGLING });
-    });
-
-    it("keeps the silence clause for silent-allowed runs", async () => {
-      fakeAgentState.danglingReplies = [DANGLING, SUMMARY];
-      await runDangling({ allowSilentEmpty: true });
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(1);
-      expect(fakeAgentState.followUpMessages[0]).toEqual(
-        expect.objectContaining({ content: expect.stringContaining("stay silent") }),
-      );
-    });
-
-    it("asks for a no-tools summary after the tool budget is exhausted", async () => {
-      process.env.MAX_TOOL_CALLS_PER_TURN = "80";
-      fakeAgentState.mode = "parent-limit";
-      fakeAgentState.wrapUpText = SUMMARY;
-      const executeTool = vi.fn(async () => ({ ok: true }));
-      const runtime = new PiAgentRuntime();
-      const events: unknown[] = [];
-      for await (const event of runtime.run(
-        {
-          botId: "b",
-          threadId: "t",
-          runId: "budget-wrap-up",
-          prompt: "keep going",
-          instructions: "Use shell.",
-          history: [],
-          tools: [shellTool],
-          model: { provider: "test", id: "dispatch-test-model" },
-          executeTool,
-        },
-        {
-          operationId: "wrap",
-          traceId: "wrap",
-          spaceId: "w",
-          userId: "u",
-          signal: new AbortController().signal,
-        },
-      )) {
-        events.push(event);
-      }
-
-      expect(executeTool).toHaveBeenCalledTimes(80);
-      expect(fakeAgentState.wrapUpPrompts).toHaveLength(1);
-      expect(fakeAgentState.wrapUpPrompts[0]).toContain("limit of 80 tool calls");
-      expect(fakeAgentState.wrapUpPrompts[0]).toContain("continua");
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-      expect(events.at(-1)).toEqual({
-        type: "done",
-        text: `${SUMMARY}\n\nI stopped after reaching the limit of 80 tool calls in this turn. Send another message to continue.`,
-      });
-    });
-
-    it("skips the wrap-up call when TOOL_BUDGET_FINAL_SUMMARY=0", async () => {
-      process.env.MAX_TOOL_CALLS_PER_TURN = "80";
-      process.env.TOOL_BUDGET_FINAL_SUMMARY = "0";
-      fakeAgentState.mode = "parent-limit";
-      fakeAgentState.wrapUpText = SUMMARY;
-      const runtime = new PiAgentRuntime();
-      const events: unknown[] = [];
-      for await (const event of runtime.run(
-        {
-          botId: "b",
-          threadId: "t",
-          runId: "budget-no-wrap-up",
-          prompt: "keep going",
-          instructions: "Use shell.",
-          history: [],
-          tools: [shellTool],
-          model: { provider: "test", id: "dispatch-test-model" },
-          executeTool: vi.fn(async () => ({ ok: true })),
-        },
-        {
-          operationId: "nowrap",
-          traceId: "nowrap",
-          spaceId: "w",
-          userId: "u",
-          signal: new AbortController().signal,
-        },
-      )) {
-        events.push(event);
-      }
-
-      expect(fakeAgentState.wrapUpPrompts).toHaveLength(0);
-      expect(events.at(-1)).toEqual({
-        type: "done",
-        text: "I stopped after reaching the limit of 80 tool calls in this turn. Send another message to continue.",
-      });
-    });
-  });
-
-  describe("mid-run steering note (patch 0027)", () => {
-    const STATUS = "Sono a metà: 12 profili su 26 verificati.";
-    const FINAL = "Ho finito: 26 profili verificati, dossier aggiornato.";
-
-    async function runSteer(claimSteering: (seen: string[]) => Promise<unknown[]>) {
-      fakeAgentState.mode = "steer-status";
-      const runtime = new PiAgentRuntime();
-      const events: unknown[] = [];
-      for await (const event of runtime.run(
-        {
-          botId: "b",
-          threadId: "t",
-          runId: `steer-${Math.random()}`,
-          prompt: "verify all profiles",
-          instructions: "Use the destination tool.",
-          history: [],
-          tools: [destinationTool],
-          model: { provider: "test", id: "dispatch-test-model" },
-          executeTool: vi.fn(async () => ({ ok: true })),
-          claimSteering: claimSteering as never,
-        },
-        {
-          operationId: "steer",
-          traceId: "steer",
-          spaceId: "w",
-          userId: "u",
-          signal: new AbortController().signal,
-        },
-      )) {
-        events.push(event);
-      }
-      return events;
-    }
-
-    function midRunOnly() {
-      let calls = 0;
-      return vi.fn(async () => {
-        calls += 1;
-        return calls === 2
-          ? [{ id: "s-1", messageId: "m-1", text: "fammi un riassunto di dove sei" }]
-          : [];
-      });
-    }
-
-    it("frames a mid-run message and keeps the run going after a status reply", async () => {
-      fakeAgentState.danglingReplies = [STATUS, FINAL];
-      const events = await runSteer(midRunOnly());
-
-      expect(fakeAgentState.steeredMessages).toHaveLength(1);
-      const steered = fakeAgentState.steeredMessages[0] as { content: string };
-      expect(steered.content.startsWith(MID_RUN_STEERING_NOTE)).toBe(true);
-      expect(steered.content).toContain("in the user's language");
-      expect(steered.content.endsWith("fammi un riassunto di dove sei")).toBe(true);
-      expect(fakeAgentState.followUpMessages).toHaveLength(1);
-      expect(fakeAgentState.followUpMessages[0]).toEqual(
-        expect.objectContaining({
-          content: expect.stringContaining("the original task is paused"),
-        }),
-      );
-      const done = events.at(-1) as { type: string; text?: string };
-      expect(done.text?.endsWith(FINAL)).toBe(true);
-    });
-
-    it("uses the quick-acked note when a quick reply already answered (patch 0030)", async () => {
-      fakeAgentState.danglingReplies = [STATUS, FINAL];
-      let calls = 0;
-      await runSteer(
-        vi.fn(async () => {
-          calls += 1;
-          return calls === 2
-            ? [
-                {
-                  id: "s-1",
-                  messageId: "m-1",
-                  text: "a che punto sei?",
-                  quickReplyText: "Sono al passo 2 di 4, ti aggiorno a breve.",
-                },
-              ]
-            : [];
-        }),
-      );
-
-      expect(fakeAgentState.steeredMessages).toHaveLength(1);
-      const steered = fakeAgentState.steeredMessages[0] as { content: string };
-      expect(steered.content).toBe(
-        frameQuickAckedSteering("a che punto sei?", "Sono al passo 2 di 4, ti aggiorno a breve."),
-      );
-      expect(steered.content).not.toContain(MID_RUN_STEERING_NOTE);
-      expect(steered.content).toContain("Do not acknowledge the message again");
-      expect(steered.content).toContain("Sono al passo 2 di 4");
-    });
-
-    it("does not frame the steering claimed at run start", async () => {
-      fakeAgentState.danglingReplies = [FINAL];
-      let calls = 0;
-      await runSteer(
-        vi.fn(async () => {
-          calls += 1;
-          return calls === 1 ? [{ id: "s-0", messageId: "m-0", text: "usa fonti primarie" }] : [];
-        }),
-      );
-
-      expect(fakeAgentState.promptInputs[0]).toContain("usa fonti primarie");
-      expect(fakeAgentState.promptInputs[0]).not.toContain(MID_RUN_STEERING_NOTE);
-      expect(fakeAgentState.steeredMessages).toHaveLength(0);
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-    });
-
-    it("STEERING_CONTINUE_NOTE=0 injects verbatim and keeps the old ending", async () => {
-      process.env.STEERING_CONTINUE_NOTE = "0";
-      fakeAgentState.danglingReplies = [STATUS, FINAL];
-      const events = await runSteer(midRunOnly());
-
-      expect(fakeAgentState.steeredMessages[0]).toEqual(
-        expect.objectContaining({ content: "fammi un riassunto di dove sei" }),
-      );
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
-    });
-
-    it("shares the nudge cap with the dangling-narration guard", async () => {
-      process.env.DANGLING_NARRATION_NUDGES = "0";
-      fakeAgentState.danglingReplies = [STATUS, FINAL];
-      const events = await runSteer(midRunOnly());
-
-      expect(fakeAgentState.followUpMessages).toHaveLength(0);
-      expect(events.at(-1)).toEqual({ type: "done", text: STATUS });
-    });
   });
 });

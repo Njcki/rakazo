@@ -36,8 +36,8 @@ import {
   createArtifactStore,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
-  createConnectorStack,
   createCountingWebProvider,
+  createConnectorStack,
   createIdleComputerSweeper,
   createJobReconciler,
   createMessagingContextLoader,
@@ -157,6 +157,7 @@ import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
 import { monitoringRoutes } from "./monitoring.js";
 import { mountApiRequestBodyLimits } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
+import { loadPublicShare } from "./thread-shares.js";
 import { mountScreenTarget } from "./screen-proxy.js";
 import { createAuthResponseAudit } from "./security-audit.js";
 import { createSpeechSummarizer } from "./speech-summary.js";
@@ -787,6 +788,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.route("/", cspReportRoutes(requestClientIp));
   mountApiRequestBodyLimits(app, env.maxUploadSizeBytes);
   mountScreenTarget(app, prisma, env.screenProxySecret);
+  
   // Public, token-scoped share views: no session required. The token is the
   // only credential, and the snapshot is frozen at share-creation time.
   app.get("/api/share/:token", async (c) => {

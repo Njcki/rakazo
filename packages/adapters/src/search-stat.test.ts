@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { recordSearchStat } from "./executor.js";
+import { recordSearchStat } from "./search-stats.js";
 
 describe("recordSearchStat", () => {
   it("increments the counter for the service that answered", async () => {

@@ -9,7 +9,7 @@ import {
   isCloudflareModelProvider,
 } from "./cloudflare-ai-gateway.js";
 import { ThreadMessageSchema } from "./events.js";
-import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { Id, IsoDate, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import {
   McpHeadersSchema,
   McpRemoteEndpointSchema,
@@ -22,11 +22,6 @@ import { NavLinkSchema } from "./nav-links.js";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "./routine-watch.js";
 import { RunTriggerSchema } from "./runs.js";
 import { SettingsScopeSchema } from "./settings-scope.js";
-
-export const VoiceCallThinkingSchema = z.object({
-  thinkingLevel: ThinkingLevelSchema.nullable(),
-});
-export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
 export type ComputerMode = z.infer<typeof ComputerModeSchema>;
@@ -69,6 +64,12 @@ export const ThinkingLevelSchema = z.enum([
   "max",
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+
+export const VoiceCallThinkingSchema = z.object({
+  thinkingLevel: ThinkingLevelSchema.nullable(),
+});
+export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
+
 
 export { AGENT_SECRET_NAME_PATTERN };
 
@@ -122,6 +123,7 @@ export const BotSchema = z.object({
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
+  voiceThinkingLevel: ThinkingLevelSchema.nullable(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   crossSpaceCommunication: z.boolean().optional(),
@@ -1730,3 +1732,89 @@ export const ExportManifestSchema = z.object({
   history: z.array(ThreadMessageSchema),
 });
 export type ExportManifest = z.infer<typeof ExportManifestSchema>;
+
+// --- Rakazo NK: plan / share / search stats ---
+export const AgentPlanStatusSchema = z.enum(["active", "completed", "cancelled"]);
+export type AgentPlanStatus = z.infer<typeof AgentPlanStatusSchema>;
+export const AgentPlanStepStatusSchema = z.enum([
+  "todo",
+  "in_progress",
+  "done",
+  "blocked",
+  "skipped",
+]);
+export type AgentPlanStepStatus = z.infer<typeof AgentPlanStepStatusSchema>;
+export const AgentPlanStepSchema = z.object({
+  id: Id,
+  index: z.number().int().positive(),
+  title: z.string(),
+  status: AgentPlanStepStatusSchema,
+  notes: z.string(),
+  blockedBy: z.array(z.number().int().positive()),
+  updatedAt: z.string(),
+});
+export type AgentPlanStep = z.infer<typeof AgentPlanStepSchema>;
+export const AgentPlanSchema = z.object({
+  id: Id,
+  botId: Id,
+  title: z.string(),
+  status: AgentPlanStatusSchema,
+  summary: z.string(),
+  progress: z.object({
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    percent: z.number().int().nonnegative(),
+  }),
+  nextStep: AgentPlanStepSchema.nullable(),
+  steps: z.array(AgentPlanStepSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  guidance: z.string().optional(),
+});
+export type AgentPlan = z.infer<typeof AgentPlanSchema>;
+
+/** A share the owner created for a 1:1 bot thread, as the owner sees it. */
+export const ThreadShareSchema = z.object({
+  id: Id,
+  token: z.string(),
+  threadId: Id,
+  title: z.string().nullable(),
+  messageCount: z.number().int().nonnegative(),
+  createdAt: IsoDate,
+  expiresAt: IsoDate.nullable(),
+  revokedAt: IsoDate.nullable(),
+  viewCount: z.number().int().nonnegative(),
+});
+export type ThreadShare = z.infer<typeof ThreadShareSchema>;
+
+/** The only block kinds that leave the instance in a public share. */
+export const SharedMessageBlock = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({ kind: z.literal("image"), artifactId: Id, mimeType: z.string(), name: z.string() }),
+]);
+export type SharedMessageBlock = z.infer<typeof SharedMessageBlock>;
+
+export const SharedMessageSchema = z.object({
+  role: z.string(),
+  authorName: z.string(),
+  blocks: z.array(SharedMessageBlock),
+  createdAt: IsoDate,
+});
+export type SharedMessage = z.infer<typeof SharedMessageSchema>;
+
+/** What an unauthenticated viewer receives for a share token. */
+export const ThreadSharePublicSchema = z.object({
+  title: z.string().nullable(),
+  botName: z.string(),
+  sharedAt: IsoDate,
+  messages: z.array(SharedMessageSchema),
+});
+export type ThreadSharePublic = z.infer<typeof ThreadSharePublicSchema>;
+export const SearchStatSchema = z.object({
+  service: z.string(),
+  count: z.number().int().min(0),
+});
+export const SearchStatListSchema = z.array(SearchStatSchema);
+export type SearchStat = z.infer<typeof SearchStatSchema>;
+export type SearchStatList = z.infer<typeof SearchStatListSchema>;
+

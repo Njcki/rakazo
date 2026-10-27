@@ -11,6 +11,7 @@ import { publishMessage } from "./run-messages.js";
 import {
   canPublishDurableProgress,
   flushProgress,
+  markDurableProgress,
   publishMidTurnNarration,
 } from "./run-progress.js";
 import type { ToolHandlers } from "./run-tool-gate.js";
@@ -93,6 +94,7 @@ export const messagingTools: ToolHandlers = {
     );
     reply.midTurnUserTexts.push(text);
     reply.publishedMidTurnUserMessage = true;
+    markDurableProgress(reply);
     return call.finish(
       truncated
         ? {

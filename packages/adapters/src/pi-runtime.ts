@@ -74,6 +74,22 @@ import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
 import {
+  danglingNarrationNudges,
+  danglingNarrationPrompt,
+  frameMidRunSteering,
+  looksLikeDanglingNarration,
+  steeringContinueNoteEnabled,
+  steeringContinuePrompt,
+  toolBudgetFinalSummaryEnabled,
+  toolBudgetWrapUpPrompt,
+} from "./final-answer-guard.js";
+import {
+  ProgressCadenceTracker,
+  progressCadenceConfig,
+  progressNudgeContinuePrompt,
+} from "./progress-cadence.js";
+import { frameQuickAckedSteering } from "./quick-reply.js";
+import {
   restoreTurnCheckpoint,
   serializeTurnCheckpoint,
   unresolvedTurnCheckpointCalls,
@@ -425,6 +441,16 @@ export class PiAgentRuntime implements AgentRuntime {
             host.apiKey = target.credentials?.accessToken ?? target.apiKey;
           },
         };
+        // Patch 0027/0028: mid-run steering note + progress cadence nudges.
+        const steeringNote = steeringContinueNoteEnabled();
+        let midRunSteeringPending = false;
+        const cadence = new ProgressCadenceTracker(progressCadenceConfig(), Date.now());
+        const cadenceEnabled =
+          !request.allowSilentEmpty && tools.some((tool) => tool.name === "message_user");
+        let danglingNudges = 0;
+        const maxDanglingNudges = danglingNarrationNudges();
+        let budgetWrapUp = false;
+
         agent = new Agent({
           sessionId: conversationSessionId(request.threadId, request.botId),
           steeringMode: "all",
@@ -452,18 +478,41 @@ export class PiAgentRuntime implements AgentRuntime {
             );
           },
           prepareNextTurnWithContext: async () => {
-            if (!request.claimSteering) return undefined;
-            const steering = await request.claimSteering([...seenSteeringIds]);
-            if (steering.length === 0) return undefined;
+            const steering = request.claimSteering
+              ? await request.claimSteering([...seenSteeringIds])
+              : [];
+            if (steering.length === 0) {
+              // Patch 0028: no user message waiting; ask for a progress line when silent too long.
+              if (
+                cadenceEnabled &&
+                !budgetWrapUp &&
+                !host.pausePending &&
+                !host.toolCallBudget.exceeded &&
+                danglingNudges < maxDanglingNudges
+              ) {
+                const nudge = cadence.takeNudge(Date.now());
+                if (nudge) {
+                  agent.steer({ role: "user", content: nudge, timestamp: Date.now() });
+                }
+              }
+              return undefined;
+            }
+            cadence.onSteering(Date.now());
             seenSteeringIds.push(...steering.map((item) => item.id));
             for (const item of steering) representedHistoryIds.add(item.messageId);
             if (steering.some((item) => item.images?.length && !item.imageFileFallback))
               hasCurrentImages = true;
+            if (steeringNote) midRunSteeringPending = true;
             for (const item of steering) {
               const images = toPiImages(item.images);
+              const text = item.quickReplyText
+                ? frameQuickAckedSteering(item.text, item.quickReplyText)
+                : steeringNote
+                  ? frameMidRunSteering(item.text)
+                  : item.text;
               agent.steer({
                 role: "user",
-                content: images.length ? [{ type: "text", text: item.text }, ...images] : item.text,
+                content: images.length ? [{ type: "text", text }, ...images] : text,
                 timestamp: Date.now(),
               });
             }
@@ -585,6 +634,7 @@ export class PiAgentRuntime implements AgentRuntime {
             finishedCalls.delete(event.toolCallId);
             if (host.toolCallBudget.exceeded) return;
             toolCalls += 1;
+            cadence.onToolStart(event.toolName, Date.now());
             // Live activity feedback: without this the thread shows a bare
             // "working…" for the whole tool call with nothing actionable.
             toolActivityShowing = true;
@@ -630,16 +680,51 @@ export class PiAgentRuntime implements AgentRuntime {
               event.message.role === "assistant" ? assistantText(event.message) : "";
             const hasToolCalls = messageHasToolCall(event.message);
             const hasToolResults = event.toolResults.length > 0;
+            // Patch 0028: a text-only reply right after a cadence nudge is a status line.
+            const answeredCadenceNudge = cadence.pending && !hasToolCalls;
+            if (messageText.trim()) cadence.onVisibleText(Date.now());
+            else if (hasToolCalls) cadence.onToolTurnEnd();
+            if (budgetWrapUp && hasToolCalls) {
+              agent.abort();
+              return;
+            }
 
             // Text in a turn that also contains a tool call is narration, not a final
             // response. Keep the run alive until a later text-only turn answers the user.
+            if (hasToolCalls) midRunSteeringPending = false;
             if (hasToolCalls && hasToolResults && !host.pausePending) {
               toolWorkPendingFinal = true;
               silentToolContinuations = 0;
               streamedBeforePendingFinal = streamed.length;
             } else if (toolWorkPendingFinal && !hasToolCalls && !hasToolResults) {
               const streamedFinal = streamed.slice(streamedBeforePendingFinal).trim();
-              if (messageText.trim() || streamedFinal) {
+              const candidateFinal = messageText.trim() || streamedFinal;
+              const answeredMidRunSteering = midRunSteeringPending;
+              midRunSteeringPending = false;
+              if (
+                candidateFinal &&
+                !budgetWrapUp &&
+                !host.pausePending &&
+                !host.toolCallBudget.exceeded &&
+                danglingNudges < maxDanglingNudges &&
+                !providerFailureText(event.message) &&
+                (answeredMidRunSteering ||
+                  answeredCadenceNudge ||
+                  looksLikeDanglingNarration(candidateFinal))
+              ) {
+                danglingNudges += 1;
+                silentToolContinuations = 0;
+                streamedBeforePendingFinal = streamed.length;
+                agent.followUp({
+                  role: "user",
+                  content: answeredMidRunSteering
+                    ? steeringContinuePrompt(request.allowSilentEmpty)
+                    : answeredCadenceNudge
+                      ? progressNudgeContinuePrompt(request.allowSilentEmpty)
+                      : danglingNarrationPrompt(request.allowSilentEmpty),
+                  timestamp: Date.now(),
+                });
+              } else if (candidateFinal) {
                 toolWorkPendingFinal = false;
                 silentToolContinuations = 0;
                 // A provider can put the answer only on the completed message after
@@ -653,6 +738,7 @@ export class PiAgentRuntime implements AgentRuntime {
                 // another model turn that would hide the error.
                 !providerFailureText(event.message) &&
                 !host.pausePending &&
+                !budgetWrapUp &&
                 silentToolContinuations < MAX_SILENT_TOOL_CONTINUATIONS
               ) {
                 silentToolContinuations += 1;
@@ -859,6 +945,34 @@ export class PiAgentRuntime implements AgentRuntime {
         // Budget abort stops the agent underneath the model, which leaves
         // errorMessage set. Treat that as a soft stop so the turn still ends
         // with a durable assistant message instead of a failed run.
+        // Patch 0026: after the tool budget aborts the turn, ask once more with
+        // no tools so the user gets a summary instead of only the stop notice.
+        if (
+          host.toolCallBudget.exceeded &&
+          !signal.aborted &&
+          !host.pausePending &&
+          toolBudgetFinalSummaryEnabled()
+        ) {
+          budgetWrapUp = true;
+          toolWorkPendingFinal = true;
+          streamedBeforePendingFinal = streamed.length;
+          signal.addEventListener("abort", onAbort);
+          try {
+            agent.state.tools = [];
+            await agent.prompt(
+              toolBudgetWrapUpPrompt(host.toolCallBudget.limit, request.allowSilentEmpty),
+            );
+            await agent.waitForIdle();
+          } catch (wrapUpError) {
+            getLogger().warn("tool budget wrap-up call failed", {
+              runId: request.runId,
+              error: wrapUpError,
+            });
+          } finally {
+            signal.removeEventListener("abort", onAbort);
+          }
+        }
+
         const budgetExceeded = host.toolCallBudget.exceeded;
         const terminalMessage = agent.state.messages.at(-1);
         // pi-agent-core records ordinary provider failures as an empty assistant

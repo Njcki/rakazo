@@ -295,6 +295,16 @@ function reportAllowlistDrift(
   );
 }
 
+
+/** Build an Authorization value GitHub MCP and similar accept (`Bearer …`). */
+export function mcpBearerAuthorization(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  const match = /^(?:Bearer|token)\s+(\S.*)$/i.exec(trimmed);
+  if (match) return `Bearer ${match[1]!.trim()}`;
+  return `Bearer ${trimmed}`;
+}
+
 /** Redact complete credential documents and values a process may quote separately. */
 function credentialContentSecrets(content: string): string[] {
   const values = content.length >= 8 ? [content] : [];
@@ -1123,19 +1133,21 @@ export class McpConnector implements ConnectorProvider {
         const localHttp =
           endpoint.protocol === "http:" && isLocalhostOrLoopbackIp(endpoint.hostname);
         const allowPrivateEndpoint = this.options.allowPrivateEndpoint === true;
-        const authProvider =
-          !localHttp && this.oauth
-            ? await this.oauth.providerFor(server, context, loaded, onPersisted)
-            : undefined;
-        const staticToken = material.secret
-          ? material.secret.startsWith("Bearer ")
-            ? material.secret
-            : `Bearer ${material.secret}`
-          : undefined;
+        // PAT / static Authorization wins over OAuth. Providers like GitHub MCP
+        // reject Dynamic Client Registration and answer 400 (not 401) when the
+        // Authorization header is missing, so an attached OAuth provider never
+        // starts and the probe just fails. Prefer the stored access token.
+        const headerAuth =
+          material.headers?.Authorization ?? material.headers?.authorization;
+        const staticToken = mcpBearerAuthorization(material.secret) ?? mcpBearerAuthorization(headerAuth);
         const headers = {
           ...(material.headers ?? {}),
           ...(staticToken ? { Authorization: staticToken } : {}),
         };
+        const authProvider =
+          !localHttp && this.oauth && !staticToken
+            ? await this.oauth.providerFor(server, context, loaded, onPersisted)
+            : undefined;
         await session.connectRemote({
           url: server.endpoint,
           urlPolicy: {

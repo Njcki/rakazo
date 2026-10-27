@@ -11,6 +11,7 @@ import { errorText } from "../../lib/user-error";
 export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId?: string }) {
   const { t } = useLingui();
   const [endpoint, setEndpoint] = useState("");
+  const [accessToken, setAccessToken] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<IntegrationCatalogResult[]>([]);
   const [searched, setSearched] = useState(false);
@@ -35,7 +36,14 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
     try {
       await action();
     } catch (err) {
-      setError(errorText(err, t`Could not connect`));
+      const message = errorText(err, t`Could not connect`);
+      const hint =
+        /dynamic.?client|registration|oauth|authorization.?header|invalid.?redirect/i.test(
+          message,
+        )
+          ? t` If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again.`
+          : "";
+      setError(`${message}${hint}`);
     } finally {
       setBusy(false);
     }
@@ -43,6 +51,7 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
 
   async function connect(name: string, url: string) {
     await run(async () => {
+      const token = accessToken.trim();
       const existing = (await rpc.mcp.servers.list()).find((server) => server.endpoint === url);
       const server =
         existing ??
@@ -51,11 +60,22 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
           name,
           transport: "streamable_http",
           endpoint: url,
+          ...(token ? { secret: token } : {}),
         }));
-      const result = await connectMcpOauth(server.id);
-      if (result === "cancelled") return;
+      if (token) {
+        if (existing) {
+          await rpc.mcp.servers.update({
+            id: existing.id,
+            secret: token,
+          });
+        }
+      } else {
+        const result = await connectMcpOauth(server.id);
+        if (result === "cancelled") return;
+      }
       if (botId) await rpc.mcp.assignments.approve({ botId, serverId: server.id });
       setConnected((current) => [...current, url]);
+      setAccessToken("");
     });
   }
 
@@ -105,6 +125,7 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
           <Trans>No remote MCP servers found</Trans>
         </p>
       ) : null}
+      <FieldAccessToken accessToken={accessToken} setAccessToken={setAccessToken} />
       <Disclosure className="text-sm text-muted-foreground" summary={<Trans>Add server URL</Trans>}>
         <div className="mt-3 space-y-3">
           <Input
@@ -131,6 +152,34 @@ export function IntegrationSetup({ onDone, botId }: { onDone?: () => void; botId
           <Trans>Continue</Trans>
         </Button>
       ) : null}
+    </div>
+  );
+}
+
+function FieldAccessToken({
+  accessToken,
+  setAccessToken,
+}: {
+  accessToken: string;
+  setAccessToken: (value: string) => void;
+}) {
+  const { t } = useLingui();
+  return (
+    <div className="space-y-2">
+      <Input
+        aria-label={t`Access token (optional)`}
+        type="password"
+        autoComplete="new-password"
+        value={accessToken}
+        onChange={(event) => setAccessToken(event.target.value)}
+        placeholder={t`PAT or Bearer token (GitHub MCP, etc.)`}
+      />
+      <p className="text-xs text-muted-foreground">
+        <Trans>
+          Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal
+          access token here instead of Connect OAuth.
+        </Trans>
+      </p>
     </div>
   );
 }

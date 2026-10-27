@@ -541,25 +541,33 @@ export function McpServersOverlay({
                     />
                   </Field>
                 )}
+                <Field>
+                  <FieldLabel htmlFor="mcp-secret">
+                    <Trans>Access token (optional)</Trans>
+                  </FieldLabel>
+                  <Input
+                    id="mcp-secret"
+                    type="password"
+                    autoComplete="new-password"
+                    value={secret}
+                    onChange={(e) => setSecret(e.target.value)}
+                    placeholder={t`PAT or Bearer token — stored encrypted`}
+                  />
+                  {transport !== "stdio" ? (
+                    <p className="text-xs text-muted-foreground">
+                      <Trans>
+                        For GitHub MCP paste a personal access token here. Bearer is added
+                        automatically — skip Connect OAuth on self-hosted installs.
+                      </Trans>
+                    </p>
+                  ) : null}
+                </Field>
                 <Disclosure
                   className="group rounded-xl border border-border"
                   summary={<Trans>Advanced</Trans>}
                   summaryClassName="w-full flex items-center justify-between px-3 py-2.5 text-sm text-foreground"
                 >
                   <div className="space-y-4 border-t border-border p-3">
-                    <Field>
-                      <FieldLabel htmlFor="mcp-secret">
-                        <Trans>Access token (optional)</Trans>
-                      </FieldLabel>
-                      <Input
-                        id="mcp-secret"
-                        type="password"
-                        autoComplete="new-password"
-                        value={secret}
-                        onChange={(e) => setSecret(e.target.value)}
-                        placeholder={t`Stored encrypted`}
-                      />
-                    </Field>
                     {transport === "stdio" ? (
                       <Field>
                         <FieldTitle>

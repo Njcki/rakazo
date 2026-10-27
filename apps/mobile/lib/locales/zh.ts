@@ -584,6 +584,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Replace API key": "替换 API 密钥",
   "Replace key": "替换密钥",
   Reset: "重置",
+  Statistics: "统计",
+  "Could not reset the statistics": "无法重置统计",
   "Reset your password": "重置密码",
   "Stop computer": "停止电脑",
   "Could not stop computer": "无法停止电脑",

@@ -37,7 +37,20 @@ import {
   CollapsibleTrigger,
 } from "@rakazo/ui-web/components/ui/collapsible";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Download, Settings, X } from "lucide-react";
+import {
+  AlignLeft,
+  Bell,
+  Brain,
+  ChevronDown,
+  Download,
+  KeyRound,
+  Monitor,
+  Settings,
+  SlidersHorizontal,
+  Volume2,
+  Wrench,
+  X,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
@@ -50,6 +63,24 @@ import { errorText } from "../../lib/user-error";
 import { AgentImportUndo } from "./agent-import-undo";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
 import { ChatModelPicker } from "./chat-model-picker";
+
+/** NK hybrid (0016/0018): darker advanced cards + white idle fields on light theme. */
+const NK_ADVANCED_CARD_CLASS =
+  "rounded-xl border border-border/60 bg-muted/60 p-4 space-y-3 [&>*]:mt-0 " +
+  "[&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white " +
+  "[&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 " +
+  "[&_[data-slot=input]]:placeholder:text-muted-foreground/45 " +
+  "[&_textarea]:placeholder:text-muted-foreground/45 " +
+  "dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background " +
+  "dark:[&_textarea]:bg-background";
+
+const NK_IDLE_FIELD_ROOT_CLASS =
+  "[&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white " +
+  "[&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 " +
+  "[&_[data-slot=input]]:placeholder:text-muted-foreground/45 " +
+  "[&_textarea]:placeholder:text-muted-foreground/45 " +
+  "dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background " +
+  "dark:[&_textarea]:bg-background";
 
 const ScratchpadSection = lazyComponent(() =>
   import("../ScratchpadSection").then((module) => module.ScratchpadSection),
@@ -492,7 +523,7 @@ export function BotSettings({
   }
 
   return (
-    <div data-testid="bot-settings">
+    <div data-testid="bot-settings" className={NK_IDLE_FIELD_ROOT_CLASS}>
       <div
         data-testid="bot-profile-header"
         className="flex flex-col items-center pb-6 pt-2 text-center"
@@ -535,11 +566,14 @@ export function BotSettings({
         />
       </div>
       <InstructionSettings key={bot.id} bot={bot} />
-      <section className="mt-6">
+      <section className="mt-6 border-t border-border/60 pt-5">
         <h3 className="mb-2 text-xs font-medium text-muted-foreground">
-          <Trans>Notifications</Trans>
+          <span className="flex items-center gap-2">
+            <Bell size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Notifications</Trans>
+          </span>
         </h3>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 p-4">
+        <div className={`flex items-center justify-between gap-3 ${NK_ADVANCED_CARD_CLASS}`}>
           <div>
             <label
               htmlFor={`${ids}-notify-finish`}
@@ -579,7 +613,10 @@ export function BotSettings({
       >
         <h3 className="mb-0 text-xs font-medium text-muted-foreground">
           <CollapsibleTrigger className="group flex w-full cursor-pointer min-h-11 items-center justify-between gap-2 text-xs font-medium text-muted-foreground text-start outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
-            <Trans>Advanced</Trans>
+            <span className="flex items-center gap-2">
+              <SlidersHorizontal size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+              <Trans>Advanced</Trans>
+            </span>
             <ChevronDown
               aria-hidden="true"
               className="size-4 text-muted-foreground transition-transform -rotate-90 group-aria-expanded:rotate-0 motion-reduce:transition-none"
@@ -590,7 +627,10 @@ export function BotSettings({
           <div className="space-y-6 pt-6">
             <div ref={modelRef}>
               <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground pe-1">
-                <Trans>Model</Trans>
+                <span className="flex items-center gap-2">
+                  <Brain size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+                  <Trans>Model</Trans>
+                </span>
                 {onOpenConnections ? (
                   <Button
                     variant="ghost"
@@ -602,7 +642,7 @@ export function BotSettings({
                   </Button>
                 ) : null}
               </div>
-              <div className="rounded-xl bg-muted/50 p-4 space-y-3">
+              <div className={NK_ADVANCED_CARD_CLASS}>
                 <div className="flex min-h-11 items-center justify-between gap-3">
                   <label htmlFor={`${ids}-model`} className="sr-only">
                     <Trans>Model</Trans>
@@ -644,7 +684,7 @@ export function BotSettings({
                 ) : null}
               </div>
             </div>
-            <SettingsGroup label={t`Computer`} plain>
+            <SettingsGroup label={t`Computer`} plain icon={<Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}>
               <ComputerModePicker value={computerMode} onChange={setComputerMode} />
               {memoryProviderConfigured ? (
                 <div className="mt-4 text-sm text-foreground">
@@ -674,7 +714,7 @@ export function BotSettings({
                 </div>
               ) : null}
             </SettingsGroup>
-            <SettingsGroup label={t`Voice`}>
+            <SettingsGroup label={t`Voice`} icon={<Volume2 size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />}>
               <label
                 htmlFor={`${ids}-auto-speak`}
                 className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm text-foreground"
@@ -710,7 +750,7 @@ export function BotSettings({
                 </label>
               ) : null}
             </SettingsGroup>
-            <SettingsGroup label={t`Permissions`}>
+            <SettingsGroup label={t`Permissions`} icon={<KeyRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />}>
               <div className="flex min-h-11 items-center justify-between gap-3 text-sm">
                 <label htmlFor={`${ids}-cross-space`} className={rowLabelClass}>
                   <Trans>Allow cross-space bot communication</Trans>
@@ -740,7 +780,7 @@ export function BotSettings({
                 />
               </div>
             </SettingsGroup>
-            <SettingsGroup label={t`Description`} plain>
+            <SettingsGroup label={t`Description`} plain icon={<AlignLeft size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}>
               <Textarea
                 id={`${ids}-description`}
                 aria-label={t`Description`}
@@ -753,7 +793,7 @@ export function BotSettings({
                 className="min-h-16 resize-none field-sizing-content"
               />
             </SettingsGroup>
-            <SettingsGroup label={t`Tools`} plain>
+            <SettingsGroup label={t`Tools`} plain icon={<Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}>
               <section data-testid="bot-settings-tools">
                 <div className="space-y-2 [&>*]:mt-0">
                   <div>
@@ -804,7 +844,7 @@ export function BotSettings({
                 <KnowledgeSection botId={bot.id} skillsOnly />
               </Suspense>
             </ErrorBoundary>
-            <div className="overflow-hidden rounded-xl bg-muted/50 px-4">
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/60 px-4">
               <button
                 type="button"
                 className="flex min-h-12 w-full items-center justify-between text-sm"
@@ -827,21 +867,23 @@ export function BotSettings({
       </Collapsible>
       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
       {dirty ? (
-        <Button
-          className="sticky bottom-0 mt-5 w-full"
-          disabled={saving}
-          onClick={() => {
-            void enqueueSave({
-              name,
-              title,
-              description,
-              color,
-              notifyOnFinish,
-            });
-          }}
-        >
-          <Trans>Save</Trans>
-        </Button>
+        <div className="sticky bottom-0 z-10 -mx-5 mt-6 border-t border-border/70 bg-background/95 px-5 py-3 backdrop-blur">
+          <Button
+            className="w-full"
+            disabled={saving}
+            onClick={() => {
+              void enqueueSave({
+                name,
+                title,
+                description,
+                color,
+                notifyOnFinish,
+              });
+            }}
+          >
+            <Trans>Save</Trans>
+          </Button>
+        </div>
       ) : null}
     </div>
   );
@@ -928,16 +970,27 @@ function InlineProfileField({
 function SettingsGroup({
   label,
   plain = false,
+  icon,
   children,
 }: {
   label: string;
   plain?: boolean;
+  icon?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section>
-      <h3 className="mb-2 text-xs font-medium text-muted-foreground">{label}</h3>
-      <div className={`space-y-3 [&>*]:mt-0 ${plain ? "" : "rounded-xl bg-muted/50 p-4"}`}>
+      <h3 className="mb-2 text-xs font-medium text-muted-foreground">
+        {icon ? (
+          <span className="flex items-center gap-2">
+            {icon}
+            {label}
+          </span>
+        ) : (
+          label
+        )}
+      </h3>
+      <div className={plain ? "space-y-3 [&>*]:mt-0" : NK_ADVANCED_CARD_CLASS}>
         {children}
       </div>
     </section>

@@ -3,7 +3,7 @@ import type { ScratchpadItem } from "@rakazo/contracts";
 import { fetchFresh, writeSaved } from "@rakazo/core/query";
 import { Button, Checkbox, Input } from "@rakazo/ui-web";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { NotebookPen, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useSpaceQueries } from "../lib/query";
 import { useSpaceRpc } from "../lib/space-rpc";
@@ -100,7 +100,10 @@ export function ScratchpadSection({ botId }: { botId: string }) {
   return (
     <div className="mt-6" data-testid="bot-scratchpad">
       <h3 className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground pe-1">
-        <Trans>Open work</Trans>
+        <span className="flex items-center gap-2">
+          <NotebookPen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Open work</Trans>
+        </span>
         <Button
           variant="ghost"
           size="icon-xs"

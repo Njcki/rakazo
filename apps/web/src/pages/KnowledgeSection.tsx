@@ -6,7 +6,7 @@ import { fetchFresh, writeSaved } from "@rakazo/core/query";
 import { Badge, Button, Skeleton, Textarea } from "@rakazo/ui-web";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@rakazo/ui-web/components/ui/tooltip";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Plus } from "lucide-react";
+import { BookOpen, Download, Plus, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { SettingsSectionHeading } from "../components/SettingsSectionHeading";
 import { downloadArtifactBytes } from "../lib/artifact-open";
@@ -39,7 +39,10 @@ export function KnowledgeSection({
     return (
       <section data-testid="bot-knowledge">
         <h3 className="mb-2 text-xs font-medium text-muted-foreground">
-          <Trans>Skills</Trans>
+          <span className="flex items-center gap-2">
+            <Sparkles size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Skills</Trans>
+          </span>
         </h3>
         <div className="rounded-xl bg-muted/50 p-4">
           <AgentSkills />
@@ -200,7 +203,10 @@ function MemoryDocumentList({
     <section className={compact ? "mt-6" : undefined}>
       {compact ? (
         <h3 className="mb-2 text-xs font-medium text-muted-foreground">
-          <Trans>Memory</Trans>
+          <span className="flex items-center gap-2">
+            <BookOpen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Memory</Trans>
+          </span>
         </h3>
       ) : null}
       <div data-testid={testId} className={compact ? "rounded-xl bg-muted/50 p-4" : undefined}>

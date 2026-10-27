@@ -1,7 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import type { Bot, Group, ThreadSnapshot } from "@rakazo/contracts";
 import { BotAvatar, Button, GroupAvatar } from "@rakazo/ui-web";
-import { Menu, Monitor, Phone } from "lucide-react";
+import { Menu, Monitor, Phone, Share2 } from "lucide-react";
 import { IconTooltip } from "../../components/IconTooltip";
 
 /** The floating header over the transcript: navigation, the chat's name, call and computer. */
@@ -17,6 +17,7 @@ export function ChatHeader({
   onOpenChatSettings,
   onCall,
   onToggleComputer,
+  onShare,
 }: {
   inGroup: boolean;
   active: Bot | undefined;
@@ -29,6 +30,7 @@ export function ChatHeader({
   onOpenChatSettings: () => void;
   onCall: (bot: Bot) => void;
   onToggleComputer: (bot: Bot) => void;
+  onShare?: () => void;
 }) {
   const { t } = useLingui();
   return (
@@ -76,6 +78,20 @@ export function ChatHeader({
               className="app-no-drag"
             >
               <Phone strokeWidth={1.6} className="size-[17px]" />
+            </Button>
+          </IconTooltip>
+        ) : null}
+        {!inGroup && active && onShare ? (
+          <IconTooltip label={t`Share conversation`}>
+            <Button
+              variant="floating"
+              size="icon-lg"
+              data-testid="share-thread-button"
+              aria-label={t`Share conversation`}
+              onClick={onShare}
+              className="app-no-drag"
+            >
+              <Share2 strokeWidth={1.6} className="size-[17px]" />
             </Button>
           </IconTooltip>
         ) : null}

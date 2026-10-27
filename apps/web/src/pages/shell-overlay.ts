@@ -8,6 +8,7 @@ const SETTINGS_SECTIONS = [
   "vault",
   "messaging",
   "usage",
+  "stats",
   "computer",
   "billing",
   "updates",

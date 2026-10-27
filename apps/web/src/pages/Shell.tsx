@@ -68,6 +68,7 @@ import { HostComputerPrompt } from "./HostComputerPrompt";
 import { ArchivedChats } from "./shell/archived-chats";
 import { ChatContextMenu } from "./shell/chat-context-menu";
 import { ChatHeader } from "./shell/chat-header";
+import { ShareThreadDialog } from "./shell/share-thread-dialog";
 import { FALLBACK_BOT_COLOR } from "./shell/chat-shared";
 import { Composer } from "./shell/composer";
 import { ComputerOverlay } from "./shell/computer-overlay";
@@ -199,6 +200,7 @@ function SpaceShell() {
     void queryClient.invalidateQueries({ queryKey: queries.agentSkills.list.queryKey() });
   }, [queries]);
   const [teachBusy, setTeachBusy] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const messagingStatus = useQuery({
     ...queries.messaging.status.queryOptions(),
     enabled: Boolean(session.data?.user),
@@ -849,6 +851,7 @@ function SpaceShell() {
                 void refreshThread(bot.id).catch(() => undefined);
               }
             }}
+            onShare={active && !inGroup ? () => setShareDialogOpen(true) : undefined}
           />
           {!active && !activeGroup && initialBotsLoaded ? (
             <div className="grid flex-1 place-items-center">
@@ -1161,6 +1164,14 @@ function SpaceShell() {
           peerBot={resolveTranscriptBot}
         />
       </Suspense>
+
+      {shareDialogOpen && active && !inGroup ? (
+        <ShareThreadDialog
+          botId={active.id}
+          botName={active.name}
+          onClose={() => setShareDialogOpen(false)}
+        />
+      ) : null}
 
       {computerOpen && computerBot ? (
         <ComputerOverlay

@@ -47,6 +47,8 @@ import {
   Monitor,
   Settings,
   SlidersHorizontal,
+  Tag,
+  UserRound,
   Volume2,
   Wrench,
   X,
@@ -540,32 +542,47 @@ export function BotSettings({
             }}
           />
         </div>
-        <InlineProfileField
-          label={t`Name`}
-          editLabel={t`Edit name`}
+      </div>
+      <label htmlFor={`${ids}-name`} className="mt-2 block text-[13.5px] text-muted-foreground/80">
+        <span className="flex items-center gap-2">
+          <UserRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Name</Trans>
+        </span>
+        <Input
+          id={`${ids}-name`}
+          data-testid="bot-settings-name"
           value={name}
           maxLength={BOT_NAME_MAX_LENGTH}
-          className="text-xl font-semibold"
-          onCommit={(value) => {
-            if (!value.trim()) return;
-            setName(value.trim());
-            void enqueueSave({ name: value });
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            if (!name.trim()) {
+              setName(savedNameRef.current);
+              return;
+            }
+            void enqueueSave({ name });
           }}
+          className="mt-1.5"
         />
-        <InlineProfileField
-          label={t`Title`}
-          editLabel={t`Edit label`}
-          placeholder={t`Add a label`}
+      </label>
+      <label htmlFor={`${ids}-title`} className="mt-4 block text-[13.5px] text-muted-foreground/80">
+        <span className="flex items-center gap-2">
+          <Tag size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Title</Trans>
+        </span>
+        <Input
+          id={`${ids}-title`}
+          data-testid="bot-settings-title"
           value={title}
           maxLength={BOT_TITLE_MAX_LENGTH}
-          className="mt-1 text-sm text-muted-foreground"
-          onCommit={(value) => {
-            setTitle(value.trim());
-            void enqueueSave({ title: value });
-          }}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={() => void enqueueSave({ title })}
+          placeholder={t`e.g. Research assistant, Ops bot`}
+          className="mt-1.5"
         />
+      </label>
+      <div className="mt-5">
+        <InstructionSettings key={bot.id} bot={bot} />
       </div>
-      <InstructionSettings key={bot.id} bot={bot} />
       <section className="mt-6 border-t border-border/60 pt-5">
         <h3 className="mb-2 text-xs font-medium text-muted-foreground">
           <span className="flex items-center gap-2">
@@ -903,67 +920,6 @@ function catalogEntry(
 ) {
   if (!provider) return undefined;
   return catalog.find((entry) => entry.provider === provider && entry.id === modelId);
-}
-
-function InlineProfileField({
-  label,
-  editLabel,
-  value,
-  placeholder,
-  maxLength,
-  className,
-  onCommit,
-}: {
-  label: string;
-  editLabel: string;
-  value: string;
-  placeholder?: string;
-  maxLength: number;
-  className: string;
-  onCommit: (value: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const cancelled = useRef(false);
-  function commit() {
-    if (cancelled.current) return;
-    setEditing(false);
-    if (draft.trim() !== value.trim()) onCommit(draft);
-  }
-  return editing ? (
-    <Input
-      autoFocus
-      aria-label={label}
-      value={draft}
-      maxLength={maxLength}
-      className={`h-auto border-transparent bg-transparent p-0 text-center shadow-none ${className}`}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commit();
-        }
-        if (event.key === "Escape") {
-          cancelled.current = true;
-          setEditing(false);
-        }
-      }}
-    />
-  ) : (
-    <button
-      type="button"
-      aria-label={editLabel}
-      className={`min-w-0 max-w-full cursor-text break-words rounded px-2 outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
-      onClick={() => {
-        cancelled.current = false;
-        setDraft(value);
-        setEditing(true);
-      }}
-    >
-      {value || placeholder}
-    </button>
-  );
 }
 
 /** `plain` drops the card for a section whose single control already draws its own frame. */

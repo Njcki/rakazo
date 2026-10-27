@@ -2,6 +2,7 @@ import { useLingui } from "@lingui/react/macro";
 import type { SpaceMemoryConfig, UsageSummary } from "@rakazo/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
 import {
+  BarChart3,
   Brain,
   ChevronLeft,
   ChevronRight,
@@ -28,6 +29,7 @@ import { SpaceRpcProvider } from "../lib/space-rpc";
 import {
   ComputerSettingsPanel,
   GeneralSettingsPanels,
+  StatsSettingsPanel,
   UpdatesSettingsPanel,
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
@@ -154,6 +156,7 @@ export function SettingsOverlay({
       : []),
     { id: "memory", label: t`Memory`, icon: Brain },
     { id: "usage", label: t`Usage`, icon: Gauge },
+    { id: "stats", label: t`Statistics`, icon: BarChart3 },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
     ...(billingEnabled ? [{ id: "billing" as const, label: t`Billing`, icon: CreditCard }] : []),
     ...(showUpdates ? [{ id: "updates" as const, label: t`Updates`, icon: CloudDownload }] : []),
@@ -401,6 +404,7 @@ export function SettingsOverlay({
                   {section === "usage" ? (
                     <UsageSettingsPanel usage={usage} panelRef={usageRef} />
                   ) : null}
+                  {section === "stats" ? <StatsSettingsPanel /> : null}
                   {section === "computer" && showComputer ? (
                     <ComputerSettingsPanel
                       sandboxProvider={sandboxProvider}

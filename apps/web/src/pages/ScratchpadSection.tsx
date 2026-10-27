@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ScratchpadItem } from "@rakazo/contracts";
 import { Button, Checkbox, Input } from "@rakazo/ui-web";
-import { X } from "lucide-react";
+import { NotebookPen, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { rpc } from "../lib/rpc";
@@ -102,7 +102,8 @@ export function ScratchpadSection({ botId }: { botId: string }) {
 
   return (
     <div className="mt-6" data-testid="bot-scratchpad">
-      <div className="mb-3 text-[14px] text-muted-foreground">
+      <div className="mb-3 flex items-center gap-2 text-[14px] text-muted-foreground">
+        <NotebookPen size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
         <Trans>Open work</Trans>
       </div>
       {items.length === 0 ? (

@@ -7,6 +7,7 @@ import {
   encodeLoginSecret,
 } from "@rakazo/contracts";
 import { Button, Input, NativeSelect, NativeSelectOption } from "@rakazo/ui-web";
+import { KeyRound } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { errorText } from "../../lib/user-error";
@@ -223,7 +224,8 @@ export function BotCredentialsSection({ botId }: { botId: string }) {
 
   return (
     <section data-testid="bot-credentials" className="mt-5 border-t border-border/20 pt-4">
-      <div className="text-[13.5px] font-medium text-foreground">
+      <div className="flex items-center gap-2 text-[13.5px] font-medium text-foreground">
+        <KeyRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
         <Trans>Credentials</Trans>
       </div>
       <p className="mt-0.5 text-[12px] text-muted-foreground/70">

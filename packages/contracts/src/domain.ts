@@ -8,7 +8,7 @@ import {
   isCloudflareAiGatewayProvider,
 } from "./cloudflare-ai-gateway.js";
 import { ThreadMessageSchema } from "./events.js";
-import { Id, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
+import { Id, IsoDate, MemoryScope, RunStatus, SandboxKind } from "./ids.js";
 import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
 import { RunTriggerSchema } from "./runs.js";
 
@@ -31,6 +31,21 @@ export const ThinkingLevelSchema = z.enum([
   "max",
 ]);
 export type ThinkingLevel = z.infer<typeof ThinkingLevelSchema>;
+
+/** Per-user default reasoning level for voice calls (null = deployment default "low"). */
+export const VoiceCallThinkingSchema = z.object({
+  thinkingLevel: ThinkingLevelSchema.nullable(),
+});
+export type VoiceCallThinking = z.infer<typeof VoiceCallThinkingSchema>;
+
+/** A web search counter for one service that answered. */
+export const SearchStatSchema = z.object({
+  service: z.string(),
+  count: z.number().int().min(0),
+});
+export const SearchStatListSchema = z.array(SearchStatSchema);
+export type SearchStat = z.infer<typeof SearchStatSchema>;
+export type SearchStatList = z.infer<typeof SearchStatListSchema>;
 
 export { AGENT_SECRET_NAME_PATTERN };
 
@@ -75,6 +90,8 @@ export const BotSchema = z.object({
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
+  /** Per-bot override of the voice-call reasoning level (null = use the user's setting). */
+  voiceThinkingLevel: ThinkingLevelSchema.nullable(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   disabledBuiltinTools: z.array(z.string()).default([]),
@@ -343,6 +360,7 @@ export const UpdateBotInput = z
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
+    voiceThinkingLevel: ThinkingLevelSchema.nullable().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
     disabledBuiltinTools: DisabledBuiltinToolsSchema.optional(),
@@ -488,6 +506,49 @@ export const CreateScratchpadItemInput = z.object({
   status: ScratchpadItemStatusSchema.default("open"),
   notes: z.string().max(4_000).default(""),
 });
+
+
+export const AgentPlanStatusSchema = z.enum(["active", "completed", "cancelled"]);
+export type AgentPlanStatus = z.infer<typeof AgentPlanStatusSchema>;
+
+export const AgentPlanStepStatusSchema = z.enum([
+  "todo",
+  "in_progress",
+  "done",
+  "blocked",
+  "skipped",
+]);
+export type AgentPlanStepStatus = z.infer<typeof AgentPlanStepStatusSchema>;
+
+export const AgentPlanStepSchema = z.object({
+  id: Id,
+  index: z.number().int().positive(),
+  title: z.string(),
+  status: AgentPlanStepStatusSchema,
+  notes: z.string(),
+  blockedBy: z.array(z.number().int().positive()),
+  updatedAt: z.string(),
+});
+export type AgentPlanStep = z.infer<typeof AgentPlanStepSchema>;
+
+export const AgentPlanSchema = z.object({
+  id: Id,
+  botId: Id,
+  title: z.string(),
+  status: AgentPlanStatusSchema,
+  summary: z.string(),
+  progress: z.object({
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    percent: z.number().int().nonnegative(),
+  }),
+  nextStep: AgentPlanStepSchema.nullable(),
+  steps: z.array(AgentPlanStepSchema),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  guidance: z.string().optional(),
+});
+export type AgentPlan = z.infer<typeof AgentPlanSchema>;
 
 export const TaughtSkillStatusSchema = z.enum(["recording", "drafting", "draft", "saved"]);
 export type TaughtSkillStatus = z.infer<typeof TaughtSkillStatusSchema>;
@@ -944,6 +1005,44 @@ export const ThreadSnapshotSchema = z.object({
   computer: ComputerStatusSchema.optional(),
 });
 export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
+
+/** A share the owner created for a 1:1 bot thread, as the owner sees it. */
+export const ThreadShareSchema = z.object({
+  id: Id,
+  token: z.string(),
+  threadId: Id,
+  title: z.string().nullable(),
+  messageCount: z.number().int().nonnegative(),
+  createdAt: IsoDate,
+  expiresAt: IsoDate.nullable(),
+  revokedAt: IsoDate.nullable(),
+  viewCount: z.number().int().nonnegative(),
+});
+export type ThreadShare = z.infer<typeof ThreadShareSchema>;
+
+/** The only block kinds that leave the instance in a public share. */
+export const SharedMessageBlock = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), text: z.string() }),
+  z.object({ kind: z.literal("image"), artifactId: Id, mimeType: z.string(), name: z.string() }),
+]);
+export type SharedMessageBlock = z.infer<typeof SharedMessageBlock>;
+
+export const SharedMessageSchema = z.object({
+  role: z.string(),
+  authorName: z.string(),
+  blocks: z.array(SharedMessageBlock),
+  createdAt: IsoDate,
+});
+export type SharedMessage = z.infer<typeof SharedMessageSchema>;
+
+/** What an unauthenticated viewer receives for a share token. */
+export const ThreadSharePublicSchema = z.object({
+  title: z.string().nullable(),
+  botName: z.string(),
+  sharedAt: IsoDate,
+  messages: z.array(SharedMessageSchema),
+});
+export type ThreadSharePublic = z.infer<typeof ThreadSharePublicSchema>;
 
 /** Default maximum number of completion tokens for an OpenAI-compatible connection. */
 export const DEFAULT_MODEL_MAX_TOKENS = 4_096;

@@ -112,6 +112,7 @@ import {
   Reply,
   Search,
   Settings,
+  Share2,
   Smile,
   Square,
   SquareKanban,
@@ -120,8 +121,7 @@ import {
   X,
 } from "lucide-react";
 import type { ClipboardEvent, DragEvent, MutableRefObject, RefObject } from "react";
-import {
-  Fragment,
+import { lazy, Fragment,
   memo,
   Suspense,
   useCallback,
@@ -131,8 +131,7 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
-} from "react";
+  useSyncExternalStore, } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
@@ -148,7 +147,7 @@ import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { CallCard } from "../components/call/CallCard";
 import { VoiceChatCard } from "../components/call/VoiceChatCard";
 import { ComputerWorkspace } from "../components/computer/ComputerWorkspace";
-import { lazyOverlay } from "../components/ErrorBoundary";
+import { ErrorBoundary, lazyOverlay, SectionLoadFailed } from "../components/ErrorBoundary";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import {
   LIVE_TOOL_STEP_WINDOW,
@@ -242,9 +241,12 @@ import {
   toolStepCount,
 } from "../lib/tool-activity-view";
 import {
+  observeTranscriptContent,
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
+  transcriptLatestChange,
   transcriptMovedDown,
+  transcriptShouldSnap,
 } from "../lib/transcript-scroll";
 import { speaker } from "../lib/tts";
 import { errorText } from "../lib/user-error";
@@ -265,6 +267,11 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
+
+const PlanSection = lazy(() =>
+  import("./PlanSection").then((module) => ({ default: module.PlanSection })),
+);
+
 import { BotCreatePicker } from "./shell/bot-picker";
 import { ComposerReplyPreview, ReplyLine, TimeSeparator } from "./shell/chat-context";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
@@ -286,6 +293,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { commitSpaceRename, sidebarGroupsForSpaces } from "./shell/space-sidebar";
+import { ShareThreadDialog } from "./shell/share-thread-dialog";
 import { WindowChrome } from "./WindowChrome";
 
 const BotContextMenu = lazyOverlay(() =>
@@ -561,6 +569,7 @@ export function ShellPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
   const [messagingProviders, setMessagingProviders] = useState<string[]>([]);
   const [memoryProviderConfig, setMemoryProviderConfig] = useState<
@@ -1800,6 +1809,26 @@ export function ShellPage() {
   );
   const transcriptRunning = workingRuns.length > 0;
   const composerRunning = currentRuns.some((run) => isActive(run.status));
+  // RAKAZO PATCH (continua): soft Continua button. (1) answers a pending AskCard while
+  // waiting_input, or (2) resumes when the last bot turn looks unfinished and no run is active.
+  const answerableAskMessage =
+    answerableAskMessageId == null
+      ? null
+      : (activeSnapshot?.messages.find((message) => message.id === answerableAskMessageId) ?? null);
+  const lastBotMessage = [...(activeSnapshot?.messages ?? [])]
+    .reverse()
+    .find((message) => message.role === "bot");
+  const lastBotText = (lastBotMessage?.blocks ?? [])
+    .map((block) => (block.kind === "text" ? block.text : ""))
+    .join("\n")
+    .trim();
+  const lastLooksUnfinished =
+    /\b(stato\s*:|continua|in corso|prossimo passo|todo:|let me |i('|’)ll )\b/i.test(lastBotText) ||
+    /(\.{3}|…)\s*$/.test(lastBotText);
+  const showContinua =
+    !recordingSkill &&
+    (Boolean(answerableAskMessage) ||
+      (!composerRunning && Boolean(lastBotMessage) && lastLooksUnfinished));
   const runError = threadRunError(activeSnapshot, dismissedRunErrorIds);
   const displayedRunError = !sendError ? runError : null;
   const displayedRunErrorId = displayedRunError ? (activeSnapshot?.run?.id ?? null) : null;
@@ -2053,7 +2082,7 @@ export function ShellPage() {
           continue;
         }
         if (file.size > ATTACHMENT_MAX_BYTES) {
-          skipped.push(t`${file.name} (over 10 MiB)`);
+          skipped.push(t`${file.name} (over 100 MiB)`);
           continue;
         }
         const mimeType = inferAttachmentMimeType(file.name, file.type);
@@ -3628,22 +3657,33 @@ export function ShellPage() {
           </div>
           <div className="flex items-center gap-1">
             {!inGroup && active ? (
-              <button
-                type="button"
-                title={t`Agent computer`}
-                onClick={() => {
-                  const next = panel === "computer" ? null : "computer";
-                  setPanel(next);
-                  if (next === "computer" && active) {
-                    // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
-                    void refreshThread(active.id).catch(() => undefined);
-                  }
-                }}
-                data-active={panel === "computer" ? "" : undefined}
-                className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
-              >
-                <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  title={t`Share conversation`}
+                  aria-label={t`Share conversation`}
+                  onClick={() => setShareDialogOpen(true)}
+                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent"
+                >
+                  <Share2 size={18} strokeWidth={1.6} className="text-foreground/75" />
+                </button>
+                <button
+                  type="button"
+                  title={t`Agent computer`}
+                  onClick={() => {
+                    const next = panel === "computer" ? null : "computer";
+                    setPanel(next);
+                    if (next === "computer" && active) {
+                      // Refresh run/computer so Take control isn't stuck on a stale busyBotName.
+                      void refreshThread(active.id).catch(() => undefined);
+                    }
+                  }}
+                  data-active={panel === "computer" ? "" : undefined}
+                  className="app-no-drag grid h-[30px] w-[34px] place-items-center rounded-[9px] hover:bg-accent data-active:bg-accent"
+                >
+                  <Monitor size={18} strokeWidth={1.6} className="text-foreground/75" />
+                </button>
+              </>
             ) : null}
           </div>
         </div>
@@ -3705,6 +3745,30 @@ export function ShellPage() {
             key={inGroup ? `group:${groupId}` : `bot:${active?.id}`}
             activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
             running={composerRunning}
+            showContinua={showContinua}
+            onContinue={() => {
+              void (async () => {
+                try {
+                  if (answerableAskMessage) {
+                    const askBlock = answerableAskMessage.blocks.find(
+                      (block) => block.kind === "ask" && block.status !== "answered",
+                    );
+                    const actions = askBlock?.kind === "ask" ? (askBlock.actions ?? []) : [];
+                    const continua =
+                      actions.find(
+                        (action) =>
+                          action.id === "choice-1" ||
+                          action.label.trim().toLowerCase() === "continua",
+                      ) ?? actions[0];
+                    await answerMessage(answerableAskMessage, continua?.id ?? "choice-1");
+                    return;
+                  }
+                  await sendMessage("Continua", [], newClientId());
+                } catch (error) {
+                  setSendError(error instanceof Error ? error.message : t`Could not continue`);
+                }
+              })();
+            }}
             disabled={Boolean(recordingSkill)}
             pendingAttachments={activePendingAttachments}
             attachmentNotice={attachmentNotice}
@@ -3768,7 +3832,11 @@ export function ShellPage() {
         panel={panel ?? "closed"}
       >
         {panel && (active || activeGroup || panel === "create") ? (
-          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]">
+          <div
+            className={`rk-scroll h-full w-full overflow-y-auto px-5 pt-[17px] ${
+              panel === "settings" ? "pb-0" : "pb-[17px]"
+            }`}
+          >
             {panel !== "routine" &&
             panel !== "create" &&
             panel !== "create-group" &&
@@ -3887,6 +3955,11 @@ export function ShellPage() {
                 <p className="mt-2 truncate text-[13.5px] text-muted-foreground" dir="auto">
                   {t`${active.name}'s screen`}
                 </p>
+                <ErrorBoundary fallback={<SectionLoadFailed />}>
+                  <Suspense fallback={null}>
+                    <PlanSection botId={active.id} />
+                  </Suspense>
+                </ErrorBoundary>
                 <RoutineListHeader
                   onCreate={() => {
                     setRoutineDraft(emptyRoutineDraft());
@@ -4625,6 +4698,14 @@ export function ShellPage() {
         ) : null}
       </Suspense>
 
+      {shareDialogOpen && active ? (
+        <ShareThreadDialog
+          botId={active.id}
+          botName={active.name}
+          onClose={() => setShareDialogOpen(false)}
+        />
+      ) : null}
+
       {booting ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-background/95">
           <div className="text-[19px] font-medium text-foreground">
@@ -4872,6 +4953,14 @@ const Transcript = memo(function Transcript({
   const [atEnd, setAtEnd] = useState(true);
   const following = useRef(true);
   const autoScrolling = useRef(false);
+  // A pointer/touch held in the transcript (text selection, scrollbar drag, an unsettled
+  // fling) defers follow snaps instead of unfollowing: a click or tap at the bottom must
+  // not stop the transcript from sticking to new messages.
+  const pointerHeld = useRef(false);
+  const pointerScrolled = useRef(false);
+  const pointerSettleTimer = useRef<number | undefined>(undefined);
+  const latestMessageId = useRef<string | null>(null);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const lastScrollTop = useRef<number | null>(null);
   const autoScrollTimer = useRef<number | undefined>(undefined);
   const jumpButtonRef = useRef<HTMLButtonElement>(null);
@@ -5050,8 +5139,88 @@ const Transcript = memo(function Transcript({
   }, [messages, scrollRequest, scrollRef, endJumpScroll, onScrollRequestHandled]);
 
   useLayoutEffect(() => {
-    if (following.current) snapToEnd();
+    const change = transcriptLatestChange(latestMessageId.current, messages.at(-1));
+    if (change !== "none") latestMessageId.current = messages.at(-1)?.id ?? null;
+    // The reader's own send always returns to the end; others' messages never yank a
+    // reader who scrolled up, they only light the jump-to-latest affordance.
+    if (change === "own" && !jumpScrolling.current) {
+      following.current = true;
+      pointerHeld.current = false;
+    }
+    if (following.current) {
+      if (!pointerHeld.current) snapToEnd();
+    } else if (change === "incoming") {
+      setHasNewMessages(true);
+    }
   }, [messages, running, snapToEnd]);
+
+  useEffect(() => {
+    if (atEnd) setHasNewMessages(false);
+  }, [atEnd]);
+
+  // Streaming growth and late layout (images, charts, KaTeX, code blocks) change row
+  // heights after the commit; keep the end pinned while following.
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    return observeTranscriptContent(element, () => {
+      if (
+        !transcriptShouldSnap({
+          following: following.current,
+          pointerHeld: pointerHeld.current,
+          jumpScrolling: jumpScrolling.current,
+          autoScrolling: autoScrolling.current,
+        })
+      ) {
+        return;
+      }
+      const end = element.scrollHeight - element.clientHeight;
+      if (Math.abs(element.scrollTop - end) > 1) element.scrollTop = element.scrollHeight;
+    });
+  }, [scrollRef]);
+
+  const releasePointer = useCallback(() => {
+    window.clearTimeout(pointerSettleTimer.current);
+    if (!pointerHeld.current) return;
+    pointerHeld.current = false;
+    const element = scrollRef.current;
+    if (
+      element &&
+      transcriptShouldSnap({
+        following: following.current,
+        pointerHeld: false,
+        jumpScrolling: jumpScrolling.current,
+        autoScrolling: autoScrolling.current,
+      })
+    ) {
+      element.scrollTop = element.scrollHeight;
+    }
+  }, [scrollRef]);
+
+  useEffect(() => {
+    const onRelease = () => {
+      if (!pointerHeld.current) return;
+      // A fling keeps scrolling after the finger lifts: wait for it to settle.
+      if (pointerScrolled.current) {
+        window.clearTimeout(pointerSettleTimer.current);
+        pointerSettleTimer.current = window.setTimeout(releasePointer, 600);
+        scrollRef.current?.addEventListener("scrollend", releasePointer, { once: true });
+      } else {
+        releasePointer();
+      }
+    };
+    document.addEventListener("pointerup", onRelease, true);
+    document.addEventListener("pointercancel", onRelease, true);
+    document.addEventListener("touchend", onRelease, true);
+    document.addEventListener("touchcancel", onRelease, true);
+    return () => {
+      document.removeEventListener("pointerup", onRelease, true);
+      document.removeEventListener("pointercancel", onRelease, true);
+      document.removeEventListener("touchend", onRelease, true);
+      document.removeEventListener("touchcancel", onRelease, true);
+      window.clearTimeout(pointerSettleTimer.current);
+    };
+  }, [releasePointer, scrollRef]);
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5093,12 +5262,18 @@ const Transcript = memo(function Transcript({
         onPointerDown={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
-          following.current = false;
+          pointerHeld.current = true;
+          pointerScrolled.current = false;
+          window.clearTimeout(pointerSettleTimer.current);
+          event.currentTarget.removeEventListener("scrollend", releasePointer);
         }}
         onTouchStart={(event) => {
           lastScrollTop.current = event.currentTarget.scrollTop;
           autoScrolling.current = false;
-          following.current = false;
+          pointerHeld.current = true;
+          pointerScrolled.current = false;
+          window.clearTimeout(pointerSettleTimer.current);
+          event.currentTarget.removeEventListener("scrollend", releasePointer);
         }}
         onWheel={(event) => {
           if (event.deltaY < 0) {
@@ -5113,6 +5288,7 @@ const Transcript = memo(function Transcript({
             event.currentTarget.scrollTop,
           );
           lastScrollTop.current = event.currentTarget.scrollTop;
+          if (pointerHeld.current) pointerScrolled.current = true;
           const nearEnd = transcriptIsNearEnd(event.currentTarget);
           setAtEnd(nearEnd);
           // A jump scroll owns the viewport until its animation settles; its
@@ -5298,7 +5474,7 @@ const Transcript = memo(function Transcript({
       <button
         ref={jumpButtonRef}
         type="button"
-        aria-label={t`Jump to latest`}
+        aria-label={hasNewMessages ? t`Jump to latest, new messages` : t`Jump to latest`}
         aria-hidden={atEnd}
         tabIndex={atEnd ? -1 : 0}
         onClick={jumpToLatest}
@@ -5307,6 +5483,12 @@ const Transcript = memo(function Transcript({
         }`}
       >
         <ArrowDown size={17} strokeWidth={1.8} />
+        {hasNewMessages ? (
+          <span
+            data-testid="transcript-new-messages"
+            className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary"
+          />
+        ) : null}
       </button>
     </div>
   );
@@ -5390,6 +5572,8 @@ export const Composer = memo(function Composer({
   artifactTarget,
   activeName,
   running,
+  showContinua,
+  onContinue,
   disabled,
   pendingAttachments,
   attachmentNotice,
@@ -5416,6 +5600,8 @@ export const Composer = memo(function Composer({
 }: {
   activeName?: string;
   running: boolean;
+  showContinua?: boolean;
+  onContinue?: () => void;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
   attachmentNotice: string | null;
@@ -6216,6 +6402,19 @@ export const Composer = memo(function Composer({
           ) : null}
           {running ? (
             <>
+              {showContinua ? (
+                <Button
+                  variant="outline"
+                  data-testid="continua-button"
+                  aria-label={t`Continue`}
+                  title={t`Continue`}
+                  disabled={sending || disabled}
+                  onClick={() => onContinue?.()}
+                  className="h-8 shrink-0 rounded-full border border-border bg-muted px-3 text-[13px] font-medium text-foreground/85 shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {t`Continue`}
+                </Button>
+              ) : null}
               <Button
                 size="icon"
                 aria-label={t`Send`}
@@ -6237,15 +6436,30 @@ export const Composer = memo(function Composer({
               </Button>
             </>
           ) : (
-            <Button
-              size="icon"
-              aria-label={t`Send`}
-              disabled={sending || !canSend || disabled}
-              onClick={send}
-              className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
-            >
-              <ArrowUp size={16} strokeWidth={2.2} />
-            </Button>
+            <>
+              {showContinua ? (
+                <Button
+                  variant="outline"
+                  data-testid="continua-button"
+                  aria-label={t`Continue`}
+                  title={t`Continue`}
+                  disabled={sending || disabled}
+                  onClick={() => onContinue?.()}
+                  className="h-8 shrink-0 rounded-full border border-border bg-muted px-3 text-[13px] font-medium text-foreground/85 shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  {t`Continue`}
+                </Button>
+              ) : null}
+              <Button
+                size="icon"
+                aria-label={t`Send`}
+                disabled={sending || !canSend || disabled}
+                onClick={send}
+                className="size-8 shrink-0 rounded-full bg-white text-black hover:bg-white/90 shadow-sm transition-transform active:scale-95 disabled:bg-white/10 disabled:text-muted-foreground/30 disabled:shadow-none"
+              >
+                <ArrowUp size={16} strokeWidth={2.2} />
+              </Button>
+            </>
           )}
         </div>
       </div>

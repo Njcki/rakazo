@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, StyleSheet, Text, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -256,6 +256,95 @@ export function ImageArtifactViewer({
         ) : (
           <Text style={[styles.message, { color: tokens.mutedForeground }]}>
             {state.status === "error" ? state.message : t("Loading image…")}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** A picture that is already a URL, using the same pinch viewer as an attached image. */
+export function UriImageViewer({
+  uri,
+  name,
+  onClose,
+}: {
+  uri: string;
+  name: string;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const tokens = mobileTokens();
+  const insets = useSafeAreaInsets();
+  const [box, setBox] = useState<ImageSize | null>(null);
+  const [natural, setNatural] = useState<ImageSize | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (!cancelled) setNatural({ width, height });
+      },
+      () => {
+        if (!cancelled) setFailed(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [uri]);
+
+  return (
+    <View
+      style={[
+        styles.screen,
+        {
+          backgroundColor: tokens.background,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.header,
+          { borderBottomColor: tokens.border, borderBottomWidth: StyleSheet.hairlineWidth },
+        ]}
+      >
+        <Text numberOfLines={1} style={[styles.title, { color: tokens.foreground }]}>
+          {name}
+        </Text>
+        <GlassIconButton
+          accessibilityLabel={t("Close image")}
+          ios="xmark"
+          android="close"
+          iconSize={18}
+          onPress={onClose}
+        />
+      </View>
+      <View
+        style={styles.stage}
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width <= 0 || height <= 0) return;
+          setBox((current) =>
+            current?.width === width && current?.height === height ? current : { width, height },
+          );
+        }}
+      >
+        {natural && box ? (
+          <ZoomableImage
+            uri={uri}
+            displayed={fitImageSize(natural, box.width, box.height)}
+            box={box}
+            onClose={onClose}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <Text style={[styles.message, { color: tokens.mutedForeground }]}>
+            {failed ? t("Could not load image") : t("Loading image…")}
           </Text>
         )}
       </View>

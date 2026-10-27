@@ -3,11 +3,13 @@ import { isToolActivityBlock } from "@rakazo/core";
 import { describe, expect, it } from "vitest";
 import {
   botMessageOutcomeFromMidTurn,
+  clampMidTurnNarration,
   clampUserProgressMessage,
   extractNarrationText,
   finalBlocksAfterMidTurnProgress,
   isProgressMessageTruncated,
   isUserProgressClientNonce,
+  MID_TURN_NARRATION_MAX_LENGTH,
   USER_PROGRESS_MESSAGE_MAX_LENGTH,
   userProgressClientNonce,
 } from "./user-progress.js";
@@ -100,5 +102,33 @@ describe("userProgressClientNonce", () => {
     expect(userProgressClientNonce("run-1", 0)).not.toBe(nonce);
     expect(isUserProgressClientNonce(null)).toBe(false);
     expect(isUserProgressClientNonce("other")).toBe(false);
+  });
+});
+
+describe("clampMidTurnNarration", () => {
+  it("inserts spaces between glued Italian sentences before clamping", () => {
+    const glued =
+      "Sto avviando la rimozione dei file per una ripartenza pulita.Sto verificando l'elenco.";
+    expect(clampMidTurnNarration(glued)).toBe(
+      "Sto avviando la rimozione dei file per una ripartenza pulita. Sto verificando l'elenco.",
+    );
+  });
+
+  it("keeps a long status report that precedes a tool call intact", () => {
+    const report = `**Punto della situazione**\n\n${"dettaglio ".repeat(150)}`.trim();
+    expect(report.length).toBeGreaterThan(USER_PROGRESS_MESSAGE_MAX_LENGTH);
+    expect(clampMidTurnNarration(report)).toBe(report);
+  });
+
+  it("clamps only beyond the final-message limit", () => {
+    expect(MID_TURN_NARRATION_MAX_LENGTH).toBe(8_000);
+    const out = clampMidTurnNarration("x".repeat(MID_TURN_NARRATION_MAX_LENGTH + 10));
+    expect(out).toHaveLength(MID_TURN_NARRATION_MAX_LENGTH);
+    expect(out.endsWith("…")).toBe(true);
+    expect(clampMidTurnNarration("   ")).toBe("");
+  });
+
+  it("leaves the short progress-beat cap unchanged", () => {
+    expect(USER_PROGRESS_MESSAGE_MAX_LENGTH).toBe(500);
   });
 });

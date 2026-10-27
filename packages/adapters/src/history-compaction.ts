@@ -136,6 +136,8 @@ export const MAX_TRANSCRIPT_CHARS = 40_000;
  * cannot finish in that window, get more time up to a hard cap. The cap is the spend bound for one
  * attempt; the job's attempt cap bounds how many times a stuck thread pays it.
  */
+/** Flat budget for one compaction summarizer call. The scalable helper remains for callers. */
+export const SUMMARIZE_TIMEOUT_MS = 480_000;
 export const SUMMARIZE_TIMEOUT_MIN_MS = 120_000;
 export const SUMMARIZE_TIMEOUT_MAX_MS = 8 * 60_000;
 /** Prompts at or below this stay on the short timeout. */
@@ -392,7 +394,7 @@ export async function compactHistory(deps: CompactHistoryDeps, threadId: string)
       traceId: `compact:${threadId}`,
       spaceId: thread.spaceId,
       userId: thread.userId,
-      signal: AbortSignal.timeout(summarizeTimeoutMs(prompt.length)),
+      signal: AbortSignal.timeout(SUMMARIZE_TIMEOUT_MS),
     },
   )) {
     if (event.type === "usage" && !event.accounted) {

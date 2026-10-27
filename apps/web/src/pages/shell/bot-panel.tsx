@@ -30,7 +30,19 @@ import {
   Textarea,
   Toggle,
 } from "@rakazo/ui-web";
-import { X } from "lucide-react";
+import {
+  AlignLeft,
+  Bell,
+  Brain,
+  Cpu,
+  Monitor,
+  SlidersHorizontal,
+  Tag,
+  UserRound,
+  Volume2,
+  Wrench,
+  X,
+} from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
 import { botProfilePatch } from "../../lib/bot-profile-patch";
@@ -42,6 +54,10 @@ import { BotCredentialsSection } from "./bot-credentials";
 
 const ScratchpadSection = lazy(() =>
   import("../ScratchpadSection").then((module) => ({ default: module.ScratchpadSection })),
+);
+
+const PlanSection = lazy(() =>
+  import("../PlanSection").then((module) => ({ default: module.PlanSection })),
 );
 
 const KnowledgeSection = lazy(() =>
@@ -63,7 +79,8 @@ function ComputerModePicker({
 }) {
   return (
     <div className="mt-4">
-      <div className="text-[14px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-[14px] text-muted-foreground">
+        <Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
         <Trans>Computer</Trans>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -222,6 +239,7 @@ export function BotSettings({
     modelProvider?: string | null;
     modelId?: string | null;
     thinkingLevel?: ThinkingLevel | null;
+    voiceThinkingLevel?: ThinkingLevel | null;
     disabledBuiltinTools?: string[];
   }) => Promise<void>;
   onExport: () => Promise<void>;
@@ -249,6 +267,7 @@ export function BotSettings({
     bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
+  const [voiceThinkingLevel, setVoiceThinkingLevel] = useState(bot.voiceThinkingLevel ?? "");
   const [disabledBuiltinTools, setDisabledBuiltinTools] = useState<string[]>(
     bot.disabledBuiltinTools ?? [],
   );
@@ -379,6 +398,9 @@ export function BotSettings({
               thinkingLevel: thinkingOptions.length
                 ? ((thinkingLevel || null) as ThinkingLevel | null)
                 : null,
+              voiceThinkingLevel: thinkingOptions.length
+                ? ((voiceThinkingLevel || null) as ThinkingLevel | null)
+                : null,
             }
           : {}),
       };
@@ -468,7 +490,10 @@ export function BotSettings({
   }
 
   return (
-    <div data-testid="bot-settings">
+    <div
+      data-testid="bot-settings"
+      className="[&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background"
+    >
       <div className="flex justify-center py-4">
         <AvatarStudioPopover
           value={color}
@@ -482,7 +507,10 @@ export function BotSettings({
         />
       </div>
       <label htmlFor={`${ids}-name`} className="mt-4 block text-[13.5px] text-muted-foreground/80">
-        <Trans>Name</Trans>
+        <span className="flex items-center gap-2">
+          <UserRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Name</Trans>
+        </span>
         <Input
           id={`${ids}-name`}
           value={name}
@@ -493,7 +521,10 @@ export function BotSettings({
         />
       </label>
       <label htmlFor={`${ids}-title`} className={fieldLabelClass}>
-        <Trans>Title</Trans>
+        <span className="flex items-center gap-2">
+          <Tag size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Title</Trans>
+        </span>
         <Input
           id={`${ids}-title`}
           value={title}
@@ -505,7 +536,10 @@ export function BotSettings({
         />
       </label>
       <label htmlFor={`${ids}-description`} className={fieldLabelClass}>
-        <Trans>Description</Trans>
+        <span className="flex items-center gap-2">
+          <AlignLeft size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+          <Trans>Description</Trans>
+        </span>
         <Textarea
           id={`${ids}-description`}
           value={description}
@@ -516,12 +550,13 @@ export function BotSettings({
           className="mt-1.5"
         />
       </label>
-      <div className="mt-6 flex items-center justify-between pt-4 border-t border-border/20">
+      <div className="mt-6 flex items-center justify-between border-t border-border/60 pt-5">
         <div className="space-y-0.5 pe-4">
           <div
             id={`${ids}-notify-finish-label`}
-            className="text-[13.5px] font-medium text-foreground"
+            className="flex items-center gap-2 text-[13.5px] font-medium text-foreground"
           >
+            <Bell size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
             <Trans>Notifications</Trans>
           </div>
           <div id={`${ids}-notify-finish-desc`} className="text-[12px] text-muted-foreground/70">
@@ -539,36 +574,52 @@ export function BotSettings({
           }}
         />
       </div>
+      <ErrorBoundary fallback={<SectionLoadFailed />}>
+        <Suspense fallback={null}>
+          <PlanSection botId={bot.id} />
+        </Suspense>
+      </ErrorBoundary>
       <details
         data-testid="bot-settings-advanced"
-        className="group mt-5"
+        className="group mt-6 border-t border-border/60 pt-4"
         onToggle={(event) => {
           if (event.currentTarget.open) setAdvancedOpened(true);
         }}
       >
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14px] text-muted-foreground">
-          <span className="text-muted-foreground">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <SlidersHorizontal size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
             <Trans>Advanced</Trans>
           </span>
           <span aria-hidden="true" className="transition-transform group-open:rotate-90">
             ›
           </span>
         </summary>
-        <ComputerModePicker value={computerMode} onChange={setComputerMode} />
-        <ErrorBoundary fallback={<SectionLoadFailed />}>
-          <Suspense fallback={null}>
-            <ScratchpadSection botId={bot.id} />
-          </Suspense>
-        </ErrorBoundary>
-        {advancedOpened ? (
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-computer">
+          <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        </div>
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-scratchpad">
           <ErrorBoundary fallback={<SectionLoadFailed />}>
             <Suspense fallback={null}>
-              <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+              <ScratchpadSection botId={bot.id} />
             </Suspense>
           </ErrorBoundary>
+        </div>
+        {advancedOpened ? (
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-knowledge">
+            <ErrorBoundary fallback={<SectionLoadFailed />}>
+              <Suspense fallback={null}>
+                <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
         ) : null}
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-model">
         <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
-          <Trans>Model</Trans>
+          <span className="flex items-center gap-2">
+            <Cpu size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Model</Trans>
+          </span>
           <NativeSelect
             id={`${ids}-model`}
             className="mt-2 w-full"
@@ -617,9 +668,33 @@ export function BotSettings({
             </NativeSelect>
           </label>
         ) : null}
+        {thinkingOptions.length ? (
+          <label htmlFor={`${ids}-voice-thinking`} className={fieldLabelClass}>
+            <Trans>Thinking in calls</Trans>
+            <NativeSelect
+              id={`${ids}-voice-thinking`}
+              className="mt-2 w-full"
+              value={voiceThinkingLevel}
+              onChange={(event) => setVoiceThinkingLevel(event.target.value)}
+            >
+              <NativeSelectOption value="">
+                {t`Default (user setting)`}
+              </NativeSelectOption>
+              {thinkingOptions.map((level) => (
+                <NativeSelectOption key={level} value={level}>
+                  {thinkingLevelLabel(level)}
+                </NativeSelectOption>
+              ))}
+            </NativeSelect>
+          </label>
+        ) : null}
+        </div>
         {memoryProviderConfigured ? (
-          <div className="mt-4 text-[14px] text-muted-foreground">
-            <Trans>Memory scope</Trans>
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-memory">
+            <span className="flex items-center gap-2">
+              <Brain size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+              <Trans>Memory scope</Trans>
+            </span>
             <div className="mt-2 flex gap-2">
               {(
                 [
@@ -644,6 +719,7 @@ export function BotSettings({
             </div>
           </div>
         ) : null}
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-voice">
         <label
           htmlFor={`${ids}-auto-speak`}
           className="mt-5 flex cursor-pointer items-center gap-3 text-[14px] text-foreground/75"
@@ -653,7 +729,10 @@ export function BotSettings({
             checked={autoSpeak}
             onCheckedChange={(checked) => setAutoSpeak(checked)}
           />
-          <Trans>Read replies aloud</Trans>
+          <span className="flex items-center gap-2">
+            <Volume2 size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />
+            <Trans>Read replies aloud</Trans>
+          </span>
         </label>
         {voices.length ? (
           <label htmlFor={`${ids}-voice`} className={fieldLabelClass}>
@@ -673,8 +752,13 @@ export function BotSettings({
             </NativeSelect>
           </label>
         ) : null}
+        </div>
+        <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-tools">
         <label htmlFor={`${ids}-disabled-tools`} className={fieldLabelClass}>
-          <Trans>Disabled tools</Trans>
+          <span className="flex items-center gap-2">
+            <Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />
+            <Trans>Disabled tools</Trans>
+          </span>
           <Input
             id={`${ids}-disabled-tools`}
             value={toolNameDraft}
@@ -717,35 +801,45 @@ export function BotSettings({
             />
           </label>
         ))}
-        {advancedOpened ? <BotCredentialsSection botId={bot.id} /> : null}
+        </div>
+        {advancedOpened ? (
+          <div className="mt-3 rounded-xl border border-border/60 bg-muted/60 p-3.5 [&>*]:mt-0 [&_[data-slot=native-select]]:bg-white [&_[data-slot=input]]:bg-white [&_textarea]:bg-white [&_[data-slot=native-select]]:placeholder:text-muted-foreground/45 [&_[data-slot=input]]:placeholder:text-muted-foreground/45 [&_textarea]:placeholder:text-muted-foreground/45 dark:[&_[data-slot=native-select]]:bg-background dark:[&_[data-slot=input]]:bg-background dark:[&_textarea]:bg-background" data-testid="bot-settings-advanced-credentials">
+            <BotCredentialsSection botId={bot.id} />
+          </div>
+        ) : null}
       </details>
       {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
-      <div className="mt-5 flex flex-col items-start gap-3">
-        <Button
-          disabled={saving}
-          onClick={() => {
-            void enqueueSave({
-              name,
-              title,
-              description,
-              color,
-              notifyOnFinish,
-            });
-          }}
-        >
-          <Trans>Save</Trans>
-        </Button>
-        <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
-          <Trans>Export</Trans>
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ms-2.5 text-destructive hover:text-destructive"
-          onClick={onClear}
-        >
-          <Trans>Clear conversation</Trans>
-        </Button>
+      <div
+        data-testid="bot-settings-footer"
+        className="sticky bottom-0 z-10 -mx-5 -mb-[17px] mt-6 border-t border-border/70 bg-background/95 px-5 pt-3 pb-[17px] backdrop-blur"
+      >
+        <div className="flex flex-col items-start gap-2">
+          <Button
+            disabled={saving}
+            onClick={() => {
+              void enqueueSave({
+                name,
+                title,
+                description,
+                color,
+                notifyOnFinish,
+              });
+            }}
+          >
+            <Trans>Save</Trans>
+          </Button>
+          <Button variant="ghost" size="sm" className="-ms-2.5" onClick={() => void onExport()}>
+            <Trans>Export</Trans>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ms-2.5 text-destructive hover:text-destructive"
+            onClick={onClear}
+          >
+            <Trans>Clear conversation</Trans>
+          </Button>
+        </div>
       </div>
     </div>
   );

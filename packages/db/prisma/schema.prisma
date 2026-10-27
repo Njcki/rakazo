@@ -31,6 +31,8 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("robot")
+  // Per-user default reasoning level for voice calls (null = deployment default "low").
+  voiceCallThinkingLevel      String?
   sessions                    Session[]
   accounts                    Account[]
   members                     Member[]
@@ -216,6 +218,7 @@ model Space {
   runs                        Run[]
   routines                    Routine[]
   scratchpadItems             ScratchpadItem[]
+  agentPlans                  AgentPlan[]
   taughtSkills                TaughtSkill[]
   agentSkills                 AgentSkill[]
   connections                 Connection[]
@@ -389,6 +392,16 @@ model SpaceVoicePreference {
   @@map("space_voice_preferences")
 }
 
+// Global counters of web searches by the service that answered (self-host patch 0032).
+model SearchStat {
+  id        String   @id @default(cuid())
+  service   String   @unique
+  count     Int      @default(0)
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("search_stats")
+}
+
 model Bot {
   screenGeneration Int @default(0)
   id                String            @id @default(cuid())
@@ -422,12 +435,15 @@ model Bot {
   modelProvider     String?
   modelId           String?
   thinkingLevel     String?
+  // Per-bot override of the voice-call reasoning level (null = use the user's setting).
+  voiceThinkingLevel String?
   disabledBuiltinTools String[] @default([])
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)
   teamChatRules          String  @default("")
   routines          Routine[]
   scratchpadItems   ScratchpadItem[]
+  agentPlans        AgentPlan[]
   taughtSkills      TaughtSkill[]
   memoryDocuments   MemoryDocument[]
   agentHome         AgentHome?
@@ -541,9 +557,32 @@ model Thread {
   tasks                       Task[]
   runs                        Run[]
   routines                    Routine[]
+  shares                      ThreadShare[]
 
   @@index([spaceId])
   @@map("threads")
+}
+
+// A read-only, link-shareable snapshot of the messages an owner picked from a
+// 1:1 bot thread. The token is the only credential; the snapshot is frozen at
+// creation time so later edits or deletes never change what the link shows.
+model ThreadShare {
+  id         String    @id @default(cuid())
+  token      String    @unique
+  threadId   String
+  thread     Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  spaceId    String
+  userId     String
+  title      String?
+  messageIds Json
+  snapshot   Json
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  viewCount  Int       @default(0)
+
+  @@index([threadId])
+  @@map("thread_shares")
 }
 
 model Message {
@@ -811,6 +850,43 @@ model ScratchpadItem {
   @@index([spaceId, botId, status])
   @@index([spaceId, botId, updatedAt])
   @@map("scratchpad_items")
+}
+
+model AgentPlan {
+  id        String          @id @default(cuid())
+  spaceId   String
+  space     Space           @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  botId     String
+  bot       Bot             @relation(fields: [botId], references: [id], onDelete: Cascade)
+  userId    String
+  title     String
+  status    String          @default("active")
+  summary   String          @default("")
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  steps     AgentPlanStep[]
+
+  @@index([spaceId, botId, status])
+  @@index([spaceId, botId, updatedAt])
+  @@map("agent_plans")
+}
+
+model AgentPlanStep {
+  id        String    @id @default(cuid())
+  planId    String
+  plan      AgentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  spaceId   String
+  index     Int
+  title     String
+  status    String    @default("todo")
+  notes     String    @default("")
+  blockedBy Json      @default("[]")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([planId, index])
+  @@index([planId, status])
+  @@map("agent_plan_steps")
 }
 
 model TaughtSkill {

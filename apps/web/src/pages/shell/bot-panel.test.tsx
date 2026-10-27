@@ -97,6 +97,7 @@ function bot(description = "Billing"): Bot {
     modelProvider: null,
     modelId: null,
     thinkingLevel: null,
+    voiceThinkingLevel: null,
     teamChatAmbientEnabled: false,
     teamChatRules: "",
     disabledBuiltinTools: [],

@@ -74,8 +74,10 @@ import {
   REPLY_QUOTE_MAX_LENGTH,
   ReorderBotsInput,
   RoutineSchema,
+  AgentPlanSchema,
   ScratchpadItemSchema,
   ScratchpadItemStatusSchema,
+  SearchStatListSchema,
   ServerUpdateCheckSchema,
   ServerUpdateRequestSchema,
   ServerUpdateRunSchema,
@@ -88,12 +90,15 @@ import {
   TeachRecordingEventSchema,
   ThinkingLevelSchema,
   ThreadMessagePageSchema,
+  ThreadSharePublicSchema,
+  ThreadShareSchema,
   ThreadSnapshotSchema,
   UpdateAgentSkillInput,
   UpdateBotInput,
   UpdateExternalConversationPolicyInput,
   UpdateGroupInput,
   UsageRecordSchema,
+  VoiceCallThinkingSchema,
   VoiceCatalogEntrySchema,
   VoiceCredentialSchema,
   VoiceInfoSchema,
@@ -413,6 +418,21 @@ export const appContract = {
     markRead: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
+  threadShares: {
+    create: oc
+      .input(
+        z.object({
+          botId: Id,
+          messageIds: z.array(Id).min(1).max(5000),
+          title: z.string().trim().min(1).max(200).optional(),
+          expiresInDays: z.number().int().min(1).max(365).optional(),
+        }),
+      )
+      .output(z.object({ token: z.string(), url: z.string() })),
+    list: oc.input(z.object({ botId: Id })).output(z.array(ThreadShareSchema)),
+    revoke: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
+    remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
+  },
   computer: {
     status: oc.input(botId).output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
@@ -553,6 +573,12 @@ export const appContract = {
         }),
       )
       .output(z.object({ runId: Id })),
+  },
+  plans: {
+    active: oc.input(z.object({ botId: Id })).output(AgentPlanSchema.nullable()),
+    list: oc
+      .input(z.object({ botId: Id, includeClosed: z.boolean().optional() }))
+      .output(z.array(AgentPlanSchema)),
   },
   scratchpad: {
     list: oc
@@ -937,6 +963,16 @@ export const appContract = {
         }),
       )
       .output(z.object({ ready: z.boolean(), utterances: z.array(z.string()) })),
+    /** Per-user default reasoning level for voice calls (null = deployment default "low"). */
+    callThinking: oc.output(VoiceCallThinkingSchema),
+    setCallThinking: oc
+      .input(z.object({ thinkingLevel: ThinkingLevelSchema.nullable() }))
+      .output(VoiceCallThinkingSchema),
+  },
+  stats: {
+    /** Web searches by the service that answered (self-host patch 0032). */
+    searches: oc.output(SearchStatListSchema),
+    resetSearches: oc.input(z.object({})).output(z.object({ ok: z.literal(true) })),
   },
   externalConversations: {
     updatePolicy: oc

@@ -53,6 +53,19 @@ describe("keyless HTTP web provider", () => {
     ]);
   });
 
+  it("notifies onResults when the HTML backend answers", async () => {
+    let reported = 0;
+    const html = `<div class="result"><a class="result__a" href="https://example.test/a">Alpha</a></div>`;
+    const provider = new KeylessHttpWebProvider({
+      fetch: async () =>
+        new Response(html, { status: 200, headers: { "content-type": "text/html" } }),
+      resolveHostname: publicResolver,
+      onResults: () => reported++,
+    });
+    expect((await provider.search({ query: "alpha" }, ctx)).length).toBeGreaterThan(0);
+    expect(reported).toBe(1);
+  });
+
   it("fetches readable page text with truncation", async () => {
     const long = "word ".repeat(100);
     const html = `<html><head><title>Doc</title></head><body><article><p>${long}</p></article></body></html>`;

@@ -34,6 +34,11 @@ msgstr "{0, plural, one {Waiting for sign-in — the code expires in about # min
 msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 msgstr "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 
+#. placeholder {0}: copied ? "Copied" : "Copy"
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0}"
+msgstr "{0}"
+
 #. placeholder {0}: file.name
 #: src/pages/Shell.tsx
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
@@ -41,8 +46,8 @@ msgstr "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
 
 #. placeholder {0}: file.name
 #: src/pages/Shell.tsx
-msgid "{0} (over 10 MiB)"
-msgstr "{0} (over 10 MiB)"
+msgid "{0} (over 100 MiB)"
+msgstr "{0} (over 100 MiB)"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -73,6 +78,17 @@ msgstr "{0} KB"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} MB"
+
+#. placeholder {0}: share.messageCount
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} messages"
+msgstr "{0} messages"
+
+#. placeholder {0}: selected.size
+#. placeholder {1}: selectable.length
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} of {1} messages"
+msgstr "{0} of {1} messages"
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -271,6 +287,10 @@ msgstr "Active"
 msgid "Active model"
 msgstr "Active model"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Active shares"
+msgstr "Active shares"
+
 #: src/components/computer/TerminalApp.tsx
 #: src/pages/Shell.tsx
 msgid "Activity"
@@ -398,6 +418,11 @@ msgstr "Advanced"
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "Advanced..."
+
+#. placeholder {0}: option.value
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "After {0} days"
+msgstr "After {0} days"
 
 #: src/pages/Shell.tsx
 msgid "Agent computer"
@@ -928,6 +953,7 @@ msgid "Choose which connected model Rakazo uses."
 msgstr "Choose which connected model Rakazo uses."
 
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Clear"
 msgstr "Clear"
 
@@ -963,6 +989,7 @@ msgstr "Client secret"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "Close"
@@ -978,10 +1005,6 @@ msgstr "Close chart"
 #: src/pages/Shell.tsx
 msgid "Close computer"
 msgstr "Close computer"
-
-#: src/pages/shell/message-cards.tsx
-msgid "Close image preview"
-msgstr "Close image preview"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Close integrations"
@@ -1077,6 +1100,10 @@ msgstr "Compact"
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
 msgstr "Complete"
+
+#: src/pages/PlanSection.tsx
+msgid "Completed"
+msgstr "Completed"
 
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
@@ -1231,6 +1258,7 @@ msgstr "Context limit"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/Shell.tsx
 msgid "Continue"
 msgstr "Continue"
 
@@ -1247,6 +1275,12 @@ msgstr "Continue with {0}"
 msgid "Continue with email"
 msgstr "Continue with email"
 
+#. placeholder {0}: data.botName
+#. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
+#: src/pages/SharePage.tsx
+msgid "Conversation with {0} · shared {1}"
+msgstr "Conversation with {0} · shared {1}"
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -1262,6 +1296,10 @@ msgstr "Copy"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Copy .env example"
 msgstr "Copy .env example"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr "Copy link"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -1357,6 +1395,10 @@ msgstr "Could not create section"
 #: src/pages/shell/dialogs.tsx
 msgid "Could not create space"
 msgstr "Could not create space"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not create the share"
+msgstr "Could not create the share"
 
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
@@ -1481,9 +1523,17 @@ msgstr "Could not load integrations"
 msgid "Could not load MCP servers"
 msgstr "Could not load MCP servers"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not load messages"
+msgstr "Could not load messages"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Could not load model settings"
 msgstr "Could not load model settings"
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr "Could not load plan"
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -1497,6 +1547,10 @@ msgstr "Could not load sign-in options"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Could not load skill"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr "Could not load statistics"
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -1586,9 +1640,17 @@ msgstr "Could not render chart"
 msgid "Could not reset password"
 msgstr "Could not reset password"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr "Could not reset the statistics"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Could not revoke connection"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not revoke the share"
+msgstr "Could not revoke the share"
 
 #: src/pages/Shell.tsx
 msgid "Could not run routine"
@@ -1639,6 +1701,10 @@ msgstr "Could not save that speech model"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not save that voice"
 msgstr "Could not save that voice"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr "Could not save the call thinking level"
 
 #: src/pages/shell/bot-credentials.tsx
 msgid "Could not save the credential"
@@ -1735,6 +1801,10 @@ msgstr "Create account"
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "Create group"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Create link"
+msgstr "Create link"
 
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
@@ -1855,6 +1925,14 @@ msgstr "Default ({0})"
 msgid "Default ({0})"
 msgstr "Default ({0})"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr "Default (low)"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Default (user setting)"
+msgstr "Default (user setting)"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Default scope"
@@ -1924,6 +2002,10 @@ msgstr "Denied"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "Deny"
+
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr "Depends on"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
@@ -2170,6 +2252,11 @@ msgstr "Expand"
 #: src/pages/Shell.tsx
 msgid "Expand {0}"
 msgstr "Expand {0}"
+
+#. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "expires {0}"
+msgstr "expires {0}"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
@@ -2500,6 +2587,10 @@ msgstr "Isolated"
 msgid "Isolated preview — no access to your account"
 msgstr "Isolated preview — no access to your account"
 
+#: src/pages/SharePage.tsx
+msgid "It may have been revoked or expired."
+msgstr "It may have been revoked or expired."
+
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
 msgstr "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."
@@ -2507,6 +2598,10 @@ msgstr "Its conversation, files, and routines will be permanently deleted. Bots 
 #: src/pages/Shell.tsx
 msgid "Jump to latest"
 msgstr "Jump to latest"
+
+#: src/pages/Shell.tsx
+msgid "Jump to latest, new messages"
+msgstr "Jump to latest, new messages"
 
 #: src/pages/shell/chat-context.tsx
 msgid "Jump to replied message: {excerpt}"
@@ -2557,6 +2652,10 @@ msgstr "Linear issue"
 msgid "Link a chat app"
 msgstr "Link a chat app"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Link expires"
+msgstr "Link expires"
+
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
 msgstr "Link SSO"
@@ -2601,6 +2700,10 @@ msgstr "Loading integrations…"
 msgid "Loading memory settings…"
 msgstr "Loading memory settings…"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Loading messages…"
+msgstr "Loading messages…"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
 msgstr "Loading model catalog…"
@@ -2622,6 +2725,7 @@ msgid "Loading voice providers…"
 msgstr "Loading voice providers…"
 
 #: src/App.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/Auth.tsx
 #: src/pages/IntegrationSetup.tsx
@@ -2629,6 +2733,7 @@ msgstr "Loading voice providers…"
 #: src/pages/Onboarding.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/SharePage.tsx
 #: src/pages/Shell.tsx
 msgid "Loading…"
 msgstr "Loading…"
@@ -2778,6 +2883,7 @@ msgid "Mentions only"
 msgstr "Mentions only"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Message"
 msgstr "Message"
 
@@ -3001,6 +3107,10 @@ msgstr "New space"
 msgid "New ticket"
 msgstr "New ticket"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No active shares."
+msgstr "No active shares."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
 msgstr "No agent connections yet."
@@ -3040,6 +3150,10 @@ msgstr "No chat apps linked yet."
 #: src/pages/shell/bot-credentials.tsx
 msgid "No credentials saved for this bot."
 msgstr "No credentials saved for this bot."
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No expiration"
+msgstr "No expiration"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
@@ -3081,6 +3195,10 @@ msgstr "No model catalog is available."
 msgid "No models listed."
 msgstr "No models listed."
 
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "No providers found."
 msgstr "No providers found."
@@ -3101,6 +3219,10 @@ msgstr "No runs match these filters."
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "No runs yet"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
+msgstr "No searches recorded yet."
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -3178,6 +3300,11 @@ msgstr "OAuth connection failed"
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth expired"
+
+#. js-lingui-explicit-id
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr "Off"
 
 #. placeholder {0}: call.botName
 #: src/components/call/CallCard.tsx
@@ -3371,9 +3498,21 @@ msgstr "Pick a model from the catalog."
 msgid "Pick a model from the list or enter a model id served by this endpoint."
 msgstr "Pick a model from the list or enter a model id served by this endpoint."
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+msgstr "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Pin"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr "Plan"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr "Plan progress"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Playing…"
@@ -3670,6 +3809,7 @@ msgid "Research & writing"
 msgstr "Research & writing"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "Reset"
@@ -3695,6 +3835,7 @@ msgid "Reset your password"
 msgstr "Reset your password"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 msgid "Resetting…"
 msgstr "Resetting…"
 
@@ -3751,6 +3892,7 @@ msgid "Review provider settings and test again."
 msgstr "Review provider settings and test again."
 
 #: src/pages/MessagingSettingsOverlay.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Revoke"
 msgstr "Revoke"
 
@@ -3930,6 +4072,10 @@ msgstr "Search providers"
 msgid "Search runs"
 msgstr "Search runs"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr "Search statistics reset."
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -3947,6 +4093,10 @@ msgstr "Select a bot"
 #: src/pages/ModelBackupsSettings.tsx
 msgid "Select a connected model"
 msgstr "Select a connected model"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Select all"
+msgstr "Select all"
 
 #: src/pages/Shell.tsx
 msgid "Send"
@@ -4025,6 +4175,11 @@ msgstr "Setup help"
 msgid "Shape"
 msgstr "Shape"
 
+#: src/pages/Shell.tsx
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Share conversation"
+msgstr "Share conversation"
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -4037,6 +4192,10 @@ msgstr "Shared chat with 2-6 bots. They all reply in the same thread."
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared documents"
 msgstr "Shared documents"
+
+#: src/pages/SharePage.tsx
+msgid "Shared from Rakazo"
+msgstr "Shared from Rakazo"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared skills"
@@ -4148,6 +4307,10 @@ msgstr "Slack not enabled"
 msgid "Software update"
 msgstr "Software update"
 
+#: src/pages/SharePage.tsx
+msgid "Something went wrong loading this share."
+msgstr "Something went wrong loading this share."
+
 #: src/App.tsx
 #: src/lib/user-error.ts
 msgid "Something went wrong. Try again."
@@ -4211,6 +4374,11 @@ msgstr "Starting"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Starting…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/SettingsOverlay.tsx
+msgid "Statistics"
+msgstr "Statistics"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -4372,6 +4540,11 @@ msgstr "These saved settings can't be read. Remove it and add it again."
 msgid "Thinking"
 msgstr "Thinking"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Thinking in calls"
+msgstr "Thinking in calls"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Thinking: {activeThinkingLabel}"
 msgstr "Thinking: {activeThinkingLabel}"
@@ -4395,6 +4568,10 @@ msgstr "This chat is view-only"
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "this computer"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "This conversation has no shareable messages yet."
+msgstr "This conversation has no shareable messages yet."
 
 #. placeholder {0}: pendingDelete.versionCount
 #: src/pages/Artifacts.tsx
@@ -4449,6 +4626,10 @@ msgstr "This server did not request browser authorization."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "This server is already connected. Disconnect it first to authorize again."
 
+#: src/pages/SharePage.tsx
+msgid "This share link is not available."
+msgstr "This share link is not available."
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
@@ -4465,6 +4646,10 @@ msgstr "Time of day"
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Title (optional)"
+msgstr "Title (optional)"
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -4569,6 +4754,10 @@ msgstr "Unpin"
 #: src/pages/Shell.tsx
 msgid "Unsupported file type: {0}"
 msgstr "Unsupported file type: {0}"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Untitled share"
+msgstr "Untitled share"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -4730,6 +4919,10 @@ msgstr "Waiting in line…"
 msgid "Waiting…"
 msgstr "Waiting…"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr "Web searches answered by each service."
+
 #: src/pages/Paywall.tsx
 msgid "Web, desktop and mobile apps"
 msgstr "Web, desktop and mobile apps"
@@ -4814,6 +5007,7 @@ msgid "Yesterday"
 msgstr "Yesterday"
 
 #: src/pages/Shell.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "You"
 msgstr "You"
 

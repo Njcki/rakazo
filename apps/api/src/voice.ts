@@ -344,7 +344,13 @@ export async function prepareVoice(
 export async function synthesizeVoice(
   deps: VoiceDeps,
   actor: Actor,
-  input: { text: string; voiceId?: string; botId?: string; signal?: AbortSignal },
+  input: {
+    text: string;
+    voiceId?: string;
+    botId?: string;
+    language?: string;
+    signal?: AbortSignal;
+  },
 ) {
   const target = await resolveVoiceTarget(deps, actor, input);
   const text = input.text.trim();
@@ -359,6 +365,7 @@ export async function synthesizeVoice(
       voiceId: target.voiceId,
       apiKey: target.apiKey,
       model: target.cred.speechModel || undefined,
+      language: input.language,
       signal: input.signal,
     },
     voiceContext(actor, input.signal),
@@ -408,6 +415,7 @@ export function mountVoiceHttpRoutes(
         text: String((body as { text?: unknown }).text ?? ""),
         voiceId: optionalString((body as { voiceId?: unknown }).voiceId),
         botId: optionalString((body as { botId?: unknown }).botId),
+        language: optionalString((body as { language?: unknown }).language),
         signal: AbortSignal.any(
           [c.req.raw.signal, AbortSignal.timeout(SPEAK_TIMEOUT_MS)].filter(
             Boolean,

@@ -76,6 +76,9 @@ import {
   listAvailablePiCatalog,
   listBotSecretMetadata,
   listPiCatalog,
+  getActivePlan,
+  getDisplayPlan,
+  listPlansForBot,
   listScratchpadItems,
   McpOAuthBroker,
   mapScratchpadItem,
@@ -136,6 +139,7 @@ import type {
   ProductEvent,
   Routine,
   SpaceNavigation,
+  ThinkingLevel,
 } from "@rakazo/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
@@ -260,6 +264,12 @@ import { listSpaceRuns } from "./runs.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
+import {
+  createThreadShare,
+  listThreadShares,
+  removeThreadShare,
+  revokeThreadShare,
+} from "./thread-shares.js";
 import type { UpdaterProxyConfig } from "./server-update.js";
 import {
   applyServerUpdate,
@@ -1762,6 +1772,9 @@ export function createRouter(deps: RouterDeps) {
               ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
               : {}),
             ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
+            ...(input.voiceThinkingLevel !== undefined
+              ? { voiceThinkingLevel: input.voiceThinkingLevel }
+              : {}),
             ...(input.teamChatAmbientEnabled !== undefined
               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }
               : {}),
@@ -2476,6 +2489,20 @@ export function createRouter(deps: RouterDeps) {
         await setThreadUnreadState(deps.prisma, context.actor, target, true);
         return { ok: true as const };
       }),
+    },
+    threadShares: {
+      create: authed.threadShares.create.handler(async ({ context, input }) =>
+        createThreadShare({ ...deps, webOrigin: deps.env.webOrigin }, context.actor, input),
+      ),
+      list: authed.threadShares.list.handler(async ({ context, input }) =>
+        listThreadShares(deps, context.actor, input),
+      ),
+      revoke: authed.threadShares.revoke.handler(async ({ context, input }) =>
+        revokeThreadShare(deps, context.actor, input),
+      ),
+      remove: authed.threadShares.remove.handler(async ({ context, input }) =>
+        removeThreadShare(deps, context.actor, input),
+      ),
     },
     computer: {
       status: authed.computer.status.handler(async ({ context, input }) =>
@@ -3585,6 +3612,27 @@ export function createRouter(deps: RouterDeps) {
           getLogger().error("routine testRun enqueue", error);
         });
         return { runId: run.id };
+      }),
+    },
+    plans: {
+      active: authed.plans.active.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+        // Sidebar: keep showing the latest completed plan until a new one replaces it.
+        return getDisplayPlan(
+          { prisma: deps.prisma },
+          { spaceId: context.actor.spaceId, botId: input.botId },
+        );
+      }),
+      list: authed.plans.list.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+        return listPlansForBot(
+          { prisma: deps.prisma },
+          {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            includeClosed: input.includeClosed,
+          },
+        );
       }),
     },
     scratchpad: {
@@ -5929,12 +5977,13 @@ export function createRouter(deps: RouterDeps) {
         ]);
         const runs = new Set(runGroups.map((row) => row.parentRunId ?? row.runId).filter(Boolean))
           .size;
-        const completeSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
-          result._count[field] === result._count._all ? (result._sum[field] ?? 0) : null;
+        // Calls that never reported a field stay out of that sum. They must not hide the rest.
+        const measuredSum = (field: "inputTokens" | "outputTokens" | "totalTokens") =>
+          result._count[field] > 0 || result._count._all === 0 ? (result._sum[field] ?? 0) : null;
         return {
-          inputTokens: completeSum("inputTokens"),
-          outputTokens: completeSum("outputTokens"),
-          totalTokens: completeSum("totalTokens"),
+          inputTokens: measuredSum("inputTokens"),
+          outputTokens: measuredSum("outputTokens"),
+          totalTokens: measuredSum("totalTokens"),
           modelCalls: result._count._all,
           runs,
         };
@@ -6120,6 +6169,33 @@ export function createRouter(deps: RouterDeps) {
       prepare: authed.voice.prepare.handler(async ({ context, input }) =>
         prepareVoice(deps, context.actor, input),
       ),
+      callThinking: authed.voice.callThinking.handler(async ({ context }) => {
+        const user = await deps.prisma.user.findUnique({
+          where: { id: context.actor.userId },
+          select: { voiceCallThinkingLevel: true },
+        });
+        // The stored value is only written via setCallThinking (validated against the enum).
+        return { thinkingLevel: (user?.voiceCallThinkingLevel ?? null) as ThinkingLevel | null };
+      }),
+      setCallThinking: authed.voice.setCallThinking.handler(async ({ context, input }) => {
+        await deps.prisma.user.update({
+          where: { id: context.actor.userId },
+          data: { voiceCallThinkingLevel: input.thinkingLevel },
+        });
+        return { thinkingLevel: input.thinkingLevel };
+      }),
+    },
+    stats: {
+      searches: authed.stats.searches.handler(async () => {
+        const rows = await deps.prisma.searchStat.findMany({
+          orderBy: [{ count: "desc" }, { service: "asc" }],
+        });
+        return rows.map((row) => ({ service: row.service, count: row.count }));
+      }),
+      resetSearches: authed.stats.resetSearches.handler(async () => {
+        await deps.prisma.searchStat.deleteMany({});
+        return { ok: true as const };
+      }),
     },
   });
 }

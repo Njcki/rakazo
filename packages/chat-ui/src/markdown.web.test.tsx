@@ -14,7 +14,7 @@ import {
 } from "./markdown.web";
 
 describe("web markdown remote images", () => {
-  it("loads a remote image in place only after the reader asks", async () => {
+  it("shows a raster image as a preview that opens a zoomable overlay", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const markdown = "![chart](https://images.example.test/tap.png)";
     const container = document.createElement("div");
@@ -23,29 +23,32 @@ describe("web markdown remote images", () => {
     await act(async () => {
       root.render(<ChatMarkdown>{markdown}</ChatMarkdown>);
     });
-    expect(container.querySelector("img")).toBeNull();
+    const preview = container.querySelector("button.rk-chat-image-preview img");
+    expect(preview?.getAttribute("src")).toBe("https://images.example.test/tap.png");
+    expect(document.body.querySelector("[role=dialog]")).toBeNull();
 
-    const button = container.querySelector("button");
-    expect(button?.textContent).toBe("chartimages.example.test");
     await act(async () => {
-      button?.click();
+      container
+        .querySelector("button.rk-chat-image-preview")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
-    const image = container.querySelector("img");
-    expect(image?.getAttribute("src")).toBe("https://images.example.test/tap.png");
-    expect(image?.getAttribute("referrerpolicy")).toBe("no-referrer");
-    expect(container.querySelector("button")).toBeNull();
+    const dialog = document.body.querySelector("[role=dialog]");
+    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(
+      "https://images.example.test/tap.png",
+    );
+    const close = dialog?.querySelector("button");
+    await act(async () => {
+      close?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.body.querySelector("[role=dialog]")).toBeNull();
+
     await act(async () => {
       root.unmount();
     });
     container.remove();
-
-    // The reader's choice holds for the session, so a remounted bubble keeps the image.
-    expect(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>)).toContain(
-      'src="https://images.example.test/tap.png"',
-    );
   });
 
-  it("shows a placeholder when a tapped image is replaced with another url", async () => {
+  it("keeps the preview when the image url changes", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -56,19 +59,15 @@ describe("web markdown remote images", () => {
     await act(async () => {
       render("https://images.example.test/first.png");
     });
-    await act(async () => {
-      container.querySelector("button")?.click();
-    });
     expect(container.querySelector("img")?.getAttribute("src")).toBe(
       "https://images.example.test/first.png",
     );
-
     await act(async () => {
       render("https://images.example.test/second.png");
     });
-    expect(container.querySelector("img")).toBeNull();
-    expect(container.querySelector("button")?.textContent).toContain("images.example.test");
-
+    expect(container.querySelector("img")?.getAttribute("src")).toBe(
+      "https://images.example.test/second.png",
+    );
     await act(async () => {
       root.unmount();
     });
@@ -111,6 +110,27 @@ describe("web markdown remote images", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it("shows a same-origin image link as a preview, and detaches text glued to the url", () => {
+    const origin = window.location.origin;
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{`[Foyer](${origin}/download/foyer.jpg) e https://cdn.example.test/scritta.pngL'ambiente`}</ChatMarkdown>,
+    );
+    expect(html).toContain(`src="${origin}/download/foyer.jpg"`);
+    expect(html).toContain('alt="Foyer"');
+    expect(html).toContain('src="https://cdn.example.test/scritta.png"');
+    expect(html).toContain("L&#x27;ambiente");
+    expect(html).not.toContain("pngL");
+  });
+
+  it("previews an image link on another site instead of leaving a download link", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>{"[Foto](https://cdn.example.test/a.jpg)"}</ChatMarkdown>,
+    );
+    expect(html).toContain('src="https://cdn.example.test/a.jpg"');
+    expect(html).toContain("rk-chat-image-preview");
+    expect(html).not.toContain("<a");
   });
 
   it("keeps an image inside a rejected link as text when automatic loading is on", () => {
@@ -558,5 +578,26 @@ describe("web external link confirmation", () => {
     expect(open).not.toHaveBeenCalled();
     open.mockRestore();
     await view.cleanup();
+  });
+});
+
+describe("web math", () => {
+  it("typesets inline and display TeX with KaTeX and keeps prices as text", () => {
+    const html = renderToStaticMarkup(
+      <ChatMarkdown>
+        {"Pressione $1018.86\\text{hPa}$.\n\n$$E=mc^2$$\n\nArea \\(\\pi r^2\\), costa $5 o $10."}
+      </ChatMarkdown>,
+    );
+    expect(html).toContain('class="katex"');
+    expect(html).toContain('class="katex-display"');
+    expect(html).toContain("hPa");
+    expect(html).not.toContain("$1018.86");
+    expect(html).toContain("costa $5 o $10.");
+  });
+
+  it("leaves dollars in code untouched", () => {
+    const html = renderToStaticMarkup(<ChatMarkdown>{"`echo $HOME $x$`"}</ChatMarkdown>);
+    expect(html).toContain("echo $HOME $x$");
+    expect(html).not.toContain("katex");
   });
 });

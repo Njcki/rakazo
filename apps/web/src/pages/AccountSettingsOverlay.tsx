@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { AccountSecurity, AvatarStyle } from "@rakazo/contracts";
+import type { AccountSecurity, AvatarStyle, SearchStat } from "@rakazo/contracts";
 import { BotAvatar, Button, Field, FieldLabel, Input, Label, Switch, Toggle } from "@rakazo/ui-web";
 import { ChevronDown } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
@@ -34,7 +34,8 @@ import type { AppearancePreference } from "../lib/ui-appearance";
 import { getUiAppearancePreference, setUiAppearance } from "../lib/ui-appearance";
 import type { UiLocale } from "../lib/ui-locale";
 import { UI_LOCALE_LABELS, UI_LOCALES } from "../lib/ui-locale";
-import { authErrorText } from "../lib/user-error";
+import { rpc } from "../lib/rpc";
+import { authErrorText, errorText } from "../lib/user-error";
 
 export type SettingsGeneralProps = {
   email?: string | null;
@@ -323,6 +324,82 @@ export function UsageSettingsPanel({
       <p className={`text-[12.5px] text-muted-foreground/80 ${usage ? "mt-2" : "mt-3"}`}>
         <Trans>Model spend uses your provider keys.</Trans>
       </p>
+    </div>
+  );
+}
+
+export function StatsSettingsPanel() {
+  const { t } = useLingui();
+  const [stats, setStats] = useState<SearchStat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    void rpc.stats
+      .searches()
+      .then(setStats)
+      .catch((err: unknown) => setError(errorText(err, t`Could not load statistics`)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function resetSearches() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await rpc.stats.resetSearches({});
+      setStats([]);
+      setNotice(t`Search statistics reset.`);
+    } catch (err) {
+      setError(errorText(err, t`Could not reset the statistics`));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div data-testid="stats-settings" className="rounded-xl border border-border px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[15px] font-medium text-foreground">
+          <Trans>Statistics</Trans>
+        </h3>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy || stats.length === 0}
+          onClick={() => void resetSearches()}
+        >
+          {busy ? <Trans>Resetting…</Trans> : <Trans>Reset</Trans>}
+        </Button>
+      </div>
+      <p className="mt-3 text-[12.5px] text-muted-foreground/80">
+        <Trans>Web searches answered by each service.</Trans>
+      </p>
+      {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
+      {notice ? <p className="mt-3 text-sm text-success">{notice}</p> : null}
+      {loading ? (
+        <p className="mt-3 text-[14px] text-muted-foreground">
+          <Trans>Loading…</Trans>
+        </p>
+      ) : stats.length === 0 ? (
+        <p className="mt-3 text-[14px] text-muted-foreground">
+          <Trans>No searches recorded yet.</Trans>
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-1.5">
+          {stats.map((entry) => (
+            <li
+              key={entry.service}
+              className="flex items-center justify-between text-[14px] text-foreground/85"
+            >
+              <span>{entry.service}</span>
+              <span className="tabular-nums text-muted-foreground">{entry.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

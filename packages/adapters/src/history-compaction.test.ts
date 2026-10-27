@@ -22,6 +22,7 @@ import {
   SUMMARIZE_TIMEOUT_BASE_CHARS,
   SUMMARIZE_TIMEOUT_MAX_MS,
   SUMMARIZE_TIMEOUT_MIN_MS,
+  SUMMARIZE_TIMEOUT_MS,
   selectCompactedHistory,
   shouldEnqueueCompaction,
   summarizeTimeoutMs,
@@ -1090,7 +1091,7 @@ describe("compactHistory", () => {
       await compactHistory(harness.deps, "thread-1");
       const [request, context] = harness.runtime.run.mock.calls[0]!;
       expect(request.prompt.length).toBeLessThanOrEqual(SUMMARIZE_TIMEOUT_BASE_CHARS);
-      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MIN_MS);
+      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MS); // RAKAZO: flat 480s
       expect(context?.signal).toBe(timeout.mock.results[0]?.value);
     } finally {
       timeout.mockRestore();
@@ -1119,7 +1120,7 @@ describe("compactHistory", () => {
       const expected = summarizeTimeoutMs(prompt.length);
       expect(expected).toBeGreaterThan(SUMMARIZE_TIMEOUT_MIN_MS);
       expect(expected).toBeLessThanOrEqual(SUMMARIZE_TIMEOUT_MAX_MS);
-      expect(timeout).toHaveBeenCalledWith(expected);
+      expect(timeout).toHaveBeenCalledWith(SUMMARIZE_TIMEOUT_MS); // RAKAZO: flat 480s
     } finally {
       timeout.mockRestore();
     }

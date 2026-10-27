@@ -3,14 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   closeUnterminatedFence,
   inlineMarkdownImageSrc,
+  linkedImageFile,
   linkFaviconOrigin,
   linkifyExplicitUrls,
   linkLabel,
   markdownLinkDisplayParts,
   markdownLinkRequiresConfirmation,
   plainTextLinkParts,
+  sameDocumentOrigin,
   sanitizeMarkdownImageUrl,
   sanitizeMarkdownUrl,
+  separateGluedImageText,
 } from "./markdown";
 
 type Token = { type: string; attrGet(name: string): string | null; children: Token[] | null };
@@ -200,6 +203,48 @@ describe("markdownLinkDisplayParts", () => {
   it("returns nothing for addresses that are not web links", () => {
     expect(markdownLinkDisplayParts("mailto:hello@example.test")).toBeUndefined();
     expect(markdownLinkDisplayParts("/threads/1")).toBeUndefined();
+  });
+});
+
+describe("separateGluedImageText", () => {
+  it("splits a sentence glued onto an image URL", () => {
+    const source =
+      "https://rakazo.example/download/scritta.pngL'ambiente circostante resta visibile.";
+    expect(separateGluedImageText(source)).toBe(
+      "https://rakazo.example/download/scritta.png L'ambiente circostante resta visibile.",
+    );
+  });
+
+  it("leaves a query string on the image URL", () => {
+    expect(separateGluedImageText("https://rakazo.example/a.png?w=10 next")).toBe(
+      "https://rakazo.example/a.png?w=10 next",
+    );
+  });
+});
+
+describe("linkedImageFile", () => {
+  it("drops sentence text glued onto the path", () => {
+    expect(linkedImageFile("https://rakazo.example/download/scritta.pngL'ambiente")?.href).toBe(
+      "https://rakazo.example/download/scritta.png",
+    );
+  });
+
+  it("recognizes a raster link and ignores svg, query tricks, and unsafe schemes", () => {
+    expect(linkedImageFile("https://rakazo.example/download/foyer.jpg")).toEqual({
+      href: "https://rakazo.example/download/foyer.jpg",
+      host: "rakazo.example",
+    });
+    expect(linkedImageFile("https://rakazo.example/a.PNG?x=1")?.href).toContain(".PNG");
+    expect(linkedImageFile("https://rakazo.example/a.svg")).toBeUndefined();
+    expect(linkedImageFile("https://rakazo.example/a.jpg.exe")).toBeUndefined();
+    expect(linkedImageFile("javascript:alert(1)")).toBeUndefined();
+  });
+
+  it("matches only the page that is already open", () => {
+    expect(
+      sameDocumentOrigin("https://rakazo.example/download/a.jpg", "https://rakazo.example"),
+    ).toBe(true);
+    expect(sameDocumentOrigin("https://cdn.example/a.jpg", "https://rakazo.example")).toBe(false);
   });
 });
 

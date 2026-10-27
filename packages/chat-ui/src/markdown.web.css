@@ -240,6 +240,68 @@
   border-radius: 0.65em;
 }
 
+.rk-chat-image-preview {
+  display: inline-block;
+  max-width: min(240px, 100%);
+  margin: 0.35em 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.75em;
+  background: transparent;
+  cursor: zoom-in;
+  vertical-align: top;
+}
+
+.rk-chat-image-preview img {
+  display: block;
+  max-width: 240px;
+  max-height: 12rem;
+  width: auto;
+  height: auto;
+  margin: 0;
+  object-fit: contain;
+  border-radius: 0.75em;
+}
+
+.rk-chat-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 82%);
+  cursor: zoom-out;
+}
+
+.rk-chat-image-lightbox img {
+  max-width: 90vw;
+  max-height: 85vh;
+  width: auto;
+  height: auto;
+  margin: 0;
+  object-fit: contain;
+  border-radius: 0.75em;
+  cursor: grab;
+  touch-action: none;
+}
+
+.rk-chat-image-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 55%);
+  color: white;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .rk-chat-markdown input[type="checkbox"] {
   margin-right: 0.4em;
   accent-color: var(--primary);
@@ -317,4 +379,19 @@ a.rk-chat-link .rk-chat-link-tile > svg {
 
 a.rk-chat-link:hover .rk-chat-link-label {
   text-decoration-color: currentColor;
+}
+
+/* TeX math (KaTeX). A display formula wider than the bubble scrolls instead of overflowing. */
+.rk-chat-markdown .katex {
+  font-size: 1.1em;
+}
+.rk-chat-markdown .katex-display {
+  margin: 0.25em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15em 0;
+}
+.rk-chat-markdown .katex-error {
+  color: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
 }

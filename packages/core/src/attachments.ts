@@ -36,7 +36,7 @@ export function decodeAttachmentBase64(contentBase64: string): Uint8Array {
   const normalized = contentBase64.trim();
   if (!normalized) throw new AttachmentValidationError("Attachment content is empty");
   if (normalized.length > ATTACHMENT_MAX_BASE64_LENGTH) {
-    throw new AttachmentValidationError("Attachment exceeds the 10 MiB limit");
+    throw new AttachmentValidationError("Attachment exceeds the 100 MiB limit");
   }
   if (normalized.length % 4 !== 0 || !isWellFormedBase64(normalized)) {
     throw new AttachmentValidationError("Attachment content is not valid base64");
@@ -49,7 +49,7 @@ export function decodeAttachmentBase64(contentBase64: string): Uint8Array {
   }
   if (bytes.byteLength === 0) throw new AttachmentValidationError("Attachment content is empty");
   if (bytes.byteLength > ATTACHMENT_MAX_BYTES) {
-    throw new AttachmentValidationError("Attachment exceeds the 10 MiB limit");
+    throw new AttachmentValidationError("Attachment exceeds the 100 MiB limit");
   }
   return new Uint8Array(bytes);
 }
@@ -153,6 +153,7 @@ const MIME_TYPE_EXTENSIONS: Record<AttachmentMimeType, string> = {
   "text/html": ".html",
   "application/json": ".json",
   "application/zip": ".zip",
+  "application/octet-stream": "",
 };
 
 export function inferAttachmentMimeType(
@@ -172,8 +173,11 @@ export function inferAttachmentMimeType(
   if (extensionType === "text/markdown" && (!reportedType || reportedType === "text/plain")) {
     return extensionType;
   }
+  // RAKAZO PATCH (attachments): octet-stream is allowed as the any-type fallback, so a
+  // known extension must still beat a generic octet-stream report (e.g. .zip).
+  if (reportedType === "application/octet-stream" && extensionType) return extensionType;
   if (reportedType && isAllowedAttachmentMimeType(reportedType)) return reportedType;
-  return extensionType ?? null;
+  return extensionType ?? "application/octet-stream";
 }
 
 export function attachmentExtensionForMimeType(mimeType: string): string {

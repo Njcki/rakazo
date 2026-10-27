@@ -197,6 +197,57 @@ export function inlineMarkdownImageSrc(url: string): string | undefined {
     : undefined;
 }
 
+const rasterImageExtension = /\.(?:png|jpe?g|gif|webp)$/i;
+const gluedRasterUrl = /(https?:\/\/[^\s<>()\]]+?\.(?:png|jpe?g|gif|webp))(?=\p{L})/giu;
+
+/**
+ * A model sometimes writes the next sentence against the end of an image URL
+ * (`photo.pngL'ambiente`). Split that so the link stops at the extension.
+ */
+export function separateGluedImageText(markdown: string): string {
+  return markdown.replace(gluedRasterUrl, "$1 ");
+}
+
+/** Drop sentence text a model glued onto an image path. The query string is kept. */
+function unglueImageHref(href: string): string {
+  try {
+    const parsed = new URL(href);
+    const glued = parsed.pathname.match(/^(.*\.(?:png|jpe?g|gif|webp))(\p{L}.*)$/iu);
+    if (!glued?.[2]) return href;
+    parsed.pathname = glued[1] ?? parsed.pathname;
+    parsed.hash = "";
+    return parsed.href;
+  } catch {
+    return href;
+  }
+}
+
+/**
+ * A normal link whose target is a raster image. Markdown writers often use
+ * `[label](photo.jpg)` instead of an image. SVG is excluded: a same-origin SVG can run script.
+ */
+export function linkedImageFile(url: string): { href: string; host: string } | undefined {
+  const href = sanitizeMarkdownImageUrl(unglueImageHref(url));
+  if (!href) return undefined;
+  try {
+    const parsed = new URL(href);
+    if (!rasterImageExtension.test(parsed.pathname)) return undefined;
+    return { href, host: parsed.host };
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when the image is served by the page the reader already has open. */
+export function sameDocumentOrigin(href: string, origin: string | undefined): boolean {
+  if (!origin) return false;
+  try {
+    return new URL(href).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 /** A markdown image that may load on request, with the host its placeholder names. */
 export function remoteMarkdownImage(url: string): { href: string; host: string } | undefined {
   const href = sanitizeMarkdownImageUrl(url);

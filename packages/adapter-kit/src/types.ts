@@ -398,6 +398,8 @@ export interface AgentSteeringMessage {
   /** Persisted history text before attachment paths are appended. */
   historyText?: string;
   images?: AgentInputImage[];
+  /** Patch 0030: text of the quick reply already posted for this message, if any. */
+  quickReplyText?: string;
 }
 
 /** Adapter-supplied cache policy metadata; absent fields mean unknown. */
@@ -608,6 +610,8 @@ export interface VoiceSynthesizeRequest {
   apiKey: string;
   /** Connection speech model. Fish uses this, then `FISH_TTS_MODEL`, then s2.1-pro. */
   model?: string;
+  /** UI locale (BCP-47). ElevenLabs maps the primary subtag to language_code. */
+  language?: string;
   signal?: AbortSignal;
 }
 

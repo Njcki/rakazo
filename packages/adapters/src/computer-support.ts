@@ -156,6 +156,12 @@ function isTeamRootPath(value: string): boolean {
 function stripVirtualWorkspaceRoot(value: string): string | null {
   const portable = value.replace(/\\/g, "/");
   if (portable === "/") return "";
+  // Absolute paths under the computer HOME must resolve inside the workspace.
+  // Without this, "/home/rakazo/bots/..." became "home/rakazo/bots/..." and
+  // landed in /home/rakazo/home/rakazo/... while shell/Gradle used the real file.
+  const home = "/home/rakazo";
+  if (portable === home) return "";
+  if (portable.startsWith(home + "/")) return portable.slice(home.length + 1);
   return portable.startsWith("/") ? portable.slice(1) : null;
 }
 

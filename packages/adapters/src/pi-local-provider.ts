@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import {
   createProvider,
   type Model,
@@ -86,10 +87,94 @@ function localModel(id: string): Model<"openai-completions"> {
   };
 }
 
+/**
+ * RAKAZO PATCH (gsq-voice): extra local entries that alias an upstream model id
+ * with their own label and token limits. Read from /data/local-extra-models.json
+ * (persists across container recreate) or RAKAZO_LOCAL_EXTRA_MODELS (JSON).
+ * Shape: [{ "id": "alias", "upstreamId": "real-id", "name": "Label",
+ *           "contextWindow": 262144, "maxTokens": 16384 }]
+ */
+type ExtraLocalModel = {
+  id: string;
+  upstreamId: string;
+  name: string;
+  contextWindow: number;
+  maxTokens: number;
+};
+const EXTRA_MODELS_FILE = "/data/local-extra-models.json";
+function extraLocalModels(): ExtraLocalModel[] {
+  let raw = process.env.RAKAZO_LOCAL_EXTRA_MODELS?.trim() || "";
+  if (!raw) {
+    try {
+      raw = readFileSync(EXTRA_MODELS_FILE, "utf8");
+    } catch {
+      return [];
+    }
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((m) => m && typeof m.id === "string" && m.id.trim())
+      .map((m) => ({
+        id: String(m.id).trim(),
+        upstreamId: String(m.upstreamId || m.id).trim(),
+        name: String(m.name || m.id),
+        contextWindow:
+          Number.isSafeInteger(m.contextWindow) && m.contextWindow > 0
+            ? m.contextWindow
+            : DEFAULT_CONTEXT_WINDOW,
+        maxTokens:
+          Number.isSafeInteger(m.maxTokens) && m.maxTokens > 0 ? m.maxTokens : DEFAULT_MAX_TOKENS,
+      }));
+  } catch {
+    // Malformed extras must not hide the base local models; ignore them.
+    return [];
+  }
+}
+
+function extraLocalModel(extra: ExtraLocalModel): Model<"openai-completions"> {
+  const base = localModel(extra.upstreamId);
+  return {
+    ...base,
+    id: extra.id,
+    name: extra.name,
+    input: inputModalities(
+      localVisionModelIds().has(extra.id) || localVisionModelIds().has(extra.upstreamId),
+    ),
+    contextWindow: extra.contextWindow,
+    maxTokens: extra.maxTokens,
+  };
+}
+
+/** Rewrites alias ids to the upstream id the server actually serves. */
+function aliasingLocalApi(extras: ExtraLocalModel[]) {
+  const api = openAICompletionsApi();
+  const upstream = new Map(extras.map((e) => [e.id, e.upstreamId]));
+  const fix = <M extends { id: string }>(model: M): M => {
+    const target = upstream.get(model.id);
+    return target ? { ...model, id: target } : model;
+  };
+  return {
+    ...api,
+    stream: (
+      model: Parameters<typeof api.stream>[0],
+      context: Parameters<typeof api.stream>[1],
+      options: Parameters<typeof api.stream>[2],
+    ) => api.stream(fix(model), context, options),
+    streamSimple: (
+      model: Parameters<typeof api.streamSimple>[0],
+      context: Parameters<typeof api.streamSimple>[1],
+      options: Parameters<typeof api.streamSimple>[2],
+    ) => api.streamSimple(fix(model), context, options),
+  };
+}
+
 /** The provider, or undefined when no local models are configured. */
 export function localProvider(): Provider | undefined {
   const ids = localModelIds();
   if (!ids.length) return undefined;
+  const extras = extraLocalModels().filter((e) => !ids.includes(e.id));
   return createProvider({
     id: LOCAL_PROVIDER_ID,
     name: "Local (Ollama / LM Studio)",
@@ -103,8 +188,8 @@ export function localProvider(): Provider | undefined {
         }),
       },
     },
-    models: ids.map(localModel),
-    api: openAICompletionsApi(),
+    models: [...ids.map(localModel), ...extras.map(extraLocalModel)],
+    api: extras.length ? aliasingLocalApi(extras) : openAICompletionsApi(),
   });
 }
 

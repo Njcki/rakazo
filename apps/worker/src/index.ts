@@ -11,6 +11,7 @@ import {
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
+  createCountingWebProvider,
   createJobReconciler,
   createMessagingContextLoader,
   createPostgresReconciliationLeadership,
@@ -18,7 +19,6 @@ import {
   createRunSandbox,
   createRunSecretWriter,
   createTicketChangeNotifier,
-  createWebProvider,
   databaseCapacityBackoffMs,
   ExpoPushProvider,
   GraphileJobPublisher,
@@ -224,7 +224,7 @@ async function main() {
     onTicketChange: ticketChanges,
     ticketBoardEnabled,
     messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
-    web: createWebProvider(),
+    web: createCountingWebProvider(prisma),
     cloudAgent,
   });
 

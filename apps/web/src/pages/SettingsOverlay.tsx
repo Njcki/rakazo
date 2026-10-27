@@ -2,6 +2,7 @@ import { useLingui } from "@lingui/react/macro";
 import type { AvatarStyle, SpaceMemoryConfig } from "@rakazo/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
 import {
+  BarChart3,
   Brain,
   CloudDownload,
   Cpu,
@@ -18,6 +19,7 @@ import { computersAreUnavailable } from "../components/ComputersUnavailableHint"
 import {
   ComputerSettingsPanel,
   GeneralSettingsPanels,
+  StatsSettingsPanel,
   UpdatesSettingsPanel,
   UsageSettingsPanel,
 } from "./AccountSettingsOverlay";
@@ -32,6 +34,7 @@ export type SettingsSection =
   | "memory"
   | "voice"
   | "usage"
+  | "stats"
   | "computer"
   | "billing"
   | "updates";
@@ -139,6 +142,7 @@ export function SettingsOverlay({
     { id: "memory", label: t`Memory`, icon: Brain },
     { id: "voice", label: t`Voice`, icon: Volume2 },
     { id: "usage", label: t`Usage`, icon: Gauge },
+    { id: "stats", label: t`Statistics`, icon: BarChart3 },
     ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
     ...(billingEnabled ? [{ id: "billing" as const, label: t`Billing`, icon: CreditCard }] : []),
     { id: "updates", label: t`Updates`, icon: CloudDownload },
@@ -265,6 +269,7 @@ export function SettingsOverlay({
               {section === "usage" ? (
                 <UsageSettingsPanel usage={usage} panelRef={usageRef} />
               ) : null}
+              {section === "stats" ? <StatsSettingsPanel /> : null}
               {section === "computer" && showComputer ? (
                 <ComputerSettingsPanel
                   sandboxProvider={sandboxProvider}

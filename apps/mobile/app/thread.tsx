@@ -2738,6 +2738,10 @@ function QuoteSheet({
   );
 }
 
+function openMarkdownImage(router: ReturnType<typeof useRouter>, src: string, alt: string) {
+  router.push({ pathname: "/image", params: { uri: src, name: alt || "Image" } });
+}
+
 function previewMessageText(message: MobileMessage): string {
   const text = message.blocks
     .flatMap((block) => {
@@ -3142,6 +3146,7 @@ const MessageBubble = memo(function MessageBubble({
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
   const { t } = useI18n();
+  const router = useRouter();
   const [peerExpanded, setPeerExpanded] = useState(false);
   const artifactTarget: MobileArtifactTarget = groupId ? { groupId } : { botId };
   const cardBotId = message.botId ?? botId;
@@ -3603,6 +3608,7 @@ const MessageBubble = memo(function MessageBubble({
             tokens={tokens}
             colorScheme={colorScheme}
             streaming={message.id.startsWith("progress:")}
+            onOpenImage={(src, alt) => openMarkdownImage(router, src, alt)}
           />
         ) : null}
         {attachments.map((attachment, index) =>
@@ -3790,6 +3796,8 @@ function MessageTextCard({
 }) {
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
+  const router = useRouter();
+  const showMarkdownImage = (src: string, alt: string) => openMarkdownImage(router, src, alt);
   const contentText = blockText(message);
   if (!contentText) return null;
   return (
@@ -3822,6 +3830,7 @@ function MessageTextCard({
         tokens={tokens}
         colorScheme={colorScheme}
         streaming={message.id.startsWith("progress:")}
+        onOpenImage={showMarkdownImage}
       />
     </Pressable>
   );
@@ -3843,6 +3852,7 @@ function AgentEventLabel({
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
   const { t } = useI18n();
+  const router = useRouter();
   return (
     <Pressable
       {...actionProps}
@@ -3875,7 +3885,11 @@ function AgentEventLabel({
             paddingVertical: 10,
           }}
         >
-          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
+          <ChatMarkdown
+            palette={tokens}
+            colorScheme={colorScheme}
+            onOpenImage={(src, alt) => openMarkdownImage(router, src, alt)}
+          >
             {detail}
           </ChatMarkdown>
         </View>

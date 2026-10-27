@@ -4,6 +4,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
+    "./math": "./src/math.ts",
     "./native": "./src/markdown.native.tsx",
     "./web": "./src/markdown.web.tsx"
   },
@@ -16,9 +17,12 @@
     "@rakazo/ui-tokens": "workspace:*",
     "@rakazo/ui-web": "workspace:*",
     "@ronradtke/react-native-markdown-display": "9.0.3",
+    "katex": "0.16.47",
     "linkify-it": "5.0.2",
     "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1"
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
   },
   "peerDependencies": {
     "react": "19.2.3",

@@ -851,7 +851,7 @@ function SpaceShell() {
                 void refreshThread(bot.id).catch(() => undefined);
               }
             }}
-            onShare={active && !inGroup ? () => setShareDialogOpen(true) : undefined}
+            onShare={(active && !inGroup) || (inGroup && activeGroup) ? () => setShareDialogOpen(true) : undefined}
           />
           {!active && !activeGroup && initialBotsLoaded ? (
             <div className="grid flex-1 place-items-center">
@@ -1168,7 +1168,18 @@ function SpaceShell() {
       {shareDialogOpen && active && !inGroup ? (
         <ShareThreadDialog
           botId={active.id}
-          botName={active.name}
+          displayName={active.name}
+          onClose={() => setShareDialogOpen(false)}
+        />
+      ) : null}
+
+      {shareDialogOpen && inGroup && activeGroup ? (
+        <ShareThreadDialog
+          groupId={activeGroup.id}
+          displayName={activeGroup.name}
+          memberNames={Object.fromEntries(
+            (activeGroup.members ?? []).map((m) => [m.botId, m.name]),
+          )}
           onClose={() => setShareDialogOpen(false)}
         />
       ) : null}

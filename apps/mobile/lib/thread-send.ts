@@ -148,6 +148,7 @@ export function useThreadSend({
     const botTarget = reroutedToGroup ? undefined : initialBotTarget;
     let attempt: SendAttempt;
     try {
+      const snap = history.snapRef.current;
       attempt = feedback.sendAttempt({
         originThreadKey: originThreadKey!,
         displayText: submitted.promptText,
@@ -160,6 +161,17 @@ export function useThreadSend({
         attachments,
         replyTargetId: replyTarget?.id,
         replyQuote,
+        echoAfterSeq:
+          snap && (snap.groupId ?? snap.botId) === originThreadKey
+            ? snap.messages.reduce((max, message) => Math.max(max, message.seq ?? -1), -1)
+            : undefined,
+        echoKnownIds:
+          snap && (snap.groupId ?? snap.botId) === originThreadKey
+            ? snap.messages.flatMap((message) =>
+                message.role === "user" && message.seq === undefined ? [message.id] : [],
+              )
+            : undefined,
+        sentAt: new Date().toISOString(),
       });
     } catch (error) {
       Alert.alert(t("Failed to send message"), errorText(error));

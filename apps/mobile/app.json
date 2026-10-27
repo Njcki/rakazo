@@ -1,10 +1,10 @@
 {
   "expo": {
     "name": "Rakazo",
-    "slug": "rakazo",
+    "slug": "rakazo-fork",
     "owner": "inbox-zero",
     "scheme": "rakazo",
-    "version": "1.0.9",
+    "version": "1.0.27",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
@@ -76,15 +76,18 @@
       }
     },
     "android": {
-      "package": "com.rakazo.app",
-      "versionCode": 10,
+      "package": "com.rakazo.fork",
+      "versionCode": 27,
       "softwareKeyboardLayoutMode": "resize",
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "monochromeImage": "./assets/monochrome-icon.png",
         "backgroundImage": "./assets/icon-background.png"
-      }
+      },
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

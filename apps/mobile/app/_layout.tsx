@@ -3,8 +3,10 @@ import {
   CodeCopyButtonContext,
   LinkFaviconsContext,
   MarkdownLinkPromptProvider,
+  MathBlockContext,
   MermaidDiagramContext,
   RemoteImagesContext,
+  TableGestureGuardContext,
 } from "@rakazo/chat-ui/native";
 import { analyticsScreen } from "@rakazo/core";
 import {
@@ -30,7 +32,9 @@ import { chatRouteHeader } from "../components/chat-route-header";
 import { CodeCopyButton } from "../components/code-copy-button";
 import { ComputerUpdateProgress } from "../components/computer-update-progress";
 import { floatingHeaderOptions, glassHeaderOptions } from "../components/glass-title";
+import { MathBlockRenderer } from "../components/math-block";
 import { MermaidDiagram } from "../components/mermaid-diagram";
+import { TableGestureGuardView } from "../components/table-gesture-guard";
 import { MessageMenuHost } from "../components/message-action-menu";
 import { MessageActionSheetHost } from "../components/message-action-sheet-host";
 import { NativeSymbol } from "../components/native-symbol";
@@ -221,11 +225,15 @@ function ChatContentProviders({
     >
       <RemoteImagesContext.Provider value={loadRemoteImages}>
         <LinkFaviconsContext.Provider value={linkFavicons}>
+          <MathBlockContext.Provider value={MathBlockRenderer}>
+            <TableGestureGuardContext.Provider value={TableGestureGuardView}>
           <MermaidDiagramContext.Provider value={MermaidDiagram}>
             <CodeCopyButtonContext.Provider value={CodeCopyButton}>
               {children}
             </CodeCopyButtonContext.Provider>
           </MermaidDiagramContext.Provider>
+            </TableGestureGuardContext.Provider>
+          </MathBlockContext.Provider>
         </LinkFaviconsContext.Provider>
       </RemoteImagesContext.Provider>
     </MarkdownLinkPromptProvider>

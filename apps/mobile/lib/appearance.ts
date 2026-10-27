@@ -11,6 +11,11 @@ import { Appearance } from "react-native";
 
 export type { AppearancePreference, ResolvedAppearance };
 
+/** RN / native chrome only know light|dark; Nero uses dark chrome. */
+export function toNativeColorScheme(appearance: ResolvedAppearance): "light" | "dark" {
+  return appearance === "light" ? "light" : "dark";
+}
+
 let memoryPreference: AppearancePreference | null = null;
 let writeGeneration = 0;
 const listeners = new Set<() => void>();
@@ -90,7 +95,9 @@ async function persistAppearancePreference(
 // Native surfaces (alerts, action sheets, the keyboard, iOS platform colors) follow the
 // window's scheme, so an explicit app choice overrides it and System hands it back to the OS.
 function applyNativeColorScheme(preference: AppearancePreference) {
-  Appearance.setColorScheme(preference === "system" ? "unspecified" : preference);
+  Appearance.setColorScheme(
+    preference === "system" ? "unspecified" : preference === "black" ? "dark" : preference,
+  );
 }
 
 Appearance.addChangeListener(() => {

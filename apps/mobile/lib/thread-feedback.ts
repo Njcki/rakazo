@@ -37,6 +37,12 @@ export type SendPayload = {
   attachments: PickedAttachment[];
   replyTargetId?: string;
   replyQuote: string | null;
+  /** Highest seq known when the send began; used to match the server echo before acceptedSeq. */
+  echoAfterSeq?: number;
+  /** User message ids without seq already on screen when the send began. */
+  echoKnownIds?: string[];
+  /** Client clock when the stand-in row was created. */
+  sentAt?: string;
 };
 
 export type SendAttempt = {

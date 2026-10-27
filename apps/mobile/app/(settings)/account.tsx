@@ -22,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AppMark } from "../../components/app-mark";
 import { NameDialog } from "../../components/name-dialog";
 import { NativeActionButton } from "../../components/native-action-button";
+import { AppearancePicker } from "../../components/appearance-picker";
 import { NativeSegmentedControl } from "../../components/native-segmented-control";
 import {
   SettingsGroup,
@@ -569,14 +570,15 @@ export default function Account() {
 
         <View accessibilityLabel={t("Appearance")} style={styles.section}>
           <SettingsLabel>{t("Appearance")}</SettingsLabel>
-          <NativeSegmentedControl
+          <AppearancePicker
             accessibilityLabel={t("Appearance")}
             onChange={(value) => void setAppearancePreference(value)}
-            options={[
-              { value: "system", label: t("System") },
-              { value: "light", label: t("Light") },
-              { value: "dark", label: t("Dark") },
-            ]}
+            labels={{
+              system: t("System"),
+              light: t("Light"),
+              dark: t("Dark"),
+              black: t("Black"),
+            }}
             value={appearance}
           />
         </View>

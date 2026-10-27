@@ -1,6 +1,6 @@
 import { matchUiLocale } from "@rakazo/core";
 
-export const UI_LOCALES = ["en", "zh-CN", "zh-TW", "ru", "de", "nl", "ja"] as const;
+export const UI_LOCALES = ["en", "it", "zh-CN", "zh-TW", "ru", "de", "nl", "ja"] as const;
 
 export type UiLocale = (typeof UI_LOCALES)[number];
 
@@ -8,6 +8,7 @@ export const UI_LOCALE_STORAGE_KEY = "rakazo.uiLocale";
 
 export const UI_LOCALE_LABELS: Record<UiLocale, string> = {
   en: "English",
+  it: "Italiano",
   "zh-CN": "简体中文",
   "zh-TW": "繁體中文",
   ru: "Русский",

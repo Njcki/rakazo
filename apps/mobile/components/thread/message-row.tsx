@@ -95,6 +95,8 @@ type MessageRowProps = {
   columnWidth: number;
   enableJump: boolean;
   index: number;
+  /** In-flight text send: show "Sending…" under the bubble without remounting later. */
+  pending?: boolean;
 };
 
 export const MessageRow = memo(function MessageRow({
@@ -130,6 +132,7 @@ export const MessageRow = memo(function MessageRow({
   columnWidth,
   enableJump,
   index,
+  pending,
 }: MessageRowProps) {
   const tokens = useMobileTokens();
   const colorScheme = useResolvedAppearance();
@@ -451,6 +454,21 @@ export const MessageRow = memo(function MessageRow({
                 onHelperToggle={actions.helperToggle}
                 userBubble={userBubble}
               />
+          {pending ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{
+                position: "absolute",
+                right: 4,
+                bottom: -15,
+                color: tokens.mutedForeground,
+                fontSize: 11,
+                lineHeight: 13,
+              }}
+            >
+              {t("Sending…")}
+            </Text>
+          ) : null}
             </ThreadReadOnlyContext.Provider>
           </MessageContextMenu>
           {displayedReactions.size > 0 ? (

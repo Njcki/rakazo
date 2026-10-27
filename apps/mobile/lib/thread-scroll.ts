@@ -160,7 +160,7 @@ export class ThreadScrollBehavior {
         ? Number.POSITIVE_INFINITY
         : Math.max(0, this.contentHeight - this.viewportHeight);
     this.distanceFromEnd = Math.min(maxDistance, Math.max(0, distanceFromEnd));
-    const detached = this.distanceFromEnd > 80;
+    const detached = this.distanceFromEnd > 100;
     this.currentState = {
       detached,
       unread: detached ? this.currentState.unread || this.pendingFollow : false,

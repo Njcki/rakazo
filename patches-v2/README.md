@@ -32,12 +32,24 @@ Copies of the 2026-10-27 regen live under the operator logs dir `series-post-reb
 IT: `0001`–`0050` sul pin `0723154` resta su branch `selfhost-v2` e negli archivi operatore. Vedi `HISTORIC.md`.  
 EN: `0001`–`0050` on pin `0723154` remains on branch `selfhost-v2` and in operator archives. See `HISTORIC.md`.
 
+## update-rakazo-v2.sh
+
+IT: `check` / `build` / `cutover` leggono `CURRENT_TAG` + `REBASE_TIP` (mode **tip-as-base**).  
+Se mancano, resta il legacy **pin-series** (`UPSTREAM_COMMIT` + `nkN`).  
+`./update-rakazo-v2.sh check` stampa mode, tip, tag target e conteggio series.
+
+EN: `check` / `build` / `cutover` honour `CURRENT_TAG` + `REBASE_TIP` (**tip-as-base**).  
+If unset, legacy **pin-series** (`UPSTREAM_COMMIT` + `nkN`) remains.  
+`./update-rakazo-v2.sh check` prints mode, tip, target tag, and series count.
+
+See `NOTE-update-script.md`.
+
 ## Build futuri / Future builds
 
 1. Commit deltas on `rebase/onto-upstream-main` (or successor).
 2. `git format-patch <REBASE_TIP>..<new-tip> -o patches-v2/series/` (or squash).
 3. Update `PINS` (`REBASE_TIP`, `CURRENT_TAG`, `APP_DIGEST` after build).
-4. Adapt `update-rakazo-v2.sh` before using `build`/`cutover` again (script still assumes pin+`nkN`).
+4. `./update-rakazo-v2.sh build` then `cutover --yes` when authorized.
 
 ## Scrub
 

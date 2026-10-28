@@ -1,5 +1,5 @@
-# Tip-as-base after cutover 2026-10-27 (Europe/Rome).
-# Image in production: rakazo-app-nk:rebase-cd156f2 (built from REBASE_TIP, not pin+series).
+# Tip-as-base after cutover 2026-10-28 (Europe/Rome).
+# Image in production: rakazo-app-nk:rebase-566a2d8 (built from REBASE_TIP, not pin+series).
 #
 # IT: update-rakazo-v2.sh legge CURRENT_TAG / REBASE_TIP (pin mode tip-as-base).
 # EN: update-rakazo-v2.sh reads CURRENT_TAG / REBASE_TIP (pin mode tip-as-base).
@@ -7,12 +7,12 @@
 # Upstream tip at the rebase merge (elie222/rakazo main):
 UPSTREAM_COMMIT=a0e57811172f5286d3d113e3117470d3762e2b99
 # Fork tip that matches the running image:
-REBASE_TIP=cd156f21bd07c853e8771fa8892ead1995647ec2
+REBASE_TIP=566a2d8421c9ae275a85be946e844c2871aff851
 # Local image id on the build host (not a registry digest until pushed):
-APP_DIGEST=sha256:94a5f87111eb0f4146b9a42770e5a9506e3c2351572209ea58c46c3c90148777
+APP_DIGEST=sha256:98ab7cb51cbf0184b19308b0e19aeec3f7e4578b7dfa9c0cde9281c099089d07
 # Computer tools unchanged from prior pin:
 COMPUTER_DIGEST=sha256:75c3cdc587ede7b3974cb10453ede9fe0629b606af385d5528a237c00e95836e
-CURRENT_TAG=rebase-cd156f2
+CURRENT_TAG=rebase-566a2d8
 #
 # Historic (do not reapply): pin 0723154 + series 0001–0050 → tag 0723154-nk50
 # HISTORIC_UPSTREAM_COMMIT=0723154f23d6622ef0f4accafdd170e1cda808dd

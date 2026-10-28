@@ -366,6 +366,77 @@ describe("projectMessages", () => {
     });
   });
 
+  it("keeps wiped live narration as progressAnchor so deltas do not restart mid-word", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { delta: "Cerco i file. ", streaming: true },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "shell" },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { delta: "Sto verificando le i", streaming: true },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+      {
+        id: "e4",
+        threadId: "t1",
+        seq: 3,
+        type: "thread.message.created",
+        runId: "r1",
+        payload: {
+          messageId: "m-progress",
+          role: "bot",
+          blocks: [{ kind: "text", text: "⚡ Ho recepito il connettore." }],
+        },
+        createdAt: "2026-01-01T00:00:03.000Z",
+      },
+      {
+        id: "e5",
+        threadId: "t1",
+        seq: 4,
+        type: "thread.progress",
+        runId: "r1",
+        payload: {
+          delta: "ntegrazioni e gli strumenti disponibili per Canva. ",
+          streaming: true,
+        },
+        createdAt: "2026-01-01T00:00:04.000Z",
+      },
+    ]);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.blocks[0]).toEqual({
+      kind: "text",
+      text: "⚡ Ho recepito il connettore.",
+    });
+    const live = messages[1];
+    expect(live?.id).toBe("progress:r1");
+    const visible = (live?.blocks ?? [])
+      .filter((block) => block.kind === "text" || block.kind === "progress")
+      .map((block) => block.text)
+      .join("");
+    expect(visible).toContain("Sto verificando le integrazioni e gli strumenti disponibili per Canva.");
+    expect(visible.startsWith("ntegrazioni")).toBe(false);
+    expect(live?.blocks.some((block) => block.kind === "steps")).toBe(true);
+  });
+
   it("clears live tools when the durable reply already includes steps", () => {
     const messages = projectMessages([
       {

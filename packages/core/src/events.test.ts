@@ -11,9 +11,11 @@ import {
   isRunTerminalEvent,
   liveActivityLine,
   normalizeResponseStreamingPreference,
+  midTurnKeepLiveTrail,
   projectMessages,
   redactSecrets,
   reduceLiveMessageBlocks,
+  reduceLiveWithProgressAnchor,
   responseStreamingEnabled,
   runFailureError,
   sanitizeJsonValue,
@@ -435,6 +437,27 @@ describe("projectMessages", () => {
     expect(visible).toContain("Sto verificando le integrazioni e gli strumenti disponibili per Canva.");
     expect(visible.startsWith("ntegrazioni")).toBe(false);
     expect(live?.blocks.some((block) => block.kind === "steps")).toBe(true);
+  });
+
+  it("midTurnKeepLiveTrail + reduceLiveWithProgressAnchor fix mid-word for live clients", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { delta: "Sto verificando le i", streaming: true },
+    });
+    const withTool = reduceLiveMessageBlocks(streamed, { type: "tool", name: "shell" });
+    const kept = midTurnKeepLiveTrail(withTool);
+    expect(kept.progressAnchor).toContain("Sto verificando le i");
+    expect(kept.blocks.every((block) => block.kind === "steps")).toBe(true);
+    const continued = reduceLiveWithProgressAnchor(kept.blocks, kept.progressAnchor, {
+      type: "progress",
+      payload: { delta: "ntegrazioni e gli strumenti.", streaming: true },
+    });
+    const visible = continued
+      .filter((block) => block.kind === "text" || block.kind === "progress")
+      .map((block) => block.text)
+      .join("");
+    expect(visible).toContain("Sto verificando le integrazioni e gli strumenti.");
+    expect(visible.startsWith("ntegrazioni")).toBe(false);
   });
 
   it("clears live tools when the durable reply already includes steps", () => {

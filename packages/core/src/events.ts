@@ -65,9 +65,23 @@ export function projectMessages(
     const createdAt =
       typeof event.createdAt === "string" ? event.createdAt : event.createdAt.toISOString();
     if (event.type === "thread.message.created") {
-      clearLive(event);
       const role = (payload.role as ThreadMessage["role"]) ?? "bot";
       const blocks = (payload.blocks as MessageBlock[]) ?? [];
+      // Mid-turn progress (message_user / promoted narration) is text-only. Keep the
+      // live tool-step trail so the UI shows one accumulating "Working…" card below
+      // the interim bubbles instead of clearing tools on every update. A durable
+      // message that already carries steps (final reply) clears live as before.
+      if (!event.runId || blocks.some((block) => block.kind === "steps")) {
+        clearLive(event);
+      } else {
+        const liveId = progressMessageId(event);
+        const live = liveById.get(liveId);
+        if (live) {
+          const kept = live.blocks.filter((block) => block.kind === "steps");
+          if (kept.length === 0) liveById.delete(liveId);
+          else live.blocks = kept;
+        }
+      }
       for (const block of blocks) {
         if (block.kind === "subagent") {
           durableSubagents.add(block.agentId);

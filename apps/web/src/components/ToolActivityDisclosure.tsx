@@ -8,7 +8,7 @@ import {
 } from "@rakazo/ui-web/components/ui/collapsible";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
-import { toolStepCount } from "../lib/tool-activity-view";
+import { coalesceStepsBlocks, toolStepCount } from "../lib/tool-activity-view";
 
 type ToolStep = Extract<ThreadMessage["blocks"][number], { kind: "steps" }>["steps"][number];
 
@@ -141,7 +141,7 @@ export function StandaloneToolActivity({
   );
 }
 
-/** A bot message whose only visible blocks are tool cards: one slim line per card, no bubble. */
+/** A bot message whose only visible blocks are tool cards: one slim line for the run, no bubble. */
 export function ToolOnlyNarration({
   blocks,
   live,
@@ -149,19 +149,14 @@ export function ToolOnlyNarration({
   blocks: readonly ThreadMessage["blocks"][number][];
   live: boolean;
 }) {
+  const coalesced = coalesceStepsBlocks(blocks);
+  if (!coalesced) return null;
   return (
-    <>
-      {blocks.map((block, i) =>
-        block.kind === "steps" ? (
-          <StandaloneToolActivity
-            key={i}
-            live={live}
-            steps={block.steps}
-            stepCount={toolStepCount(block.steps)}
-            durationMs={block.durationMs}
-          />
-        ) : null,
-      )}
-    </>
+    <StandaloneToolActivity
+      live={live}
+      steps={coalesced.steps}
+      stepCount={toolStepCount(coalesced.steps)}
+      durationMs={coalesced.durationMs}
+    />
   );
 }

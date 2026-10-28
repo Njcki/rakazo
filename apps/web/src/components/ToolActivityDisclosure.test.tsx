@@ -216,7 +216,7 @@ describe("ToolOnlyNarration", () => {
     expect(html).not.toContain("bg-muted");
   });
 
-  it("folds each card once the run is done", () => {
+  it("folds one coalesced card once the run is done", () => {
     const html = renderToStaticMarkup(
       <ToolOnlyNarration
         live={false}
@@ -226,8 +226,9 @@ describe("ToolOnlyNarration", () => {
         ]}
       />,
     );
-    expect(html.match(/data-testid="tool-activity-line"/g)).toHaveLength(2);
-    expect(visibleText(html)).toContain("Done 3 tools 12s");
+    expect(html.match(/data-testid="tool-activity-line"/g)).toHaveLength(1);
+    // 3 + 1 step rows coalesced → 4 tools
+    expect(visibleText(html)).toContain("Done 4 tools 12s");
     expect(html).not.toMatch(OPEN_TRIGGER);
   });
 });

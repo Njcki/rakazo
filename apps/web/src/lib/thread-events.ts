@@ -17,7 +17,8 @@ import {
   prependThreadHistoryPage,
   progressMessageId,
   QUEUE_HOLDING_RUN_STATUSES,
-  reduceLiveMessageBlocks,
+  midTurnKeepLiveTrail,
+  reduceLiveWithProgressAnchor,
   replyMetadata,
   runFailureError,
   settleRunSubagents,
@@ -27,6 +28,11 @@ import {
   updateCloudAgentMessages,
   upsertMessageById,
 } from "@rakazo/core";
+
+/** Client-only map of wiped live narration for delta math (not in contracts). */
+type ClientThreadSnapshot = ThreadSnapshot & {
+  liveProgressAnchors?: Record<string, string>;
+};
 
 const runTriggers = new Set<string>(RUN_TRIGGERS);
 
@@ -451,8 +457,10 @@ export function reduceThreadSnapshot(
   }
   if (event.type === "thread.progress") {
     const liveId = progressMessageId(event);
+    const clientPrev = prev as ClientThreadSnapshot;
     const { previous, remaining } = takeLiveMessage(prev.messages, liveId);
-    const blocks = reduceLiveMessageBlocks(previous?.blocks ?? [], {
+    const anchor = clientPrev.liveProgressAnchors?.[liveId];
+    const blocks = reduceLiveWithProgressAnchor(previous?.blocks ?? [], anchor, {
       type: "progress",
       payload: event.payload,
     });
@@ -466,12 +474,22 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, streaming] };
+    const liveProgressAnchors = { ...(clientPrev.liveProgressAnchors ?? {}) };
+    delete liveProgressAnchors[liveId];
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [...remaining, streaming],
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
+    } as ThreadSnapshot;
   }
   if (event.type === "agent.tool.called") {
     const liveId = progressMessageId(event);
+    const clientPrev = prev as ClientThreadSnapshot;
     const { previous, remaining } = takeLiveMessage(prev.messages, liveId);
-    const blocks = reduceLiveMessageBlocks(previous?.blocks ?? [], {
+    const anchor = clientPrev.liveProgressAnchors?.[liveId];
+    const blocks = reduceLiveWithProgressAnchor(previous?.blocks ?? [], anchor, {
       type: "tool",
       name: String(event.payload.name ?? ""),
     });
@@ -485,7 +503,15 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, next] };
+    const liveProgressAnchors = { ...(clientPrev.liveProgressAnchors ?? {}) };
+    delete liveProgressAnchors[liveId];
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [...remaining, next],
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
+    } as ThreadSnapshot;
   }
   if (event.type === "agent.tool.completed") {
     return { ...prev, cursor: event.seq };
@@ -543,9 +569,43 @@ export function reduceThreadSnapshot(
       blocks.filter((block) => block.kind === "subagent").map((block) => block.agentId),
     );
     const liveId = progressMessageId(event);
-    const { remaining } = takeLiveMessage(prev.messages, liveId);
-    const without = remaining.filter((message) => !replacedSubagent(message, replacedSubagentIds));
-    return { ...prev, cursor: event.seq, messages: upsertMessageById(without, next) };
+    const clientPrev = prev as ClientThreadSnapshot;
+    const { previous, remaining } = takeLiveMessage(prev.messages, liveId);
+    let without = remaining.filter((message) => !replacedSubagent(message, replacedSubagentIds));
+    let liveProgressAnchors = { ...(clientPrev.liveProgressAnchors ?? {}) };
+    // Mid-turn text-only durable: keep tool trail + stash wiped narration for delta math
+    // (same as projectMessages). Final replies that already carry steps clear live.
+    if (
+      event.type === "thread.message.created" &&
+      event.runId &&
+      !blocks.some((block) => block.kind === "steps") &&
+      previous
+    ) {
+      const kept = midTurnKeepLiveTrail(previous.blocks ?? []);
+      const priorAnchor = liveProgressAnchors[liveId] ?? "";
+      const anchor = priorAnchor + kept.progressAnchor;
+      if (kept.blocks.length > 0) {
+        without = [
+          ...without,
+          {
+            ...previous,
+            blocks: kept.blocks,
+            seq: event.seq,
+          },
+        ];
+      }
+      if (anchor) liveProgressAnchors[liveId] = anchor;
+      else delete liveProgressAnchors[liveId];
+    } else {
+      delete liveProgressAnchors[liveId];
+    }
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: upsertMessageById(without, next),
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
+    } as ThreadSnapshot;
   }
   return prev;
 }

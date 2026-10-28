@@ -231,6 +231,59 @@ describe("thread event reduction", () => {
     ]);
   });
 
+
+  it("keeps live trail and progressAnchor so mid-turn wipe does not restart mid-word", () => {
+    let state = reduceThreadSnapshot(
+      snapshot([]),
+      event({
+        type: "thread.progress",
+        seq: 4,
+        runId: "run-1",
+        payload: { delta: "Sto verificando le i", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({ type: "agent.tool.called", seq: 5, runId: "run-1", payload: { name: "shell" } }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 6,
+        runId: "run-1",
+        payload: {
+          messageId: "m-mid",
+          role: "bot",
+          blocks: [{ kind: "text", text: "⚡ Check ricevuto." }],
+        },
+      }),
+    );
+    expect(state?.messages.some((item) => item.id === "m-mid")).toBe(true);
+    expect((state as ThreadSnapshot & { liveProgressAnchors?: Record<string, string> })
+      ?.liveProgressAnchors?.["progress:run-1"]).toContain("Sto verificando le i");
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 7,
+        runId: "run-1",
+        payload: { delta: "ntegrazioni e gli strumenti.", streaming: true },
+      }),
+    );
+    const live = state?.messages.find((item) => item.id === "progress:run-1");
+    const visible = (live?.blocks ?? [])
+      .filter((block) => block.kind === "text" || block.kind === "progress")
+      .map((block) => ("text" in block ? block.text : ""))
+      .join("");
+    expect(visible).toContain("Sto verificando le integrazioni e gli strumenti.");
+    expect(visible.startsWith("ntegrazioni")).toBe(false);
+    expect(
+      (state as ThreadSnapshot & { liveProgressAnchors?: Record<string, string> })
+        ?.liveProgressAnchors?.["progress:run-1"],
+    ).toBeUndefined();
+  });
+
   it("keeps hidden token progress so re-enabling streaming stays continuous", () => {
     const initial = snapshot([]);
     const afterTokens = reduceThreadSnapshot(

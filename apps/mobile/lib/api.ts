@@ -44,9 +44,10 @@ import {
   messagingProviderLabel,
   parseRetryAfter,
   prependThreadHistoryPage,
+  midTurnKeepLiveTrail,
   progressMessageId,
   readBoundedJsonResponse,
-  reduceLiveMessageBlocks,
+  reduceLiveWithProgressAnchor,
   replyMetadata,
   runFailureError,
   settleRunSubagents,
@@ -1101,6 +1102,8 @@ export type MobileSnapshot = Omit<
     ComputerStatus,
     "state" | "controlHolder" | "screenAvailable" | "mode" | "busyBotName"
   >;
+  /** Client-only wiped live narration for delta math after mid-turn durables. */
+  liveProgressAnchors?: Record<string, string>;
 };
 
 export function shouldApplyMobileThreadRefresh(input: {
@@ -1549,39 +1552,57 @@ export function applyMobileThreadEvent(
   if (event.type === "thread.progress") {
     const progressId = progressMessageId(event);
     const { previous, remaining } = takeLiveMessage(prev.messages, progressId);
+    const anchor = prev.liveProgressAnchors?.[progressId];
     const streaming: MobileMessage = {
       id: progressId,
       role: "bot",
-      blocks: reduceLiveMessageBlocks((previous?.blocks ?? []) as MessageBlock[], {
-        type: "progress",
-        payload: event.payload,
-      }),
+      blocks: reduceLiveWithProgressAnchor(
+        (previous?.blocks ?? []) as MessageBlock[],
+        anchor,
+        {
+          type: "progress",
+          payload: event.payload,
+        },
+      ),
       ...(event.botId ? { botId: event.botId } : {}),
       ...(event.runId ? { runId: event.runId } : {}),
     };
+    const liveProgressAnchors = { ...(prev.liveProgressAnchors ?? {}) };
+    delete liveProgressAnchors[progressId];
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
       messages: [...remaining, streaming],
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
     };
   }
   if (event.type === "agent.tool.called") {
     const progressId = progressMessageId(event);
     const { previous, remaining } = takeLiveMessage(prev.messages, progressId);
+    const anchor = prev.liveProgressAnchors?.[progressId];
     const streaming: MobileMessage = {
       id: progressId,
       role: "bot",
-      blocks: reduceLiveMessageBlocks((previous?.blocks ?? []) as MessageBlock[], {
-        type: "tool",
-        name: String(event.payload?.name ?? ""),
-      }),
+      blocks: reduceLiveWithProgressAnchor(
+        (previous?.blocks ?? []) as MessageBlock[],
+        anchor,
+        {
+          type: "tool",
+          name: String(event.payload?.name ?? ""),
+        },
+      ),
       ...(event.botId ? { botId: event.botId } : {}),
       ...(event.runId ? { runId: event.runId } : {}),
     };
+    const liveProgressAnchors = { ...(prev.liveProgressAnchors ?? {}) };
+    delete liveProgressAnchors[progressId];
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
       messages: [...remaining, streaming],
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
     };
   }
   if (event.type === "agent.tool.completed") {
@@ -1621,7 +1642,8 @@ export function applyMobileThreadEvent(
     };
   }
   if (event.type === "thread.message.created" || event.type === "thread.message.updated") {
-    const { remaining } = takeLiveMessage(prev.messages, progressMessageId(event));
+    const liveId = progressMessageId(event);
+    const { previous, remaining } = takeLiveMessage(prev.messages, liveId);
     const id = String(event.payload?.messageId ?? event.id ?? `msg:${event.seq ?? 0}`);
     const known = prev.messages.find((message) => message.id === id);
     const seq = typeof event.payload?.seq === "number" ? event.payload.seq : known?.seq;
@@ -1641,21 +1663,46 @@ export function applyMobileThreadEvent(
       botId: event.botId ?? (event.payload?.botId ? String(event.payload.botId) : undefined),
       ...replyMetadata(event.payload ?? {}, known),
     };
+    let keptMessages = remaining.filter(
+      (message) =>
+        !(
+          message.id.startsWith("subagent:") &&
+          next.blocks.some(
+            (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+          )
+        ),
+    );
+    let liveProgressAnchors = { ...(prev.liveProgressAnchors ?? {}) };
+    // Mid-turn text-only: keep tool trail + stash wiped narration for following deltas.
+    if (
+      event.type === "thread.message.created" &&
+      event.runId &&
+      !next.blocks.some((block) => block.kind === "steps") &&
+      previous
+    ) {
+      const kept = midTurnKeepLiveTrail((previous.blocks ?? []) as MessageBlock[]);
+      const priorAnchor = liveProgressAnchors[liveId] ?? "";
+      const anchor = priorAnchor + kept.progressAnchor;
+      if (kept.blocks.length > 0) {
+        keptMessages = [
+          ...keptMessages,
+          {
+            ...previous,
+            blocks: kept.blocks,
+          },
+        ];
+      }
+      if (anchor) liveProgressAnchors[liveId] = anchor;
+      else delete liveProgressAnchors[liveId];
+    } else {
+      delete liveProgressAnchors[liveId];
+    }
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: upsertMessageById(
-        remaining.filter(
-          (message) =>
-            !(
-              message.id.startsWith("subagent:") &&
-              next.blocks.some(
-                (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-              )
-            ),
-        ),
-        next,
-      ),
+      messages: upsertMessageById(keptMessages, next),
+      liveProgressAnchors:
+        Object.keys(liveProgressAnchors).length > 0 ? liveProgressAnchors : undefined,
     };
   }
   return prev;

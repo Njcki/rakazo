@@ -491,8 +491,11 @@ export function reduceLiveMessageBlocks(
   ];
 }
 
-/** Re-attach wiped live narration so delta math still sees the server's prior prefix. */
-function withProgressAnchor(
+/**
+ * Re-attach wiped live narration so delta math still sees the server's prior prefix.
+ * Exported for the live SSE reduce on web/mobile (same keep-trail as projectMessages).
+ */
+export function withProgressAnchor(
   blocks: readonly MessageBlock[],
   progressAnchor: string | undefined,
 ): MessageBlock[] {
@@ -505,6 +508,34 @@ function liveMessageText(blocks: readonly MessageBlock[]): string {
     .filter((block) => block.kind === "text" || block.kind === "progress")
     .map((block) => block.text)
     .join("");
+}
+
+/** Narration text from live blocks (text + progress), excluding steps. */
+export function liveMessageNarration(blocks: readonly MessageBlock[]): string {
+  return liveMessageText(blocks);
+}
+
+/**
+ * Mid-turn text-only durable: keep steps trail, return wiped narration as progressAnchor.
+ * Callers keep a live bubble with `blocks` and stash `progressAnchor` for the next delta.
+ */
+export function midTurnKeepLiveTrail(blocks: readonly MessageBlock[]): {
+  blocks: MessageBlock[];
+  progressAnchor: string;
+} {
+  return {
+    progressAnchor: liveMessageText(blocks),
+    blocks: blocks.filter((block) => block.kind === "steps"),
+  };
+}
+
+/** Apply a live progress/tool update, consuming any progressAnchor into delta math. */
+export function reduceLiveWithProgressAnchor(
+  blocks: readonly MessageBlock[],
+  progressAnchor: string | undefined,
+  update: LiveMessageUpdate,
+): MessageBlock[] {
+  return reduceLiveMessageBlocks(withProgressAnchor(blocks, progressAnchor), update);
 }
 
 /**

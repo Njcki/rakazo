@@ -12,19 +12,17 @@ import { CollaborationMarker } from "../../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../../components/CloudAgentCard";
 import { SubagentCard } from "../../components/SubagentCard";
 import {
-  LIVE_TOOL_STEP_WINDOW,
   StandaloneToolActivity,
-  ToolActivityDisclosure,
   ToolOnlyNarration,
-  ToolSteps,
 } from "../../components/ToolActivityDisclosure";
 import { SkillDraftCard } from "../../components/teach/SkillDraftCard";
 import type { ArtifactTarget } from "../../lib/artifact-open";
 import { messageProviderLabel } from "../../lib/messaging";
 import {
+  coalesceStepsBlocks,
   isToolOnlyNarration,
+  narrationContentBlocks,
   renderableMessageBlocks,
-  shouldRenderToolCard,
   toolStepCount,
 } from "../../lib/tool-activity-view";
 import { ReplyLine } from "./chat-context";
@@ -205,64 +203,64 @@ export const MessageView = memo(function MessageView({
         </>
       );
     }
+    // Text stays in the bubble; tool activity is one slim line below (outside the bubble)
+    // so "Done / N tools" is never interleaved between "Sto cercando…" paragraphs.
+    const contentBlocks = narrationContentBlocks(visibleNarrationBlocks);
+    const coalescedSteps = showToolActivity ? coalesceStepsBlocks(visibleNarrationBlocks) : null;
     return (
       <>
         {messageContext}
-        <div className="relative w-fit max-w-full [@media(hover:none)]:w-full">
-          <div className="flex w-fit max-w-full justify-start [@media(hover:none)]:w-full">
-            <div
-              data-testid="message-bot-bubble"
-              className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-body1 text-foreground"
-              dir="auto"
-            >
-              {visibleNarrationBlocks.map((block, i) => {
-                if (block.kind === "steps") {
-                  return (
-                    <ToolActivityDisclosure
-                      key={i}
-                      live={isLive}
-                      stepCount={toolStepCount(block.steps)}
-                      durationMs={block.durationMs}
-                    >
-                      <ToolSteps
-                        steps={block.steps}
-                        currentIndex={isLive ? block.steps.length - 1 : undefined}
-                        limit={isLive ? LIVE_TOOL_STEP_WINDOW : undefined}
-                      />
-                    </ToolActivityDisclosure>
-                  );
-                }
-                if (block.kind === "text" || block.kind === "progress") {
-                  return (
-                    <div
-                      key={i}
-                      data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
-                    >
-                      <ChatMarkdown
-                        streaming={block.kind === "progress"}
-                        renderMention={renderMention}
-                      >
-                        {block.text}
-                      </ChatMarkdown>
-                    </div>
-                  );
-                }
-                return null;
-              })}
-              {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
-                <Button
-                  variant="text"
-                  size="xs"
-                  aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
-                  onClick={onSpeak}
-                  className="font-normal"
+        <div className="relative flex w-fit max-w-full flex-col gap-1.5 [@media(hover:none)]:w-full">
+          {contentBlocks.length > 0 ? (
+            <div className="relative w-fit max-w-full [@media(hover:none)]:w-full">
+              <div className="flex w-fit max-w-full justify-start [@media(hover:none)]:w-full">
+                <div
+                  data-testid="message-bot-bubble"
+                  className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-body1 text-foreground"
+                  dir="auto"
                 >
-                  {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
-                </Button>
-              ) : null}
+                  {contentBlocks.map((block, i) => {
+                    if (block.kind === "text" || block.kind === "progress") {
+                      return (
+                        <div
+                          key={i}
+                          data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
+                        >
+                          <ChatMarkdown
+                            streaming={block.kind === "progress"}
+                            renderMention={renderMention}
+                          >
+                            {block.text}
+                          </ChatMarkdown>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })}
+                  {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
+                    <Button
+                      variant="text"
+                      size="xs"
+                      aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
+                      onClick={onSpeak}
+                      className="font-normal"
+                    >
+                      {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              {hoverActions}
             </div>
-          </div>
-          {hoverActions}
+          ) : null}
+          {coalescedSteps ? (
+            <StandaloneToolActivity
+              live={isLive}
+              steps={coalescedSteps.steps}
+              stepCount={toolStepCount(coalescedSteps.steps)}
+              durationMs={coalescedSteps.durationMs}
+            />
+          ) : null}
         </div>
       </>
     );
@@ -272,18 +270,8 @@ export const MessageView = memo(function MessageView({
       {messageContext}
       <div className={cn("relative flex flex-col gap-2", message.role === "user" && "items-end")}>
         {blocks.map((block, i) => {
-          if (block.kind === "steps" && shouldRenderToolCard(block, showToolActivity)) {
-            return (
-              <StandaloneToolActivity
-                key={i}
-                live={isLive}
-                steps={block.steps}
-                stepCount={toolStepCount(block.steps)}
-                durationMs={block.durationMs}
-              />
-            );
-          }
-          if (isToolActivityBlock(block)) return null;
+          // Steps are coalesced into one card below the message body.
+          if (block.kind === "steps" || isToolActivityBlock(block)) return null;
           if (block.kind === "handoff") {
             const from = memberName?.(block.fromBotId) ?? t`bot`;
             const to = memberName?.(block.toBotId) ?? t`bot`;
@@ -604,6 +592,18 @@ export const MessageView = memo(function MessageView({
           return null;
         })}
         {hoverAnchorIndex === -1 ? hoverActions : null}
+        {(() => {
+          const coalesced = showToolActivity ? coalesceStepsBlocks(blocks) : null;
+          if (!coalesced) return null;
+          return (
+            <StandaloneToolActivity
+              live={isLive}
+              steps={coalesced.steps}
+              stepCount={toolStepCount(coalesced.steps)}
+              durationMs={coalesced.durationMs}
+            />
+          );
+        })()}
       </div>
     </>
   );

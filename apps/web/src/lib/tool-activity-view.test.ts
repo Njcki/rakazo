@@ -1,8 +1,11 @@
 import type { MessageBlock } from "@rakazo/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  coalesceStepsBlocks,
   isToolOnlyNarration,
+  mergeToolSteps,
   messageHasVisibleBlocks,
+  narrationContentBlocks,
   renderableMessageBlocks,
   shouldRenderToolCard,
   toolStepCount,
@@ -59,6 +62,61 @@ describe("tool-only narration", () => {
     expect(isToolOnlyNarration([narration, liveActivity, stepsBlock], true)).toBe(false);
     expect(isToolOnlyNarration([liveActivity, stepsBlock], false)).toBe(false);
     expect(isToolOnlyNarration([liveActivity], true)).toBe(false);
+  });
+});
+
+describe("coalesce steps below narration", () => {
+  it("merges adjacent same-label rows and drops message_user rows", () => {
+    expect(
+      mergeToolSteps([
+        { label: "Shell", count: 1 },
+        { label: "Shell", count: 2 },
+        { label: "Message user", count: 1 },
+        { label: "Read file", count: 1 },
+      ]),
+    ).toEqual([
+      { label: "Shell", count: 3 },
+      { label: "Read file", count: 1 },
+    ]);
+  });
+
+  it("collapses every steps block in a message into one card", () => {
+    const blocks: MessageBlock[] = [
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "text", text: "Sto esaminando i file." },
+      {
+        kind: "steps",
+        steps: [
+          { label: "Read file", count: 1 },
+          { label: "Message user", count: 1 },
+        ],
+        durationMs: 4_000,
+      },
+      { kind: "progress", text: "Sto verificando la cartella." },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }], durationMs: 12_000 },
+    ];
+    expect(coalesceStepsBlocks(blocks)).toEqual({
+      kind: "steps",
+      steps: [
+        { label: "Shell", count: 1 },
+        { label: "Read file", count: 1 },
+        { label: "Shell", count: 1 },
+      ],
+      durationMs: 12_000,
+    });
+    expect(narrationContentBlocks(blocks)).toEqual([
+      { kind: "text", text: "Sto esaminando i file." },
+      { kind: "progress", text: "Sto verificando la cartella." },
+    ]);
+  });
+
+  it("returns null when only hidden progress tools remain", () => {
+    expect(
+      coalesceStepsBlocks([
+        { kind: "steps", steps: [{ label: "Message user", count: 3 }] },
+        { kind: "text", text: "Aggiornamento." },
+      ]),
+    ).toBeNull();
   });
 });
 

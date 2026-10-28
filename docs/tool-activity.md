@@ -12,11 +12,17 @@ tools the bot called during the run.
 - While a run is live, the card starts open and lists the last six steps, with a count
   of the earlier steps. A step can represent repeated calls to the same tool.
 - Collapsing a live card keeps it collapsed while that card stays mounted. If a tools-only
-  message gains narration text, the card moves into a reply bubble and opens again.
+  message gains narration text, the card moves under the reply bubble and opens again.
 - When the run finishes, the card folds to one line with the tool count and duration.
   Expanding it lists every step.
 - A bot message that so far contains only tool calls renders as a slim line between
   messages, not as a chat bubble.
+- When a reply mixes narration and tools, **one** tool card sits **below** the bubble
+  (outside it). Steps are not interleaved between paragraphs inside the bubble.
+- Mid-turn progress bubbles (`message_user` / promoted narration) keep the live tool
+  trail: the accumulating "Working…" card stays at the bottom of the turn instead of
+  resetting on every interim message. `message_user` itself is omitted from the step list
+  when that update already appears as a chat bubble.
 - With the setting off, tool calls are hidden and only the bot's written reply shows.
 
 The setting only changes what the client renders. The thread events, stored messages, and

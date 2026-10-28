@@ -307,6 +307,98 @@ describe("projectMessages", () => {
     expect(messages[0]?.blocks[0]).toEqual({ kind: "text", text: "Lisbon" });
   });
 
+  it("keeps the live tool trail after a mid-turn progress message", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "read_file" },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "web_search" },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "thread.message.created",
+        runId: "r1",
+        payload: {
+          messageId: "m-progress",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Sto esaminando i file di perizia." }],
+        },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+      {
+        id: "e4",
+        threadId: "t1",
+        seq: 3,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "read_file" },
+        createdAt: "2026-01-01T00:00:03.000Z",
+      },
+    ]);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.blocks[0]).toEqual({
+      kind: "text",
+      text: "Sto esaminando i file di perizia.",
+    });
+    expect(messages[1]?.id).toBe("progress:r1");
+    expect(messages[1]?.blocks[0]).toEqual({
+      kind: "steps",
+      steps: [
+        { label: "Read file", count: 1 },
+        { label: "Web search", count: 1 },
+        { label: "Read file", count: 1 },
+      ],
+    });
+  });
+
+  it("clears live tools when the durable reply already includes steps", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "shell" },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "thread.message.created",
+        runId: "r1",
+        payload: {
+          messageId: "m-final",
+          role: "bot",
+          blocks: [
+            { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+            { kind: "text", text: "Fatto." },
+          ],
+        },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    ]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe("m-final");
+    expect(messages.some((message) => message.id.startsWith("progress:"))).toBe(false);
+  });
+
   it("keeps live subagent cards until a durable subagent message arrives", () => {
     const live = projectMessages([
       {

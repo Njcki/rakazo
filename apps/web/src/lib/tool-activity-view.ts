@@ -6,6 +6,62 @@ export function toolStepCount(steps: readonly { count: number }[]): number {
   return steps.reduce((total, step) => total + step.count, 0);
 }
 
+type StepsBlock = Extract<MessageBlock, { kind: "steps" }>;
+type ToolStep = StepsBlock["steps"][number];
+
+/**
+ * Progress tools that already become their own chat bubbles (message_user).
+ * Hiding them from the tool card avoids a redundant "Message user" row next to
+ * the bubble that posted the same update.
+ */
+const HIDDEN_TOOL_STEP_LABELS = new Set(["Message user"]);
+
+function isShownToolStep(step: ToolStep): boolean {
+  return !HIDDEN_TOOL_STEP_LABELS.has(step.label);
+}
+
+/** Merge step rows the way live projection does: adjacent same label → count++. */
+export function mergeToolSteps(steps: readonly ToolStep[]): ToolStep[] {
+  const out: ToolStep[] = [];
+  for (const step of steps) {
+    if (!isShownToolStep(step)) continue;
+    const last = out.at(-1);
+    if (last && last.label === step.label) {
+      out[out.length - 1] = { label: last.label, count: last.count + step.count };
+    } else {
+      out.push({ label: step.label, count: step.count });
+    }
+  }
+  return out;
+}
+
+/**
+ * One steps block for the whole message: every tool card in the turn collapses
+ * into a single disclosure so "Done / N tools" is not interleaved with narration.
+ */
+export function coalesceStepsBlocks(blocks: readonly MessageBlock[]): StepsBlock | null {
+  const stepBlocks = blocks.filter((block): block is StepsBlock => block.kind === "steps");
+  if (stepBlocks.length === 0) return null;
+  const steps = mergeToolSteps(stepBlocks.flatMap((block) => block.steps));
+  if (steps.length === 0) return null;
+  let durationMs: number | undefined;
+  for (const block of stepBlocks) {
+    if (block.durationMs === undefined) continue;
+    durationMs =
+      durationMs === undefined ? block.durationMs : Math.max(durationMs, block.durationMs);
+  }
+  return {
+    kind: "steps",
+    steps,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+  };
+}
+
+/** Narration / progress blocks only — tool cards are rendered separately below. */
+export function narrationContentBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
+  return blocks.filter((block) => block.kind === "text" || block.kind === "progress");
+}
+
 /**
  * Only a `steps` block becomes a card, and only when the preference is on.
  * A `progress` block marked `activity: true` never renders, in either mode.

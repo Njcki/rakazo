@@ -19,6 +19,8 @@ export function projectMessages(
   const messages: ThreadMessage[] = [];
   type LiveProjection = {
     blocks: MessageBlock[];
+    /** Wiped live narration kept for delta math only until the next progress/tool reduce. */
+    progressAnchor?: string;
     meta: {
       id: string;
       threadId: string;
@@ -77,8 +79,12 @@ export function projectMessages(
         const liveId = progressMessageId(event);
         const live = liveById.get(liveId);
         if (live) {
+          // Keep wiped narration as a hidden prior so later {delta} chunks do not
+          // restart mid-word after this mid-turn durable strips live text/progress.
+          const wipedText = liveMessageText(live.blocks);
+          if (wipedText) live.progressAnchor = (live.progressAnchor ?? "") + wipedText;
           const kept = live.blocks.filter((block) => block.kind === "steps");
-          if (kept.length === 0) liveById.delete(liveId);
+          if (kept.length === 0 && !live.progressAnchor) liveById.delete(liveId);
           else live.blocks = kept;
         }
       }
@@ -112,7 +118,11 @@ export function projectMessages(
     }
     if (event.type === "thread.progress") {
       const live = liveProjection(event, createdAt);
-      live.blocks = reduceLiveMessageBlocks(live.blocks, { type: "progress", payload });
+      live.blocks = reduceLiveMessageBlocks(
+        withProgressAnchor(live.blocks, live.progressAnchor),
+        { type: "progress", payload },
+      );
+      live.progressAnchor = undefined;
       live.meta = {
         ...live.meta,
         seq: event.seq,
@@ -123,10 +133,14 @@ export function projectMessages(
     }
     if (event.type === "agent.tool.called") {
       const live = liveProjection(event, createdAt);
-      live.blocks = reduceLiveMessageBlocks(live.blocks, {
-        type: "tool",
-        name: String(payload.name ?? ""),
-      });
+      live.blocks = reduceLiveMessageBlocks(
+        withProgressAnchor(live.blocks, live.progressAnchor),
+        {
+          type: "tool",
+          name: String(payload.name ?? ""),
+        },
+      );
+      live.progressAnchor = undefined;
       live.meta = {
         ...live.meta,
         seq: event.seq,
@@ -475,6 +489,15 @@ export function reduceLiveMessageBlocks(
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];
+}
+
+/** Re-attach wiped live narration so delta math still sees the server's prior prefix. */
+function withProgressAnchor(
+  blocks: readonly MessageBlock[],
+  progressAnchor: string | undefined,
+): MessageBlock[] {
+  if (!progressAnchor) return [...blocks];
+  return [{ kind: "text", text: progressAnchor }, ...blocks];
 }
 
 function liveMessageText(blocks: readonly MessageBlock[]): string {

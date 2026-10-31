@@ -131,8 +131,10 @@ describe("Tavily web provider", () => {
     expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("T");
     expect(reported).toBe(1);
 
-    const { provider: silent } = setup(async () => jsonResponse({ results: [] }), undefined, () =>
-      reported++,
+    const { provider: silent } = setup(
+      async () => jsonResponse({ results: [] }),
+      undefined,
+      () => reported++,
     );
     expect((await silent.search({ query: "q" }, ctx))[0]?.title).toBe("DDG");
     expect(reported).toBe(1);

@@ -937,7 +937,11 @@ function SpaceShell() {
               }
               callBot(bot);
             }}
-            onShare={(active && !inGroup) || (inGroup && activeGroup) ? () => setShareDialogOpen(true) : undefined}
+            onShare={
+              (active && !inGroup) || (inGroup && activeGroup)
+                ? () => setShareDialogOpen(true)
+                : undefined
+            }
           />
           {!active && !activeGroup && initialBotsLoaded ? (
             <div className="grid flex-1 place-items-center">

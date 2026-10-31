@@ -57,7 +57,6 @@ import { isMermaidFence, mermaidSvgImage } from "./mermaid";
 import { normalizeMathMarkdown } from "./math";
 import { useMermaidSvg } from "./mermaid.web";
 
-
 const remarkPlugins = [remarkGfm, remarkMath];
 const katexOptions = {
   throwOnError: false,
@@ -419,7 +418,6 @@ function RemoteImageButton({
     </button>
   );
 }
-
 
 const LIGHTBOX_MIN_SCALE = 1;
 const LIGHTBOX_MAX_SCALE = 5;

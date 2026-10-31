@@ -21,7 +21,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function setup(fetchImpl: typeof fetch, extra: { timeoutMs?: number; onResults?: () => void } = {}) {
+function setup(
+  fetchImpl: typeof fetch,
+  extra: { timeoutMs?: number; onResults?: () => void } = {},
+) {
   const fallback = new FakeWebProvider();
   fallback.searchHits = [{ title: "DDG", url: "https://ddg.test/r", snippet: "from fallback" }];
   const reasons: string[] = [];
@@ -107,7 +110,8 @@ describe("SearXNG web provider", () => {
   it("notifies onResults only when SearXNG answers", async () => {
     let reported = 0;
     const { provider } = setup(
-      async () => jsonResponse({ results: [{ title: "One", url: "https://one.test/", content: "x" }] }),
+      async () =>
+        jsonResponse({ results: [{ title: "One", url: "https://one.test/", content: "x" }] }),
       { onResults: () => reported++ },
     );
     expect((await provider.search({ query: "q" }, ctx))[0]?.title).toBe("One");

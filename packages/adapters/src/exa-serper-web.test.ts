@@ -276,7 +276,10 @@ describe("full chain SearXNG → Tavily → Exa → Serper → DuckDuckGo", () =
       expect(reported).toEqual(["SearXNG"]);
 
       reported = [];
-      stub(new Response("down", { status: 503 }), jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "" }] }));
+      stub(
+        new Response("down", { status: 503 }),
+        jsonResponse({ results: [{ title: "T", url: "https://t.test/", content: "" }] }),
+      );
       expect((await make(reported).search({ query: "q" }, ctx))[0]?.title).toBe("T");
       expect(reported).toEqual(["Tavily"]);
 

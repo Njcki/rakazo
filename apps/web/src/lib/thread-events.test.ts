@@ -235,7 +235,6 @@ describe("thread event reduction", () => {
     ]);
   });
 
-
   it("keeps live trail and progressAnchor so mid-turn wipe does not restart mid-word", () => {
     let state = reduceThreadSnapshot(
       snapshot([]),
@@ -264,8 +263,10 @@ describe("thread event reduction", () => {
       }),
     );
     expect(state?.messages.some((item) => item.id === "m-mid")).toBe(true);
-    expect((state as ThreadSnapshot & { liveProgressAnchors?: Record<string, string> })
-      ?.liveProgressAnchors?.["progress:run-1"]).toContain("Sto verificando le i");
+    expect(
+      (state as ThreadSnapshot & { liveProgressAnchors?: Record<string, string> })
+        ?.liveProgressAnchors?.["progress:run-1"],
+    ).toContain("Sto verificando le i");
     state = reduceThreadSnapshot(
       state,
       event({

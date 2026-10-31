@@ -887,7 +887,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.route("/", marketingEmailRoutes(prisma, env.authSecret));
   mountApiRequestBodyLimits(app, env.maxUploadSizeBytes);
   mountScreenTarget(app, prisma, env.screenProxySecret);
-  
+
   // Public, token-scoped share views: no session required. The token is the
   // only credential, and the snapshot is frozen at share-creation time.
   app.get("/api/share/:token", async (c) => {

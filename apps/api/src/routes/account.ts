@@ -6,7 +6,12 @@ import {
   PushSessionEndedError,
 } from "@rakazo/adapters";
 import type {
-  ThinkingLevel, ActionApprovalRule, Actor, Me, SettingsScope } from "@rakazo/contracts";
+  ThinkingLevel,
+  ActionApprovalRule,
+  Actor,
+  Me,
+  SettingsScope,
+} from "@rakazo/contracts";
 import {
   approvalModeFromPreference,
   approvalPreferenceFromMode,

@@ -118,10 +118,10 @@ export function projectMessages(
     }
     if (event.type === "thread.progress") {
       const live = liveProjection(event, createdAt);
-      live.blocks = reduceLiveMessageBlocks(
-        withProgressAnchor(live.blocks, live.progressAnchor),
-        { type: "progress", payload },
-      );
+      live.blocks = reduceLiveMessageBlocks(withProgressAnchor(live.blocks, live.progressAnchor), {
+        type: "progress",
+        payload,
+      });
       live.progressAnchor = undefined;
       live.meta = {
         ...live.meta,
@@ -133,13 +133,10 @@ export function projectMessages(
     }
     if (event.type === "agent.tool.called") {
       const live = liveProjection(event, createdAt);
-      live.blocks = reduceLiveMessageBlocks(
-        withProgressAnchor(live.blocks, live.progressAnchor),
-        {
-          type: "tool",
-          name: String(payload.name ?? ""),
-        },
-      );
+      live.blocks = reduceLiveMessageBlocks(withProgressAnchor(live.blocks, live.progressAnchor), {
+        type: "tool",
+        name: String(payload.name ?? ""),
+      });
       live.progressAnchor = undefined;
       live.meta = {
         ...live.meta,
@@ -431,7 +428,9 @@ export function reduceLiveMessageBlocks(
       : tail?.kind === "progress" && tail.activity === true;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    let next = activity ? [...segments] : appendTextSegment(segments, ensureSentenceSpacing(tailText));
+    let next = activity
+      ? [...segments]
+      : appendTextSegment(segments, ensureSentenceSpacing(tailText));
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
@@ -475,10 +474,7 @@ export function reduceLiveMessageBlocks(
           return next;
         }
         if (pendingToolNames.length > 0) {
-          return [
-            ...merged,
-            { kind: "progress", text: "", pendingToolNames },
-          ];
+          return [...merged, { kind: "progress", text: "", pendingToolNames }];
         }
         return merged;
       }
@@ -664,7 +660,6 @@ export function ensureSentenceSpacing(text: string): string {
   });
   return out;
 }
-
 
 /** Space `next` so that concatenating it after `prior` stays correctly spaced. */
 export function narrationContinuation(prior: string, next: string): string {

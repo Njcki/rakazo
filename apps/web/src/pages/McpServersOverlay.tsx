@@ -525,373 +525,379 @@ export function McpServersOverlay({
                 <Trans>Add server</Trans>
               </Button>
             ) : (
-          <Card className="self-start overflow-hidden bg-card">
-            <CardHeader className="border-b border-border pb-3">
-              <CardTitle>{editing ? editing.name : <Trans>Add server</Trans>}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <FieldGroup className="gap-4">
-                <Field>
-                  <FieldLabel htmlFor="mcp-name">
-                    <Trans>Server name</Trans>
-                  </FieldLabel>
-                  <Input
-                    id="mcp-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Mobbin"
-                  />
-                </Field>
-                <Field>
-                  <FieldTitle>
-                    <Trans>Transport</Trans>
-                  </FieldTitle>
-                  <Tabs
-                    value={transport}
-                    onValueChange={(value) => setTransport(value as McpTransport)}
-                  >
-                    <TabsList className="relative z-0 w-full">
-                      <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
-                      <TabsTrigger value="sse">SSE</TabsTrigger>
-                      {stdioEnabled || editing?.transport === "stdio" ? (
-                        <TabsTrigger value="stdio">STDIO</TabsTrigger>
-                      ) : null}
-                    </TabsList>
-                  </Tabs>
-                </Field>
-                {transport === "stdio" ? (
-                  <>
+              <Card className="self-start overflow-hidden bg-card">
+                <CardHeader className="border-b border-border pb-3">
+                  <CardTitle>{editing ? editing.name : <Trans>Add server</Trans>}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <FieldGroup className="gap-4">
                     <Field>
-                      <FieldLabel htmlFor="mcp-command">
-                        <Trans>Command</Trans>
+                      <FieldLabel htmlFor="mcp-name">
+                        <Trans>Server name</Trans>
                       </FieldLabel>
                       <Input
-                        id="mcp-command"
-                        value={command}
-                        onChange={(e) => setCommand(e.target.value)}
-                        placeholder="/opt/mcp-server"
+                        id="mcp-name"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Mobbin"
                       />
                     </Field>
                     <Field>
-                      <FieldLabel htmlFor="mcp-args">
-                        <Trans>Arguments</Trans>
-                      </FieldLabel>
-                      <Input
-                        id="mcp-args"
-                        value={args}
-                        onChange={(e) => setArgs(e.target.value)}
-                        placeholder={editing?.hasArgs ? t`Stored encrypted` : "--stdio"}
-                      />
+                      <FieldTitle>
+                        <Trans>Transport</Trans>
+                      </FieldTitle>
+                      <Tabs
+                        value={transport}
+                        onValueChange={(value) => setTransport(value as McpTransport)}
+                      >
+                        <TabsList className="relative z-0 w-full">
+                          <TabsTrigger value="streamable_http">HTTP</TabsTrigger>
+                          <TabsTrigger value="sse">SSE</TabsTrigger>
+                          {stdioEnabled || editing?.transport === "stdio" ? (
+                            <TabsTrigger value="stdio">STDIO</TabsTrigger>
+                          ) : null}
+                        </TabsList>
+                      </Tabs>
                     </Field>
-                  </>
-                ) : (
-                  <Field>
-                    <FieldLabel htmlFor="mcp-endpoint">
-                      <Trans>Server URL</Trans>
-                    </FieldLabel>
-                    <Input
-                      id="mcp-endpoint"
-                      type="url"
-                      autoComplete="off"
-                      value={endpoint}
-                      onChange={(e) => setEndpoint(e.target.value)}
-                      placeholder="https://api.mobbin.com/mcp"
-                    />
-                  </Field>
-                )}
-                <Field>
-                  <FieldLabel htmlFor="mcp-secret">
-                    <Trans>Access token (optional)</Trans>
-                  </FieldLabel>
-                  <Input
-                    id="mcp-secret"
-                    type="password"
-                    autoComplete="new-password"
-                    value={secret}
-                    onChange={(e) => setSecret(e.target.value)}
-                    placeholder={t`PAT or Bearer token — stored encrypted`}
-                  />
-                  {transport !== "stdio" ? (
-                    <p className="text-xs text-muted-foreground">
-                      <Trans>
-                        For a PAT or API key, paste it here and Save. Bearer is added automatically
-                        when needed — skip Connect OAuth on self-hosted installs that block OAuth.
-                      </Trans>
-                    </p>
-                  ) : null}
-                </Field>
-                {transport !== "stdio" ? <McpAuthHelp endpoint={endpoint} name={name} /> : null}
-                <Disclosure
-                  open={advancedOpen}
-                  onOpenChange={setAdvancedOpen}
-                  className="group rounded-xl border border-border"
-                  summary={<Trans>Advanced</Trans>}
-                  summaryClassName="w-full flex items-center justify-between px-3 py-2.5 text-sm text-foreground"
-                >
-                  <div className="space-y-4 border-t border-border p-3">
                     {transport === "stdio" ? (
-                      <Field>
-                        <FieldTitle>
-                          <Trans>Environment variables</Trans>
-                        </FieldTitle>
-                        {envRows.map((row) => (
-                          <Field
-                            key={row.id}
-                            orientation="horizontal"
-                            data-invalid={duplicateNames.has(row.name) || undefined}
-                            className="grid grid-cols-[.7fr_1fr_auto_auto] items-start gap-2"
-                          >
-                            <Input
-                              aria-label={t`Name`}
-                              aria-invalid={duplicateNames.has(row.name) || undefined}
-                              aria-describedby={
-                                duplicateNames.has(row.name) ? `mcp-env-error-${row.id}` : undefined
-                              }
-                              autoComplete="off"
-                              className={row.file ? "col-span-2" : undefined}
-                              value={row.name}
-                              onChange={(e) =>
-                                updateEnvRow(row.id, {
-                                  name: envName(e.target.value),
-                                })
-                              }
-                              placeholder="API_KEY"
-                            />
-                            {row.file ? null : (
-                              <Input
-                                aria-label={t`Value`}
-                                type={row.value.includes("{{oauth.") ? "text" : "password"}
-                                autoComplete={
-                                  row.value.includes("{{oauth.") ? "off" : "new-password"
-                                }
-                                value={row.value}
-                                onChange={(e) =>
-                                  updateEnvRow(row.id, {
-                                    value: e.target.value,
-                                  })
-                                }
-                                placeholder={t`Stored encrypted`}
-                              />
-                            )}
-                            <Toggle
-                              variant="outline"
-                              size="sm"
-                              pressed={row.file}
-                              onPressedChange={(file) => updateEnvRow(row.id, { file })}
-                            >
-                              <Trans>File</Trans>
-                            </Toggle>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={t`Remove`}
-                              onClick={() =>
-                                setEnvRows((rows) =>
-                                  rows.length > 1
-                                    ? rows.filter((item) => item.id !== row.id)
-                                    : [emptyEnvRow()],
-                                )
-                              }
-                            >
-                              <X />
-                            </Button>
-                            {row.file ? (
-                              <Textarea
-                                aria-label={t`Value`}
-                                autoComplete="off"
-                                spellCheck={false}
-                                className="col-span-full min-h-24 font-mono text-xs"
-                                value={row.value}
-                                onChange={(e) =>
-                                  updateEnvRow(row.id, {
-                                    value: e.target.value,
-                                  })
-                                }
-                              />
-                            ) : null}
-                            {duplicateNames.has(row.name) ? (
-                              <FieldError id={`mcp-env-error-${row.id}`} className="col-span-full">
-                                <Trans>Each name can be used once.</Trans>
-                              </FieldError>
-                            ) : null}
-                          </Field>
-                        ))}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="xs"
-                          className="self-start"
-                          onClick={() => setEnvRows((rows) => [...rows, emptyEnvRow()])}
-                        >
-                          <Trans>Add</Trans>
-                        </Button>
-                        {oauthClientId.trim() ? (
-                          <p className="text-xs text-muted-foreground">
-                            <Trans>Use {oauthEnvReference} for the access token.</Trans>
-                          </p>
-                        ) : null}
-                      </Field>
-                    ) : (
-                      <div className="grid grid-cols-[.7fr_1fr] gap-2">
-                        <Input
-                          aria-label={t`Header name`}
-                          value={headerName}
-                          onChange={(e) => setHeaderName(e.target.value)}
-                        />
-                        <Input
-                          aria-label={t`Header value`}
-                          type="password"
-                          autoComplete="new-password"
-                          value={headerValue}
-                          onChange={(e) => setHeaderValue(e.target.value)}
-                          placeholder={t`Optional header value`}
-                        />
-                      </div>
-                    )}
-                    <Field>
-                      <FieldLabel htmlFor="mcp-oauth-client-id">
-                        <Trans>OAuth client ID (optional)</Trans>
-                      </FieldLabel>
-                      <Input
-                        ref={oauthClientIdInput}
-                        id="mcp-oauth-client-id"
-                        autoComplete="off"
-                        value={oauthClientId}
-                        onChange={(e) => setOauthClientId(e.target.value)}
-                      />
-                    </Field>
-                    <Field>
-                      <FieldLabel htmlFor="mcp-oauth-client-secret">
-                        <Trans>OAuth client secret (optional)</Trans>
-                      </FieldLabel>
-                      <Input
-                        id="mcp-oauth-client-secret"
-                        type="password"
-                        autoComplete="new-password"
-                        value={oauthClientSecret}
-                        onChange={(e) => setOauthClientSecret(e.target.value)}
-                        placeholder={t`Stored encrypted`}
-                      />
-                    </Field>
-                    {oauthClientId.trim() ? (
                       <>
-                        {transport === "stdio" ? (
-                          <Field>
-                            <FieldLabel htmlFor="mcp-oauth-authorization-server">
-                              <Trans>Authorization server</Trans>
-                            </FieldLabel>
-                            <Input
-                              id="mcp-oauth-authorization-server"
-                              type="url"
-                              autoComplete="off"
-                              value={oauthAuthorizationServer}
-                              onChange={(e) => setOauthAuthorizationServer(e.target.value)}
-                              placeholder="https://accounts.google.com"
-                            />
-                          </Field>
-                        ) : null}
                         <Field>
-                          <FieldLabel htmlFor="mcp-oauth-scope">
-                            <Trans>Scopes (optional)</Trans>
+                          <FieldLabel htmlFor="mcp-command">
+                            <Trans>Command</Trans>
                           </FieldLabel>
                           <Input
-                            id="mcp-oauth-scope"
-                            autoComplete="off"
-                            value={oauthScope}
-                            onChange={(e) => setOauthScope(e.target.value)}
-                            placeholder="openid email"
+                            id="mcp-command"
+                            value={command}
+                            onChange={(e) => setCommand(e.target.value)}
+                            placeholder="/opt/mcp-server"
                           />
                         </Field>
                         <Field>
-                          <FieldLabel htmlFor="mcp-oauth-params">
-                            <Trans>Authorization parameters (optional)</Trans>
+                          <FieldLabel htmlFor="mcp-args">
+                            <Trans>Arguments</Trans>
                           </FieldLabel>
                           <Input
-                            id="mcp-oauth-params"
-                            autoComplete="off"
-                            value={oauthParams}
-                            onChange={(e) => setOauthParams(e.target.value)}
-                            placeholder="access_type=offline&prompt=consent"
-                          />
-                        </Field>
-                        <Field>
-                          <FieldLabel htmlFor="mcp-oauth-redirect-uri">
-                            <Trans>Redirect URI</Trans>
-                          </FieldLabel>
-                          <Input
-                            id="mcp-oauth-redirect-uri"
-                            readOnly
-                            value={mcpOAuthRedirectUri()}
-                            onFocus={(e) => e.target.select()}
+                            id="mcp-args"
+                            value={args}
+                            onChange={(e) => setArgs(e.target.value)}
+                            placeholder={editing?.hasArgs ? t`Stored encrypted` : "--stdio"}
                           />
                         </Field>
                       </>
+                    ) : (
+                      <Field>
+                        <FieldLabel htmlFor="mcp-endpoint">
+                          <Trans>Server URL</Trans>
+                        </FieldLabel>
+                        <Input
+                          id="mcp-endpoint"
+                          type="url"
+                          autoComplete="off"
+                          value={endpoint}
+                          onChange={(e) => setEndpoint(e.target.value)}
+                          placeholder="https://api.mobbin.com/mcp"
+                        />
+                      </Field>
+                    )}
+                    <Field>
+                      <FieldLabel htmlFor="mcp-secret">
+                        <Trans>Access token (optional)</Trans>
+                      </FieldLabel>
+                      <Input
+                        id="mcp-secret"
+                        type="password"
+                        autoComplete="new-password"
+                        value={secret}
+                        onChange={(e) => setSecret(e.target.value)}
+                        placeholder={t`PAT or Bearer token — stored encrypted`}
+                      />
+                      {transport !== "stdio" ? (
+                        <p className="text-xs text-muted-foreground">
+                          <Trans>
+                            For a PAT or API key, paste it here and Save. Bearer is added
+                            automatically when needed — skip Connect OAuth on self-hosted installs
+                            that block OAuth.
+                          </Trans>
+                        </p>
+                      ) : null}
+                    </Field>
+                    {transport !== "stdio" ? <McpAuthHelp endpoint={endpoint} name={name} /> : null}
+                    <Disclosure
+                      open={advancedOpen}
+                      onOpenChange={setAdvancedOpen}
+                      className="group rounded-xl border border-border"
+                      summary={<Trans>Advanced</Trans>}
+                      summaryClassName="w-full flex items-center justify-between px-3 py-2.5 text-sm text-foreground"
+                    >
+                      <div className="space-y-4 border-t border-border p-3">
+                        {transport === "stdio" ? (
+                          <Field>
+                            <FieldTitle>
+                              <Trans>Environment variables</Trans>
+                            </FieldTitle>
+                            {envRows.map((row) => (
+                              <Field
+                                key={row.id}
+                                orientation="horizontal"
+                                data-invalid={duplicateNames.has(row.name) || undefined}
+                                className="grid grid-cols-[.7fr_1fr_auto_auto] items-start gap-2"
+                              >
+                                <Input
+                                  aria-label={t`Name`}
+                                  aria-invalid={duplicateNames.has(row.name) || undefined}
+                                  aria-describedby={
+                                    duplicateNames.has(row.name)
+                                      ? `mcp-env-error-${row.id}`
+                                      : undefined
+                                  }
+                                  autoComplete="off"
+                                  className={row.file ? "col-span-2" : undefined}
+                                  value={row.name}
+                                  onChange={(e) =>
+                                    updateEnvRow(row.id, {
+                                      name: envName(e.target.value),
+                                    })
+                                  }
+                                  placeholder="API_KEY"
+                                />
+                                {row.file ? null : (
+                                  <Input
+                                    aria-label={t`Value`}
+                                    type={row.value.includes("{{oauth.") ? "text" : "password"}
+                                    autoComplete={
+                                      row.value.includes("{{oauth.") ? "off" : "new-password"
+                                    }
+                                    value={row.value}
+                                    onChange={(e) =>
+                                      updateEnvRow(row.id, {
+                                        value: e.target.value,
+                                      })
+                                    }
+                                    placeholder={t`Stored encrypted`}
+                                  />
+                                )}
+                                <Toggle
+                                  variant="outline"
+                                  size="sm"
+                                  pressed={row.file}
+                                  onPressedChange={(file) => updateEnvRow(row.id, { file })}
+                                >
+                                  <Trans>File</Trans>
+                                </Toggle>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={t`Remove`}
+                                  onClick={() =>
+                                    setEnvRows((rows) =>
+                                      rows.length > 1
+                                        ? rows.filter((item) => item.id !== row.id)
+                                        : [emptyEnvRow()],
+                                    )
+                                  }
+                                >
+                                  <X />
+                                </Button>
+                                {row.file ? (
+                                  <Textarea
+                                    aria-label={t`Value`}
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                    className="col-span-full min-h-24 font-mono text-xs"
+                                    value={row.value}
+                                    onChange={(e) =>
+                                      updateEnvRow(row.id, {
+                                        value: e.target.value,
+                                      })
+                                    }
+                                  />
+                                ) : null}
+                                {duplicateNames.has(row.name) ? (
+                                  <FieldError
+                                    id={`mcp-env-error-${row.id}`}
+                                    className="col-span-full"
+                                  >
+                                    <Trans>Each name can be used once.</Trans>
+                                  </FieldError>
+                                ) : null}
+                              </Field>
+                            ))}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="xs"
+                              className="self-start"
+                              onClick={() => setEnvRows((rows) => [...rows, emptyEnvRow()])}
+                            >
+                              <Trans>Add</Trans>
+                            </Button>
+                            {oauthClientId.trim() ? (
+                              <p className="text-xs text-muted-foreground">
+                                <Trans>Use {oauthEnvReference} for the access token.</Trans>
+                              </p>
+                            ) : null}
+                          </Field>
+                        ) : (
+                          <div className="grid grid-cols-[.7fr_1fr] gap-2">
+                            <Input
+                              aria-label={t`Header name`}
+                              value={headerName}
+                              onChange={(e) => setHeaderName(e.target.value)}
+                            />
+                            <Input
+                              aria-label={t`Header value`}
+                              type="password"
+                              autoComplete="new-password"
+                              value={headerValue}
+                              onChange={(e) => setHeaderValue(e.target.value)}
+                              placeholder={t`Optional header value`}
+                            />
+                          </div>
+                        )}
+                        <Field>
+                          <FieldLabel htmlFor="mcp-oauth-client-id">
+                            <Trans>OAuth client ID (optional)</Trans>
+                          </FieldLabel>
+                          <Input
+                            ref={oauthClientIdInput}
+                            id="mcp-oauth-client-id"
+                            autoComplete="off"
+                            value={oauthClientId}
+                            onChange={(e) => setOauthClientId(e.target.value)}
+                          />
+                        </Field>
+                        <Field>
+                          <FieldLabel htmlFor="mcp-oauth-client-secret">
+                            <Trans>OAuth client secret (optional)</Trans>
+                          </FieldLabel>
+                          <Input
+                            id="mcp-oauth-client-secret"
+                            type="password"
+                            autoComplete="new-password"
+                            value={oauthClientSecret}
+                            onChange={(e) => setOauthClientSecret(e.target.value)}
+                            placeholder={t`Stored encrypted`}
+                          />
+                        </Field>
+                        {oauthClientId.trim() ? (
+                          <>
+                            {transport === "stdio" ? (
+                              <Field>
+                                <FieldLabel htmlFor="mcp-oauth-authorization-server">
+                                  <Trans>Authorization server</Trans>
+                                </FieldLabel>
+                                <Input
+                                  id="mcp-oauth-authorization-server"
+                                  type="url"
+                                  autoComplete="off"
+                                  value={oauthAuthorizationServer}
+                                  onChange={(e) => setOauthAuthorizationServer(e.target.value)}
+                                  placeholder="https://accounts.google.com"
+                                />
+                              </Field>
+                            ) : null}
+                            <Field>
+                              <FieldLabel htmlFor="mcp-oauth-scope">
+                                <Trans>Scopes (optional)</Trans>
+                              </FieldLabel>
+                              <Input
+                                id="mcp-oauth-scope"
+                                autoComplete="off"
+                                value={oauthScope}
+                                onChange={(e) => setOauthScope(e.target.value)}
+                                placeholder="openid email"
+                              />
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="mcp-oauth-params">
+                                <Trans>Authorization parameters (optional)</Trans>
+                              </FieldLabel>
+                              <Input
+                                id="mcp-oauth-params"
+                                autoComplete="off"
+                                value={oauthParams}
+                                onChange={(e) => setOauthParams(e.target.value)}
+                                placeholder="access_type=offline&prompt=consent"
+                              />
+                            </Field>
+                            <Field>
+                              <FieldLabel htmlFor="mcp-oauth-redirect-uri">
+                                <Trans>Redirect URI</Trans>
+                              </FieldLabel>
+                              <Input
+                                id="mcp-oauth-redirect-uri"
+                                readOnly
+                                value={mcpOAuthRedirectUri()}
+                                onFocus={(e) => e.target.select()}
+                              />
+                            </Field>
+                          </>
+                        ) : null}
+                      </div>
+                    </Disclosure>
+                    {bots.length > 0 && !editing ? (
+                      <Field>
+                        <FieldTitle>
+                          <Trans>Agents:</Trans>
+                        </FieldTitle>
+                        <div className="flex flex-wrap gap-1.5">
+                          {bots.map((bot) => {
+                            const selected = selectedBotIds.includes(bot.id);
+                            return (
+                              <Button
+                                key={bot.id}
+                                type="button"
+                                variant={selected ? "default" : "outline"}
+                                size="xs"
+                                aria-pressed={selected}
+                                disabled={!assignmentsReady}
+                                onClick={() => toggleBot(bot.id)}
+                              >
+                                {selected ? <Check aria-hidden="true" /> : null}
+                                {bot.name}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </Field>
                     ) : null}
-                  </div>
-                </Disclosure>
-                {bots.length > 0 && !editing ? (
-                  <Field>
-                    <FieldTitle>
-                      <Trans>Agents:</Trans>
-                    </FieldTitle>
-                    <div className="flex flex-wrap gap-1.5">
-                      {bots.map((bot) => {
-                        const selected = selectedBotIds.includes(bot.id);
-                        return (
-                          <Button
-                            key={bot.id}
-                            type="button"
-                            variant={selected ? "default" : "outline"}
-                            size="xs"
-                            aria-pressed={selected}
-                            disabled={!assignmentsReady}
-                            onClick={() => toggleBot(bot.id)}
-                          >
-                            {selected ? <Check aria-hidden="true" /> : null}
-                            {bot.name}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </Field>
-                ) : null}
-              </FieldGroup>
-              <Button
-                type="button"
-                className="mt-5 w-full"
-                disabled={
-                  saving ||
-                  (transport === "stdio" && duplicateNames.size > 0) ||
-                  (!editing && selectedBotIds.length > 0 && !assignmentsReady)
-                }
-                onClick={() => void saveServer()}
-              >
-                {editing ? (
-                  saving ? (
-                    <Trans>Saving…</Trans>
-                  ) : (
-                    <Trans>Save</Trans>
-                  )
-                ) : saving ? (
-                  <Trans>Adding…</Trans>
-                ) : (
-                  <Trans>Add server</Trans>
-                )}
-              </Button>
-              {editing || (addFormOpen && servers.length > 0) ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-2 w-full"
-                  disabled={saving}
-                  onClick={resetForm}
-                >
-                  <Trans>Cancel</Trans>
-                </Button>
-              ) : null}
-            </CardContent>
-          </Card>
+                  </FieldGroup>
+                  <Button
+                    type="button"
+                    className="mt-5 w-full"
+                    disabled={
+                      saving ||
+                      (transport === "stdio" && duplicateNames.size > 0) ||
+                      (!editing && selectedBotIds.length > 0 && !assignmentsReady)
+                    }
+                    onClick={() => void saveServer()}
+                  >
+                    {editing ? (
+                      saving ? (
+                        <Trans>Saving…</Trans>
+                      ) : (
+                        <Trans>Save</Trans>
+                      )
+                    ) : saving ? (
+                      <Trans>Adding…</Trans>
+                    ) : (
+                      <Trans>Add server</Trans>
+                    )}
+                  </Button>
+                  {editing || (addFormOpen && servers.length > 0) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-2 w-full"
+                      disabled={saving}
+                      onClick={resetForm}
+                    >
+                      <Trans>Cancel</Trans>
+                    </Button>
+                  ) : null}
+                </CardContent>
+              </Card>
             )}
           </section>
           <section

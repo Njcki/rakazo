@@ -76,10 +76,7 @@ import { callMediaTool } from "./run-tools-files.js";
 import { USER_COMPUTER_TOOLS, userComputerGate } from "./run-tools-user-computer.js";
 import { connectorTrustKeys } from "./run-trust.js";
 import { watchFromTool } from "./schedule-tools.js";
-import {
-  PLAN_CREATE_REMINDER,
-  planReminderConfig,
-} from "./progress-cadence.js";
+import { PLAN_CREATE_REMINDER, planReminderConfig } from "./progress-cadence.js";
 import { getActivePlan, planStaleReminder } from "./plan-tools.js";
 
 export type AppliedEffect = Awaited<ReturnType<typeof recordEffect>>;

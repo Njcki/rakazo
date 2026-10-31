@@ -477,7 +477,9 @@ describe("projectMessages", () => {
       .filter((block) => block.kind === "text" || block.kind === "progress")
       .map((block) => block.text)
       .join("");
-    expect(visible).toContain("Sto verificando le integrazioni e gli strumenti disponibili per Canva.");
+    expect(visible).toContain(
+      "Sto verificando le integrazioni e gli strumenti disponibili per Canva.",
+    );
     expect(visible.startsWith("ntegrazioni")).toBe(false);
     expect(live?.blocks.some((block) => block.kind === "steps")).toBe(true);
   });
@@ -993,7 +995,6 @@ describe("endsSentence", () => {
     expect(endsSentence("   ")).toBe(true);
   });
 });
-
 
 describe("ensureSentenceSpacing", () => {
   it("splits glued Italian mid-turn sentences after a period", () => {

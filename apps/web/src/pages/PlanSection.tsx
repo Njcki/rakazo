@@ -119,7 +119,10 @@ export function PlanSection({
           <Trans>Plan</Trans>
         </div>
         <div className="py-1 text-[13px] text-muted-foreground/75">
-          <Trans>No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced.</Trans>
+          <Trans>
+            No plan yet. The bot creates one for multi-step work; completed plans stay here until
+            replaced.
+          </Trans>
         </div>
         {error ? <div className="mt-1 text-[12.5px] text-destructive">{error}</div> : null}
       </div>

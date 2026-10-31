@@ -408,6 +408,7 @@ describe("configured artifact upload limit", () => {
       expect.anything(),
     );
     put.mockClear();
+    // RAKAZO: unknown formats are accepted and stored as application/octet-stream.
     await expect(
       createOwnedArtifact(deps, actor, {
         botId: "bot-1",
@@ -415,8 +416,11 @@ describe("configured artifact upload limit", () => {
         mimeType: "audio/flac",
         contentBase64: "YXVkaW8=",
       }),
-    ).rejects.toThrow("Unsupported attachment type");
-    expect(put).not.toHaveBeenCalled();
+    ).rejects.toBe(reachedStorage);
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({ mimeType: "application/octet-stream" }),
+      expect.anything(),
+    );
   });
   it("rejects oversized attachments before storage and accepts uploads above the old cap", async () => {
     const stored = new Error("reached storage");
@@ -504,12 +508,13 @@ describe("storeInboundAttachment", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
-  it("rejects unsupported types and oversize downloads before storage", async () => {
+  it("stores unknown types as octet-stream and rejects oversize downloads before storage", async () => {
     const { put, store } = setup();
     const fetch = vi.fn(async () => new Uint8Array(9));
+    // RAKAZO: any file type is accepted; this one fails only on size.
     await expect(
       store({ name: "a.exe", mimeType: "application/x-msdownload", fetch }),
-    ).rejects.toThrow("Unsupported");
+    ).rejects.toThrow("limit");
     await expect(store({ name: "a.png", mimeType: "image/png", fetch })).rejects.toThrow("limit");
     expect(put).not.toHaveBeenCalled();
     fetch.mockResolvedValueOnce(new Uint8Array(8));

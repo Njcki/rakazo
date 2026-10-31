@@ -77,12 +77,13 @@ describe("dropped file attachments", () => {
     ]);
   });
 
-  it("rejects an unsupported file without reading it", async () => {
+  it("RAKAZO: accepts an unknown file type as a generic binary", async () => {
     const result = await readDroppedFiles([dropped("notes.xyz", 1024)]);
 
-    expect(result.attachments).toEqual([]);
-    expect(result.skipped).toEqual([{ name: "notes.xyz", reason: "unsupported type" }]);
-    expect(state.base64).not.toHaveBeenCalled();
+    expect(result.attachments).toMatchObject([
+      { name: "notes.xyz", mimeType: "application/octet-stream" },
+    ]);
+    expect(result.skipped).toEqual([]);
   });
 
   it("reports uncopied oversized files with the normal size reason without reading", async () => {

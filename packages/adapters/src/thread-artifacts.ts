@@ -15,7 +15,7 @@ import {
   attachmentSizeLabel,
 } from "@rakazo/contracts";
 import {
-  attachmentExtensionForMimeType,
+  attachmentStorageExtension,
   inferAttachmentMimeType,
   messageBlockForArtifact,
   validateAttachmentMimeType,
@@ -144,7 +144,7 @@ function threadFileMetadata(
     name: row.name,
     mimeType: row.mimeType,
     size: row.size,
-    path: `attachments/${row.id}${attachmentExtensionForMimeType(row.mimeType)}`,
+    path: `attachments/${row.id}${attachmentStorageExtension(row.name, row.mimeType)}`,
   };
 }
 

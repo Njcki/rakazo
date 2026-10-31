@@ -1,6 +1,7 @@
 import type { AttachmentMimeType, MessageBlock } from "@rakazo/contracts";
 import {
   ATTACHMENT_COUNT_CEILING,
+  ATTACHMENT_FALLBACK_MIME_TYPE,
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
   attachmentSizeLabel,
@@ -222,12 +223,15 @@ const MIME_TYPE_EXTENSIONS: Record<AttachmentMimeType, string> = {
   "text/html": ".html",
   "application/json": ".json",
   "application/zip": ".zip",
+  // RAKAZO: generic binaries keep their own extension (see attachmentStorageExtension).
+  "application/octet-stream": "",
 };
 
-export function inferAttachmentMimeType(
-  name: string,
-  reportedType?: string,
-): AttachmentMimeType | null {
+/**
+ * RAKAZO: the fork accepts any file type. Known formats keep their precise type;
+ * everything else falls back to application/octet-stream instead of being rejected.
+ */
+export function inferAttachmentMimeType(name: string, reportedType?: string): AttachmentMimeType {
   if (
     reportedType === "application/x-zip-compressed" ||
     reportedType === "application/x-zip" ||
@@ -251,8 +255,27 @@ export function inferAttachmentMimeType(
   if (extensionType === "text/markdown" && (!reportedType || reportedType === "text/plain")) {
     return extensionType;
   }
-  if (reportedType && isAllowedAttachmentMimeType(reportedType)) return reportedType;
-  return extensionType ?? null;
+  if (
+    reportedType &&
+    reportedType !== ATTACHMENT_FALLBACK_MIME_TYPE &&
+    isAllowedAttachmentMimeType(reportedType)
+  ) {
+    return reportedType;
+  }
+  return extensionType ?? ATTACHMENT_FALLBACK_MIME_TYPE;
+}
+
+/**
+ * RAKAZO: file extension for a stored attachment. Known types use their canonical
+ * extension; generic binaries keep a safe version of the original one (e.g. ".flac").
+ */
+export function attachmentStorageExtension(name: string, mimeType: string): string {
+  const known = attachmentExtensionForMimeType(mimeType);
+  if (known) return known;
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return "";
+  const extension = name.slice(dot).toLowerCase();
+  return /^\.[a-z0-9]{1,10}$/.test(extension) ? extension : "";
 }
 
 export function attachmentExtensionForMimeType(mimeType: string): string {

@@ -1354,3 +1354,14 @@ describe("liveActivityLine", () => {
     ).toBeUndefined();
   });
 });
+
+describe("RAKAZO redaction after sentence spacing", () => {
+  it("hides a secret whose punctuation got sentence spacing", () => {
+    const secret = "fake pass!word";
+    expect(redactSecrets(ensureSentenceSpacing(`The page still shows ${secret}.`), [secret])).toBe(
+      "The page still shows [redacted].",
+    );
+    expect(redactSecrets("key: a.B?c", ["a.B?c"])).toBe("key: [redacted]");
+    expect(redactSecrets(ensureSentenceSpacing("key: a.B?c"), ["a.B?c"])).toBe("key: [redacted]");
+  });
+});

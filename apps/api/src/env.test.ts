@@ -40,9 +40,9 @@ describe("loadEnv", () => {
     }
   });
 
-  it("defaults uploads to 10 MiB and parses a configured limit", () => {
-    expect(loadEnv(base).maxUploadSizeBytes).toBe(10 * 1024 * 1024);
-    expect(loadEnv({ ...base, MAX_UPLOAD_SIZE_MB: "" }).maxUploadSizeBytes).toBe(10 * 1024 * 1024);
+  it("defaults uploads to 100 MiB (RAKAZO) and parses a configured limit", () => {
+    expect(loadEnv(base).maxUploadSizeBytes).toBe(100 * 1024 * 1024);
+    expect(loadEnv({ ...base, MAX_UPLOAD_SIZE_MB: "" }).maxUploadSizeBytes).toBe(100 * 1024 * 1024);
     expect(loadEnv({ ...base, MAX_UPLOAD_SIZE_MB: " 25 " }).maxUploadSizeBytes).toBe(
       25 * 1024 * 1024,
     );

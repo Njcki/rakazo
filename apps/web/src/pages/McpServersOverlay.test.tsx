@@ -123,6 +123,16 @@ function server(id: string, status = "unknown") {
   } as McpServer;
 }
 
+/** RAKAZO cd156f2: with servers configured, the add form starts collapsed behind "Add server". */
+async function openAddForm(host: HTMLElement) {
+  // Wait for the list to load and collapse the form, so we click the toggle, not the submit button.
+  await vi.waitFor(() => expect(host.querySelector("#mcp-name")).toBeNull());
+  const button = Array.from(host.querySelectorAll("button")).find(
+    (b) => b.textContent === "Add server",
+  );
+  await act(async () => button!.click());
+}
+
 it("offers stdio only where the deployment runs it, and still shows existing stdio servers", async () => {
   mocks.list
     .mockReset()
@@ -146,6 +156,7 @@ it("offers stdio only where the deployment runs it, and still shows existing std
     expect(host.textContent).not.toContain("STDIO");
 
     await act(async () => root.render(overlay()));
+    await openAddForm(host);
     expect(host.textContent).toContain("STDIO");
   } finally {
     await act(async () => root.unmount());
@@ -441,6 +452,7 @@ it.each([
   const root = createRoot(host);
   try {
     await act(async () => root.render(overlay()));
+    await openAddForm(host);
     const agentButtons = () =>
       Array.from(host.querySelectorAll("button")).filter((button) => button.textContent === "Ada");
     // One in the add form and one on the server's card.
@@ -468,6 +480,7 @@ it("lets agent access change once assignments have loaded", async () => {
   const root = createRoot(host);
   try {
     await act(async () => root.render(overlay()));
+    await openAddForm(host);
     const cardButton = () =>
       Array.from(host.querySelectorAll("button")).filter(
         (button) => button.textContent === "Ada",

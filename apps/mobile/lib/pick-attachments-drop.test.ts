@@ -61,15 +61,15 @@ describe("dropped file attachments", () => {
   });
 
   it("rejects an oversized file without reading it", async () => {
-    const result = await readDroppedFiles([dropped("film.mp4", 20 * 1024 * 1024)]);
+    const result = await readDroppedFiles([dropped("film.mp4", 200 * 1024 * 1024)]);
 
     expect(result.attachments).toEqual([]);
-    expect(result.skipped).toEqual([{ name: "film.mp4", reason: "over 10 MiB" }]);
+    expect(result.skipped).toEqual([{ name: "film.mp4", reason: "over 100 MiB" }]);
     expect(state.base64).not.toHaveBeenCalled();
   });
 
   it("deletes the cached copy of a file it will not attach", async () => {
-    await readDroppedFiles([dropped("film.mp4", 20 * 1024 * 1024), dropped("note.png", 1024)]);
+    await readDroppedFiles([dropped("film.mp4", 200 * 1024 * 1024), dropped("note.png", 1024)]);
 
     expect(state.deleted).toEqual([
       "file:///cache/dropped/film.mp4",
@@ -119,12 +119,12 @@ describe("dropped file attachments", () => {
   });
 
   it("checks the copied file's actual size before reading", async () => {
-    state.info.mockReturnValue({ size: 20 * 1024 * 1024 });
+    state.info.mockReturnValue({ size: 200 * 1024 * 1024 });
     const result = await readDroppedFiles([dropped("one.png", 10), dropped("two.png", 10)]);
     expect(result.attachments).toEqual([]);
     expect(result.skipped).toEqual([
-      { name: "one.png", reason: "over 10 MiB" },
-      { name: "two.png", reason: "over 10 MiB" },
+      { name: "one.png", reason: "over 100 MiB" },
+      { name: "two.png", reason: "over 100 MiB" },
     ]);
     expect(state.base64).not.toHaveBeenCalled();
     expect(state.deleted).toHaveLength(2);

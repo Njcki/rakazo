@@ -29,7 +29,8 @@ describe("bootstrap upload configuration", () => {
       } as Awaited<ReturnType<typeof rpc.bootstrap>>);
       const { takeInitialBootstrap, getMaxUploadSizeBytes } = await import("./bootstrap");
       await takeInitialBootstrap();
-      expect(getMaxUploadSizeBytes()).toBe(maxUploadSizeBytes ?? 10 * 1024 * 1024);
+      // RAKAZO: fallback raised to 100 MiB with the server default.
+      expect(getMaxUploadSizeBytes()).toBe(maxUploadSizeBytes ?? 100 * 1024 * 1024);
     },
   );
 });

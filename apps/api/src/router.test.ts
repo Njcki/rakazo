@@ -732,7 +732,7 @@ describe("model setup gate", () => {
       const response = await call(handler, actor, "me", null);
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({
-        json: { maxUploadSizeBytes: maxUploadSizeBytes ?? 10 * 1024 * 1024 },
+        json: { maxUploadSizeBytes: maxUploadSizeBytes ?? 100 * 1024 * 1024 },
       });
     },
   );
@@ -4258,7 +4258,7 @@ describe("computer terminal and file transfer", () => {
       expect.anything(),
       "bots/bot-1/notes.txt",
       expect.anything(),
-      { maxBytes: 10 * 1024 * 1024 },
+      { maxBytes: 100 * 1024 * 1024 },
     );
     const stopped = setup({ state: "stopped" });
     await expect(stopped.call("downloadFile", { path: "notes.txt" })).resolves.toMatchObject({

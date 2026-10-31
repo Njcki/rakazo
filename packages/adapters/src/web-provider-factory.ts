@@ -1,6 +1,7 @@
 import type { WebProvider } from "@rakazo/adapter-kit";
 import { ExaWebProvider } from "./exa-web.js";
 import { FakeWebProvider } from "./fake-web.js";
+import { KeenableWebProvider } from "./keenable-web.js";
 import { KeylessHttpWebProvider } from "./keyless-http-web.js";
 import { ParallelWebProvider } from "./parallel-web.js";
 import { SearxngWebProvider } from "./searxng-web.js";
@@ -49,6 +50,8 @@ export function createWebProvider(
   switch (kind) {
     case "parallel":
       return new ParallelWebProvider(options);
+    case "keenable":
+      return new KeenableWebProvider(options);
     case "fake":
       return new FakeWebProvider();
     case "keyless-http":
@@ -95,7 +98,10 @@ function fallbackChain(
   onResults?: (service: string) => void,
 ): WebProvider {
   const notify = (service: string) => (onResults ? () => onResults(service) : undefined);
-  let next: WebProvider = new KeylessHttpWebProvider({ ...options, onResults: notify("DuckDuckGo") });
+  let next: WebProvider = new KeylessHttpWebProvider({
+    ...options,
+    onResults: notify("DuckDuckGo"),
+  });
   for (const tier of PAID_TIERS.slice(PAID_TIERS.indexOf(from)).reverse()) {
     const apiKey = source[`${tier.toUpperCase()}_API_KEY`]?.trim();
     if (!apiKey) continue;

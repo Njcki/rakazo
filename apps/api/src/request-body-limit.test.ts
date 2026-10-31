@@ -36,7 +36,8 @@ describe("API request body limits", () => {
     });
   });
   it("keeps the RPC allowance above the largest supported attachment envelope", () => {
-    expect(MAX_RPC_REQUEST_BYTES).toBeGreaterThan(ATTACHMENT_MAX_BASE64_LENGTH);
+    // RAKAZO: 100 MiB uploads lift the RPC limit above the 16 MiB floor.
+    expect(rpcRequestMaxBytes()).toBeGreaterThan(ATTACHMENT_MAX_BASE64_LENGTH);
     expect(MAX_AUTH_REQUEST_BYTES).toBeLessThan(MAX_RPC_REQUEST_BYTES);
   });
 
@@ -58,7 +59,7 @@ describe("API request body limits", () => {
         body: "{}",
       });
     const auth = await request("/api/auth/sign-in/email", MAX_AUTH_REQUEST_BYTES + 1);
-    const rpc = await request("/rpc/test", MAX_RPC_REQUEST_BYTES + 1);
+    const rpc = await request("/rpc/test", rpcRequestMaxBytes() + 1);
     const voice = await request("/api/voice/speak", MAX_RPC_REQUEST_BYTES + 1);
 
     expect(auth.status).toBe(413);

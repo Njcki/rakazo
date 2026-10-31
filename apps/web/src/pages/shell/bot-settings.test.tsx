@@ -459,10 +459,8 @@ it("omits projected identity values on unrelated saves but commits explicit inli
     container.querySelector<HTMLButtonElement>('[id$="-notify-finish"]')!.click(),
   );
   expect(onSave.mock.calls[0]?.[0]).not.toHaveProperty("name");
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('[aria-label="Edit name"]')!.click(),
-  );
-  const input = container.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
+  // RAKAZO 39434b4: explicit Name field instead of the inline header edit.
+  const input = container.querySelector<HTMLInputElement>('[data-testid="bot-settings-name"]')!;
   await act(async () => setField(input, "SupportBot2026"));
   await act(async () =>
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })),

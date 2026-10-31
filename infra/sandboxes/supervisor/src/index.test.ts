@@ -244,7 +244,8 @@ describe("sandbox supervisor HTTP boundary", () => {
     expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThan(
       supervisorRequestBodyLimit("POST", "/computers/id/files", limit),
     );
-    expect(supervisorFileWriteSchema().safeParse(payload).success).toBe(false);
+    // RAKAZO: the default is 100 MiB in this fork, so check rejection under a smaller limit.
+    expect(supervisorFileWriteSchema(10 * 1024 * 1024).safeParse(payload).success).toBe(false);
     expect(
       supervisorFileWriteSchema(limit).safeParse({
         path: "large.txt",

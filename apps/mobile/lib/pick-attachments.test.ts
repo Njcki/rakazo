@@ -22,11 +22,11 @@ describe("filterPickedAttachments", () => {
     },
   );
 
-  it("accepts picked MP3 audio but retains the 10 MiB cap", () => {
+  it("accepts picked MP3 audio but retains the 100 MiB cap", () => {
     const candidate = {
       name: "song.mp3",
       mimeType: inferAttachmentMimeType("song.mp3", "audio/mp3"),
-      size: 10 * 1024 * 1024,
+      size: 100 * 1024 * 1024,
       contentBase64: "YXVkaW8=",
     };
     const result = filterPickedAttachments(0, [
@@ -35,24 +35,24 @@ describe("filterPickedAttachments", () => {
     ]);
     expect(result.attachments).toHaveLength(1);
     expect(result.attachments[0]).toMatchObject({ name: "song.mp3", mimeType: "audio/mpeg" });
-    expect(result.skipped).toEqual([{ name: "large.mp3", reason: "over 10 MiB" }]);
+    expect(result.skipped).toEqual([{ name: "large.mp3", reason: "over 100 MiB" }]);
   });
   it("uses the server limit and falls back for older servers", () => {
     const candidate = {
       name: "large.txt",
       mimeType: "text/plain",
-      size: 11 * 1024 * 1024,
+      size: 101 * 1024 * 1024,
       contentBase64: "",
     };
     expect(
       filterPickedAttachments(
         0,
         [candidate],
-        attachmentMaxBytes({ maxUploadSizeBytes: 12 * 1024 * 1024 }),
+        attachmentMaxBytes({ maxUploadSizeBytes: 120 * 1024 * 1024 }),
       ).attachments,
     ).toHaveLength(1);
     expect(filterPickedAttachments(0, [candidate], attachmentMaxBytes({})).skipped[0]?.reason).toBe(
-      "over 10 MiB",
+      "over 100 MiB",
     );
     expect(
       filterPickedAttachments(
@@ -85,7 +85,7 @@ describe("filterPickedAttachments", () => {
       {
         name: "big.zip",
         mimeType: "application/zip",
-        size: 10 * 1024 * 1024 + 1,
+        size: 100 * 1024 * 1024 + 1,
         contentBase64: "aGVsbG8=",
       },
     ]);

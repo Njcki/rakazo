@@ -1,20 +1,26 @@
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@rakazo/chat-ui/web";
-import type { ThreadMessage } from "@rakazo/contracts";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, commandVariableName } from "@rakazo/contracts";
+import type { LoginFieldInput, ThreadMessage } from "@rakazo/contracts";
+import {
+  BOT_INSTRUCTIONS_MAX_LENGTH,
+  commandVariableName,
+  LoginSecretValue,
+  loginCardFields,
+} from "@rakazo/contracts";
 import {
   isApprovalAskBlock,
   isSecretAskBlock,
   resolveAskChoice,
   selectedAskActionLabel,
 } from "@rakazo/core";
-import { Button, Input, Textarea } from "@rakazo/ui-web";
+import { Button, Input, Label, Switch, Textarea } from "@rakazo/ui-web";
 import { Check } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { BuiCard } from "./ai/primitives";
+import { LoginFieldValue } from "./LoginFields";
 import { OptionRow, optionLetter } from "./OptionRow";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
@@ -26,23 +32,27 @@ function formatAnsweredState(
   outcome?: "created" | "cancelled",
   actions?: AskBlock["actions"],
   dismissed?: boolean,
+  remembered?: false,
 ): string {
-  if (secret) return dismissed ? t`Dismissed` : t`Saved`;
+  if (secret) return dismissed ? t`Dismissed` : remembered === false ? t`Sent` : t`Saved`;
   if (!answer) return t`Answered`;
   if (!approval) return answer === "approved" ? t`Sent` : selectedAskActionLabel(answer, actions);
   if (outcome === "created") return t`Created`;
   if (outcome === "cancelled") return t`Cancelled`;
-  if (answer === "allow") return allowsChat(actions) ? t`Allowed for this chat` : t`Allowed once`;
+  if (answer === "allow") return allowsSpace(actions) ? t`Allowed in this space` : t`Allowed once`;
   if (answer === "always") return t`Always allowed`;
   if (answer === "deny") return t`Denied`;
   return t`Answered: ${answer}`;
 }
 
-/** The server's label on the user's-computer approval, whose "allow" covers the rest of the chat. */
-const ALLOW_FOR_CHAT = "Allow for this chat";
+/**
+ * The server's labels on the user's-computer approval, whose "allow" covers the whole space. Cards
+ * from before it covered the space carry the older label.
+ */
+const ALLOW_IN_SPACE = new Set(["Allow in this space", "Allow for this chat"]);
 
-function allowsChat(actions: AskBlock["actions"]): boolean {
-  return actions?.some((action) => action.label === ALLOW_FOR_CHAT) ?? false;
+function allowsSpace(actions: AskBlock["actions"]): boolean {
+  return actions?.some((action) => ALLOW_IN_SPACE.has(action.label)) ?? false;
 }
 
 function approvalActionLabel(
@@ -53,7 +63,7 @@ function approvalActionLabel(
 ): string {
   if (outcome === "created") return t`Create space`;
   if (outcome === "cancelled") return t`Cancel`;
-  if (id === "allow") return fallback === ALLOW_FOR_CHAT ? t`Allow for this chat` : t`Allow once`;
+  if (id === "allow") return ALLOW_IN_SPACE.has(fallback) ? t`Allow in this space` : t`Allow once`;
   if (id === "always") return site ? t`Always allow ${site}` : t`Always allow this tool`;
   if (id === "deny") return t`Deny`;
   return fallback;
@@ -75,7 +85,8 @@ export function AskCard({
   block: AskBlock;
   canAnswer: boolean;
   canDismiss: boolean;
-  onAnswer: (text: string, username?: string) => Promise<void>;
+  /** A login card answers with its fields and an empty `text`; `remember` false uses it once. */
+  onAnswer: (text: string, fields?: LoginFieldInput[], remember?: false) => Promise<void>;
   /** Turns down a secret request without a value. */
   onDismiss: () => Promise<void>;
 }) {
@@ -84,8 +95,12 @@ export function AskCard({
   const [answer, setAnswer] = useState(block.instructionUpdate?.after ?? "");
   const [dismissed, setDismissed] = useState(false);
   const [acceptedAnswer, setAcceptedAnswer] = useState<string>();
+  const [acceptedRemembered, setAcceptedRemembered] = useState<false>();
   const [undone, setUndone] = useState(false);
-  const [username, setUsername] = useState("");
+  const emptyLogin = () => loginCardFields(block.loginFields);
+  const [login, setLogin] = useState(emptyLogin);
+  const [remember, setRemember] = useState(true);
+  const rememberId = useId();
   const [secretField, setSecretField] = useState<HTMLInputElement | null>(null);
   const [pastedLines, setPastedLines] = useState(false);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -94,6 +109,7 @@ export function AskCard({
   const answered = block.status === "answered" || acceptedAnswer !== undefined || dismissed;
   const displayedAnswer = block.status === "answered" ? block.answer : acceptedAnswer;
   const displayedDismissed = block.status === "answered" ? block.dismissed : dismissed;
+  const displayedRemembered = block.status === "answered" ? block.remembered : acceptedRemembered;
   const approvalActions = isApprovalAskBlock(block) ? block.actions : undefined;
   const askActions = block.actions;
   const displayActions = block.instructionUpdate
@@ -106,29 +122,24 @@ export function AskCard({
     !approvalActions && !block.instructionUpdate && !secretInput && Boolean(askActions?.length);
   const chosenOption =
     answered && displayedAnswer ? resolveAskChoice(displayedAnswer, askActions) : undefined;
-  // A reply typed instead of picked is shown in the user's words, so the card reads as answered.
+  // An edited draft is shown in the user's words, so the card reads as answered. A typed reply to
+  // options already shows as the user's message, so it only dims them.
   const typedAnswer =
     answered &&
+    !optionQuestion &&
     !approvalActions &&
     !secretInput &&
     !block.instructionUpdate &&
-    !chosenOption &&
     displayedAnswer !== "approved"
       ? displayedAnswer
       : undefined;
-  const answerQuote = typedAnswer ? (
-    <blockquote
-      data-testid="ask-answer"
-      className="mt-3 whitespace-pre-wrap break-words border-s-2 border-border ps-3 text-[15px] leading-[1.5] text-muted-foreground"
-    >
-      {typedAnswer}
-    </blockquote>
-  ) : null;
   // A login or credential is saved for the run's user, so only they can fill one in; others see
   // the card without fields or buttons.
   const ownerOnly = secretInput && Boolean(block.credential) && !canDismiss;
   const loginInput = secretInput && block.credential?.auth.type === "login";
-  const secretLabel = loginInput ? t`Password` : secretFieldLabel(block.purpose);
+  const shownLoginLabels = block.loginFields ?? [t`Username`, t`Password`];
+  const loginReady = LoginSecretValue.safeParse({ fields: login }).success;
+  const secretLabel = secretFieldLabel(block.purpose);
   const commandInput = secretInput && block.credential?.auth.type === "command";
 
   // A password field can't hold line breaks, so it would flatten a multi-line command variable
@@ -153,21 +164,21 @@ export function AskCard({
     return () => field.removeEventListener("beforeinput", keepLineBreaks);
   }, [commandInput, secretField]);
 
-  async function submitAnswer(value: string) {
+  async function submitAnswer(value: string, fields?: LoginFieldInput[]) {
     if (submitting) return;
-    if (secretInput ? value.length === 0 : !value.trim()) return;
-    const submitUsername = loginInput ? username.trim() : undefined;
-    if (loginInput && !submitUsername) return;
+    if (fields ? !loginReady : secretInput ? value.length === 0 : !value.trim()) return;
     const submitValue = secretInput ? value : value.trim();
     setPendingAction(secretInput ? "submit" : submitValue);
     setError(null);
     if (secretInput) {
       setAnswer("");
-      setUsername("");
+      setLogin(emptyLogin());
       setPastedLines(false);
     }
     try {
-      await onAnswer(submitValue, submitUsername);
+      if (fields && !remember) await onAnswer(submitValue, fields, false);
+      else await onAnswer(submitValue, fields);
+      if (fields && !remember) setAcceptedRemembered(false);
       setAcceptedAnswer(secretInput ? "" : submitValue);
     } catch (err) {
       // A secret answer's failure may echo the secret, so never show its message.
@@ -186,7 +197,7 @@ export function AskCard({
     setPendingAction("dismiss");
     setError(null);
     setAnswer("");
-    setUsername("");
+    setLogin(emptyLogin());
     setPastedLines(false);
     try {
       await onDismiss();
@@ -198,11 +209,34 @@ export function AskCard({
     }
   }
 
-  if (block.instructionUpdate?.undoVersionId)
+  const { instructionUpdate, settingsUpdate } = block;
+  const undo = instructionUpdate?.undoVersionId
+    ? {
+        label: t`Instructions updated`,
+        run: () =>
+          rpc.bots.restoreInstructions({
+            botId: instructionUpdate.botId,
+            versionId: instructionUpdate.undoVersionId!,
+            expectedInstructions: instructionUpdate.after,
+            undo: true,
+          }),
+      }
+    : settingsUpdate
+      ? {
+          label: t`Settings updated`,
+          run: () =>
+            rpc.bots.update({
+              botId: settingsUpdate.botId,
+              ...settingsUpdate.before,
+              expectedSettings: settingsUpdate.after,
+            }),
+        }
+      : undefined;
+  if (undo)
     return (
       <BuiCard className="px-5 py-4">
         <div className="flex items-center gap-2 text-sm">
-          <Trans>Instructions updated</Trans>
+          {undo.label}
           <Button
             variant="link"
             disabled={undone || submitting}
@@ -210,12 +244,7 @@ export function AskCard({
               setPendingAction("undo");
               setError(null);
               try {
-                await rpc.bots.restoreInstructions({
-                  botId: block.instructionUpdate!.botId,
-                  versionId: block.instructionUpdate!.undoVersionId!,
-                  expectedInstructions: block.instructionUpdate!.after,
-                  undo: true,
-                });
+                await undo.run();
                 setUndone(true);
               } catch (err) {
                 setError(errorText(err));
@@ -311,10 +340,14 @@ export function AskCard({
               {pendingAction === action.id ? <Trans>Sending…</Trans> : action.label}
             </OptionRow>
           ))}
-          {answerQuote}
         </div>
       ) : typedAnswer ? (
-        answerQuote
+        <blockquote
+          data-testid="ask-answer"
+          className="mt-3 whitespace-pre-wrap break-words border-s-2 border-border ps-3 text-[15px] leading-[1.5] text-muted-foreground"
+        >
+          {typedAnswer}
+        </blockquote>
       ) : answered ? (
         <div className="mt-3.5 flex items-center gap-1.5 text-[13.5px] font-medium text-muted-foreground">
           {displayedAnswer === "deny" ||
@@ -334,6 +367,7 @@ export function AskCard({
                 approvalActions?.find((action) => action.id === displayedAnswer)?.outcome,
                 askActions,
                 displayedDismissed,
+                displayedRemembered,
               )}
         </div>
       ) : !canAnswer ? (
@@ -376,34 +410,39 @@ export function AskCard({
           className="mt-3.5 flex flex-col gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            void submitAnswer(answer);
+            if (loginInput) void submitAnswer("", login);
+            else void submitAnswer(answer);
           }}
         >
           {loginInput ? (
+            login.map((field, index) => (
+              <LoginFieldValue
+                key={field.label}
+                label={shownLoginLabels[index] ?? field.label}
+                field={field}
+                disabled={submitting}
+                onChange={(change) =>
+                  setLogin((current) =>
+                    current.map((field, at) => (at === index ? { ...field, ...change } : field)),
+                  )
+                }
+              />
+            ))
+          ) : (
             <Input
+              ref={setSecretField}
               className="w-full"
-              aria-label={t`Username`}
+              aria-label={secretLabel}
+              type="password"
               autoComplete="off"
               spellCheck={false}
               disabled={submitting}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              placeholder={t`Username`}
+              readOnly={pastedLines}
+              value={pastedLines ? answer.replaceAll("\n", " ") : answer}
+              onChange={(event) => setAnswer(event.target.value)}
+              placeholder={secretLabel}
             />
-          ) : null}
-          <Input
-            ref={setSecretField}
-            className="w-full"
-            aria-label={secretLabel}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            disabled={submitting}
-            readOnly={pastedLines}
-            value={pastedLines ? answer.replaceAll("\n", " ") : answer}
-            onChange={(event) => setAnswer(event.target.value)}
-            placeholder={secretLabel}
-          />
+          )}
           {pastedLines ? (
             <Button
               type="button"
@@ -419,12 +458,36 @@ export function AskCard({
               <Trans>Clear</Trans>
             </Button>
           ) : null}
+          {loginInput ? (
+            <div className="mt-1 flex items-center gap-2">
+              <Switch
+                id={rememberId}
+                size="sm"
+                checked={remember}
+                disabled={submitting}
+                onCheckedChange={setRemember}
+              />
+              <Label htmlFor={rememberId} className="text-[13px] font-normal text-muted-foreground">
+                <Trans>Save to Vault</Trans>
+              </Label>
+            </div>
+          ) : null}
           <div className="flex gap-2">
             <Button
               type="submit"
-              disabled={answer.length === 0 || (loginInput && !username.trim()) || submitting}
+              disabled={(loginInput ? !loginReady : answer.length === 0) || submitting}
             >
-              {pendingAction === "submit" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
+              {loginInput && !remember ? (
+                pendingAction === "submit" ? (
+                  <Trans>Sending…</Trans>
+                ) : (
+                  <Trans>Continue</Trans>
+                )
+              ) : pendingAction === "submit" ? (
+                <Trans>Saving…</Trans>
+              ) : (
+                <Trans>Save</Trans>
+              )}
             </Button>
             {canDismiss ? (
               <Button

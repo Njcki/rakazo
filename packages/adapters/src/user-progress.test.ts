@@ -15,8 +15,11 @@ import {
   MID_TURN_PROGRESS_MAX_PER_RUN,
   MID_TURN_PROGRESS_MIN_TURN_AGE_MS,
   messageUserMaxLength,
+  midTaskMessagePrompt,
   midTurnProgressBudgetAllows,
   MID_TURN_NARRATION_MAX_LENGTH,
+  NARRATION_STATUS_MAX_LENGTH,
+  narrationStatusLine,
   USER_PROGRESS_MESSAGE_MAX_LENGTH,
   userProgressClientNonce,
 } from "./user-progress.js";
@@ -219,5 +222,28 @@ describe("clampMidTurnNarration", () => {
 
   it("leaves the short progress-beat cap unchanged", () => {
     expect(USER_PROGRESS_MESSAGE_MAX_LENGTH).toBe(500);
+  });
+});
+
+describe("narrationStatusLine", () => {
+  it("makes one short line of a note", () => {
+    expect(narrationStatusLine("  Checking\nthe   totals.  ")).toBe("Checking the totals.");
+    const line = narrationStatusLine("x".repeat(NARRATION_STATUS_MAX_LENGTH + 5));
+    expect(line).toBe(`${"x".repeat(NARRATION_STATUS_MAX_LENGTH)}…`);
+  });
+});
+
+describe("midTaskMessagePrompt", () => {
+  it("asks for a short answer through message_user, then the rest of the task", () => {
+    expect(midTaskMessagePrompt("Still working?", true)).toBe(
+      "The person sent this while you were working:\n\nStill working?\n\nIf it asks something or changes the plan, answer briefly with message_user, then continue the task.",
+    );
+  });
+
+  it("asks for no plain-text answer, which would end the task, when message_user is off", () => {
+    const prompt = midTaskMessagePrompt("Still working?", false);
+    expect(prompt).toContain("\n\nStill working?\n\n");
+    expect(prompt).toContain("continue the task");
+    expect(prompt).not.toMatch(/reply|answer/);
   });
 });

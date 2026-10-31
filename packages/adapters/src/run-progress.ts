@@ -5,7 +5,8 @@ import {
   createStreamingRedactor,
   endsSentence,
   isBackgroundRunTrigger,
-  redactSecrets,
+  noteLastToolStep,
+  redactSecretsAfter,
 } from "@rakazo/core";
 import type { Run } from "@rakazo/db";
 import type { ExecutorDeps } from "./executor-deps.js";
@@ -18,6 +19,8 @@ import {
   extractNarrationText,
   isUserProgressClientNonce,
   midTurnProgressBudgetAllows,
+  narrationStatusLine,
+  USER_PROGRESS_MESSAGE_MAX_LENGTH,
   userProgressClientNonce,
 } from "./user-progress.js";
 import {
@@ -44,6 +47,14 @@ export async function createReplyState(
     midTurnUserTexts: [],
     midTurnProgressCount: 0,
     turnStartedAtMs: run.startedAt?.getTime() ?? Date.now(),
+    progressBudgetStart: 0,
+    steeringReplyPending: false,
+    steeringResets: 0,
+    lastSteeringResetAt: Number.NEGATIVE_INFINITY,
+    workingNotes: [],
+    textSinceLastStep: "",
+    narrationSoFar: "",
+    narrationStatusShowing: false,
     pendingToolNames: [],
     pendingProgress: "",
     lastProgressAt: 0,
@@ -80,10 +91,20 @@ export function recordExplicitNoResponse(reply: ReplyState, text: string) {
 
 /** Durable interim messages only on genuinely long turns, capped per run. */
 export function canPublishDurableProgress(reply: ReplyState) {
-  return midTurnProgressBudgetAllows(
-    reply.midTurnProgressCount,
-    Date.now() - reply.turnStartedAtMs,
+  return (
+    reply.steeringReplyPending ||
+    midTurnProgressBudgetAllows(
+      reply.midTurnProgressCount - reply.progressBudgetStart,
+      Date.now() - reply.turnStartedAtMs,
+    )
   );
+}
+
+/** The next interim message's nonce; it uses up the allowance for answering the person. */
+export function nextProgressNonce(ctx: RunContext) {
+  const { reply } = ctx.state;
+  reply.steeringReplyPending = false;
+  return userProgressClientNonce(ctx.run.id, reply.midTurnProgressCount++);
 }
 
 export function canPublishDurableNarration(ctx: RunContext) {
@@ -135,15 +156,34 @@ export async function flushProgress(ctx: RunContext) {
   reply.lastProgressAt = Date.now();
 }
 
+/**
+ * Text the bot wrote before a step. It is posted as an interim message when the budget allows
+ * and it fits; otherwise it is a note on that step, kept out of the reply. Returns the note so
+ * the caller can show it as the working line.
+ */
 export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard = false) {
   const { deps, run } = ctx;
   const { reply } = ctx.state;
   const extracted = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
-  const narration = clampUserProgressMessage(redactSecrets(extracted.text, ctx.secrets));
-  // Patch 0040/0041/0050: do not promote a mid-clause fragment into a durable chat bubble.
-  if (narration && !endsSentence(narration) && !beforeConnectCard) {
-    return;
+  // RAKAZO 0040/0041/0050: hold a mid-clause fragment for a later sentence boundary instead of
+  // promoting it (or noting it) mid-word; the text stays in the segments for the next step.
+  {
+    const pending = extracted.text.trim();
+    if (pending && !endsSentence(pending) && !beforeConnectCard) return undefined;
   }
+  reply.messageSegments = extracted.remaining;
+  reply.currentTextSegment = "";
+  const text = redactSecretsAfter(reply.narrationSoFar, extracted.text, ctx.secrets).trim();
+  reply.narrationSoFar += extracted.text;
+  if (!text) return undefined;
+  reply.assembled = "";
+  reply.hasStreamedText = false;
+  reply.pendingProgress = "";
+  // Text the redactor still holds back belongs to the text just taken out.
+  reply.redactor.skip();
+  const promotes = runPromotesMidTurnNarration(run.trigger);
+  // RAKAZO 0028 cadence: a minimum gap between durable interim bubbles (a mid-run message
+  // from the person reopens it). Held-back narration becomes a note on the step instead.
   const cadence = progressCadenceConfig();
   const gapAllows = shouldPromoteNarration({
     now: Date.now(),
@@ -151,45 +191,32 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
     minGapSeconds: cadence.narrationMinGapSeconds,
     steeringSinceDurable: reply.steeringSinceDurableProgress,
   });
-  const canPublish =
-    (canPublishDurableNarration(ctx) && gapAllows) ||
-    (beforeConnectCard && runPromotesMidTurnNarration(run.trigger));
   if (
-    narration &&
-    !canPublish &&
-    !ctx.allowSilentEmptyRun &&
-    runPromotesMidTurnNarration(run.trigger)
+    text.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH &&
+    ((canPublishDurableNarration(ctx) && gapAllows) || (beforeConnectCard && promotes))
   ) {
-    // Still streaming as transient progress; hold segments for a later sentence boundary.
-    if (!gapAllows && canPublishDurableNarration(ctx)) {
-      return;
-    }
-    return;
+    reply.workingNotes.length = 0;
+    reply.narrationStatusShowing = false;
+    await publishMessage(
+      deps,
+      run,
+      "bot",
+      [{ kind: "text", text }],
+      undefined,
+      nextProgressNonce(ctx),
+    );
+    reply.midTurnUserTexts.push(text);
+    markDurableProgress(reply);
+    return undefined;
   }
-  reply.messageSegments = extracted.remaining;
-  reply.currentTextSegment = "";
-  if (!narration) return;
-  reply.hasStreamedText = false;
-  reply.pendingProgress = "";
-  if (!canPublish) {
-    reply.assembled = "";
-    reply.discardedMidTurnNarration = true;
-    reply.lastDiscardedMidTurnNarration = narration;
-    return;
+  reply.discardedMidTurnNarration = true;
+  reply.lastDiscardedMidTurnNarration = clampUserProgressMessage(text);
+  if (promotes && !ctx.allowSilentEmptyRun) {
+    reply.workingNotes.push(text);
+    flushPendingTools(reply);
+    reply.messageSegments = noteLastToolStep(reply.messageSegments, text);
   }
-  reply.assembled = "";
-  await publishMessage(
-    deps,
-    run,
-    "bot",
-    [{ kind: "text", text: narration }],
-    undefined,
-    userProgressClientNonce(run.id, reply.midTurnProgressCount++),
-  );
-  reply.midTurnUserTexts.push(narration);
-  reply.publishedMidTurnUserMessage = true;
-  reply.lastDurableProgressAt = Date.now();
-  reply.steeringSinceDurableProgress = false;
+  return text;
 }
 
 /** Mark that a durable mid-turn bot message was posted (message_user / quick-reply). */
@@ -197,4 +224,5 @@ export function markDurableProgress(reply: ReplyState) {
   reply.lastDurableProgressAt = Date.now();
   reply.steeringSinceDurableProgress = false;
   reply.publishedMidTurnUserMessage = true;
+}
 }

@@ -10,17 +10,17 @@ test("asks before running a command on the user's computer", async ({ page }, te
   await composer.fill("run hostname on my computer");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByText("Run on your computer?", { exact: true })).toBeVisible({
+  const transcript = page.getByTestId("transcript");
+  await expect(transcript.getByText("Run on your computer?", { exact: true })).toBeVisible({
     timeout: 60_000,
   });
-  const allow = page.getByRole("button", { name: "Allow for this chat", exact: true });
+  const allow = page.getByRole("button", { name: "Allow in this space", exact: true });
   await expect(allow).toBeVisible();
   await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "user-computer-approval-card");
 
   await allow.click();
-  const transcript = page.getByTestId("transcript");
-  await expect(transcript.getByText("Allowed for this chat", { exact: true })).toBeVisible();
+  await expect(transcript.getByText("Allowed in this space", { exact: true })).toBeVisible();
 
   // The emulated desktop (see UserDeviceEmulator) records what it ran; tool output is not
   // shown in the transcript, so check that the approved command reached it.

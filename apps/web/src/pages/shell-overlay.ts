@@ -7,6 +7,7 @@ const SETTINGS_SECTIONS = [
   "confirmations",
   "vault",
   "messaging",
+  "wallet",
   "usage",
   "stats",
   "computer",
@@ -20,10 +21,11 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 export type ShellOverlay =
   | { kind: "settings"; section: SettingsSection; spaceId: string | null }
   | { kind: "integrations" }
+  | { kind: "skills" }
   | { kind: "mcp"; serverId?: string }
   | null;
 
-const OVERLAY_KEYS = ["settings", "space", "integrations", "mcp", "messaging"] as const;
+const OVERLAY_KEYS = ["settings", "space", "integrations", "skills", "mcp", "messaging"] as const;
 
 function isSettingsSection(value: string): value is SettingsSection {
   return (SETTINGS_SECTIONS as readonly string[]).includes(value);
@@ -39,6 +41,7 @@ export function readShellOverlay(params: URLSearchParams): ShellOverlay {
     };
   }
   if (params.has("integrations")) return { kind: "integrations" };
+  if (params.has("skills")) return { kind: "skills" };
   if (params.has("mcp")) {
     const serverId = params.get("mcp");
     return serverId ? { kind: "mcp", serverId } : { kind: "mcp" };

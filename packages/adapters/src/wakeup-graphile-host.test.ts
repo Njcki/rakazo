@@ -22,6 +22,12 @@ vi.mock("node:v8", () => ({
   })),
 }));
 
+// RAKAZO: the fork raises ATTACHMENT_MAX_BYTES to 100 MiB (reserve 400 MiB); these memory
+// fixtures are sized for upstream's 10 MiB attachments (reserve 40 MiB).
+vi.mock("@rakazo/contracts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@rakazo/contracts")>()),
+  ATTACHMENT_MAX_BYTES: 10 * 1024 * 1024,
+}));
 vi.mock("graphile-worker", () => ({
   run: (...args: unknown[]) => run(...args),
   makeWorkerUtils: vi.fn(),

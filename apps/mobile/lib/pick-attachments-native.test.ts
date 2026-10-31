@@ -106,6 +106,7 @@ describe("native attachment reads", () => {
     expect(new Set(result.attachments.map((item) => item.id)).size).toBe(4);
   });
 
+  // RAKAZO: unknown types are accepted as application/octet-stream, so only size and count reject.
   it("fills remaining slots after rejected documents without changing order", async () => {
     const assets = [
       document("unknown.unsupported", "application/x-unsupported"),
@@ -120,16 +121,16 @@ describe("native attachment reads", () => {
 
     const result = await pickDocuments(2, 2 * 1024 * 1024);
 
-    expect(file.base64.mock.calls.map(([uri]) => uri)).toEqual([
-      assets[0]!.uri,
-      assets[2]!.uri,
-      assets[3]!.uri,
+    expect(file.base64.mock.calls.map(([uri]) => uri)).toEqual([assets[0]!.uri, assets[2]!.uri]);
+    expect(result.attachments.map((item) => item.name)).toEqual([
+      "unknown.unsupported",
+      "first.txt",
     ]);
-    expect(result.attachments.map((item) => item.name)).toEqual(["first.txt", "second.txt"]);
+    expect(result.attachments[0]!.mimeType).toBe("application/octet-stream");
     expect(result.attachments[0]!.id).not.toBe(result.attachments[1]!.id);
     expect(result.skipped).toEqual([
-      { name: "unknown.unsupported", reason: "unsupported type" },
       { name: "large.txt", reason: "over 2 MiB" },
+      { name: "second.txt", reason: "max 4 attachments" },
       { name: "extra.txt", reason: "max 4 attachments" },
     ]);
   });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AttachmentValidationError,
   attachmentExtensionForMimeType,
+  attachmentStorageExtension,
   attachmentsForBot,
   blocksToAgentHistoryText,
   decodeAttachmentBase64,
@@ -48,15 +49,31 @@ describe("attachment helpers", () => {
   ])("normalizes %s without needing an extension", (alias, expected) => {
     expect(inferAttachmentMimeType("clip", alias)).toBe(expected);
   });
-  it("uses M4A's container for an AAC codec report but does not allow raw AAC or FLAC", () => {
+  it("uses M4A's container for an AAC codec report and stores raw AAC or FLAC as generic files", () => {
     expect(inferAttachmentMimeType("clip.m4a", "audio/aac")).toBe("audio/mp4");
     expect(inferAttachmentMimeType("clip.m4a", "audio/x-m4a")).toBe("audio/mp4");
-    expect(inferAttachmentMimeType("clip.aac", "audio/aac")).toBeNull();
-    expect(inferAttachmentMimeType("clip.flac", "audio/flac")).toBeNull();
+    // RAKAZO: any file type is accepted; unknown formats fall back to octet-stream.
+    expect(inferAttachmentMimeType("clip.aac", "audio/aac")).toBe("application/octet-stream");
+    expect(inferAttachmentMimeType("clip.flac", "audio/flac")).toBe("application/octet-stream");
     expect(attachmentExtensionForMimeType("audio/flac")).toBe("");
     for (const reportedType of ["__proto__", "constructor", "toString"]) {
-      expect(inferAttachmentMimeType("clip", reportedType)).toBeNull();
+      expect(inferAttachmentMimeType("clip", reportedType)).toBe("application/octet-stream");
     }
+  });
+  it("RAKAZO: accepts any file type through the octet-stream fallback", () => {
+    expect(inferAttachmentMimeType("setup.exe", "application/x-msdownload")).toBe(
+      "application/octet-stream",
+    );
+    expect(inferAttachmentMimeType("model.stl", "")).toBe("application/octet-stream");
+    expect(inferAttachmentMimeType("noext", undefined)).toBe("application/octet-stream");
+    expect(inferAttachmentMimeType("logo.svg", "image/svg+xml")).toBe("application/octet-stream");
+    expect(inferAttachmentMimeType("report.pdf", "application/octet-stream")).toBe(
+      "application/pdf",
+    );
+    expect(attachmentStorageExtension("song.FLAC", "application/octet-stream")).toBe(".flac");
+    expect(attachmentStorageExtension("noext", "application/octet-stream")).toBe("");
+    expect(attachmentStorageExtension("a.b/../x", "application/octet-stream")).toBe("");
+    expect(attachmentStorageExtension("whatever.bin", "application/pdf")).toBe(".pdf");
   });
   it("enforces configured limits before and after base64 decoding", () => {
     const limit = 1024 * 1024;
@@ -72,10 +89,8 @@ describe("attachment helpers", () => {
   });
   it("accepts zip archives and rejects unsupported mime types and empty payloads", () => {
     expect(() => validateAttachmentMimeType("application/zip")).not.toThrow();
-    // Same as prod 27d1568d7: octet-stream is still rejected (the any-type fallback never landed).
-    expect(() => validateAttachmentMimeType("application/octet-stream")).toThrow(
-      AttachmentValidationError,
-    );
+    // RAKAZO: octet-stream is the any-type fallback and is accepted.
+    expect(() => validateAttachmentMimeType("application/octet-stream")).not.toThrow();
     expect(() => validateAttachmentMimeType("application/x-unknown")).toThrow(
       AttachmentValidationError,
     );

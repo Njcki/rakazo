@@ -37,7 +37,12 @@ export const ATTACHMENT_FILE_MIME_TYPES = [
   "text/html",
   "application/json",
   "application/zip",
+  // RAKAZO: any file type is accepted; unknown formats are stored as a generic binary.
+  "application/octet-stream",
 ] as const;
+
+/** RAKAZO: generic type for files whose format is not in the list above. */
+export const ATTACHMENT_FALLBACK_MIME_TYPE = "application/octet-stream" as const;
 
 export const ATTACHMENT_ALLOWED_MIME_TYPES = [
   ...ATTACHMENT_IMAGE_MIME_TYPES,

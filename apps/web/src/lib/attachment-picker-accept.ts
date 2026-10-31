@@ -1,11 +1,8 @@
-import { ATTACHMENT_ALLOWED_MIME_TYPES } from "@rakazo/contracts";
-
 /**
- * Android's document picker can filter out CSV files when the accept attribute
- * combines many MIME types. Allow the picker to show files on Android; the
- * attachment preparation and API still reject unsupported formats and sizes.
+ * RAKAZO: the fork accepts any file type (unknown formats are stored as
+ * application/octet-stream), so the picker never filters files out. The API still
+ * enforces the size limit. Upstream filtered by MIME type on desktop.
  */
-export function attachmentPickerAccept(userAgent: string): string {
-  if (/\bAndroid\b/i.test(userAgent)) return "*/*";
-  return [...ATTACHMENT_ALLOWED_MIME_TYPES, ".zip", ".csv", ".xls", ".xlsx"].join(",");
+export function attachmentPickerAccept(_userAgent: string): string {
+  return "*/*";
 }

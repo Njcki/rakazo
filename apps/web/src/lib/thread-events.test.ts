@@ -1619,7 +1619,9 @@ describe("thread event reduction", () => {
     ]);
   });
 
-  it("clears the step trail once the durable answer arrives", () => {
+  // RAKAZO 566a2d8/f7b5b98: a durable text message mid-run keeps the step trail under the
+  // bubble (midTurnKeepLiveTrail); the trail clears when the run ends.
+  it("keeps the step trail under a durable message until the run ends", () => {
     const initial = snapshot([
       message("progress:run-1", [
         { kind: "steps", steps: [{ label: "Slack find channels", count: 1 }] },
@@ -1635,7 +1637,9 @@ describe("thread event reduction", () => {
       }),
     );
 
-    expect(next?.messages.map((item) => item.id)).toEqual(["final"]);
+    expect(next?.messages.map((item) => item.id)).toEqual(["progress:run-1", "final"]);
+    const ended = reduceThreadSnapshot(next!, event({ type: "run.completed", seq: 10 }));
+    expect(ended?.messages.map((item) => item.id)).toEqual(["final"]);
   });
 
   it("updates a waiting group run without replacing the newer active run", () => {

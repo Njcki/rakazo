@@ -7,7 +7,7 @@ import {
   partialReplyClientNonce,
   RunHistoryWriteError,
 } from "@rakazo/db";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PARTIAL_REPLY_NOTE } from "./automated-messages.js";
 import { loadBotMessageContext, returnBotMessageOutcome } from "./bot-messages.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -15,6 +15,15 @@ import { createRunExecutor } from "./executor.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { PEER_NOTHING_NEW_REPLY } from "./silent-reply.js";
 import { userProgressClientNonce } from "./user-progress.js";
+
+// RAKAZO 0028: these cases test upstream's interim-message budget on its own; the extra
+// minimum gap between durable bubbles is covered in progress-cadence.test.ts.
+beforeEach(() => {
+  vi.stubEnv("PROGRESS_NARRATION_MIN_GAP_S", "0");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -154,7 +163,9 @@ async function runTurn(
       create: vi.fn(async () => ({ id: "attempt-1" })),
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
+      findMany: vi.fn(async () => []),
     },
+    agentPlan: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     thread: {
       update: vi.fn(async () => ({
         nextMessageSeq: messages.length + 1,

@@ -498,6 +498,9 @@ describe("Pi connector tool dispatch", () => {
       args: { collection: "notes", title: "Result", body: "Done" },
     };
     delete process.env.MAX_TOOL_CALLS_PER_TURN;
+    // RAKAZO: these cases check upstream's steering framing; our continue note
+    // (STEERING_CONTINUE_NOTE, on by default) is covered in final-answer-guard tests.
+    vi.stubEnv("STEERING_CONTINUE_NOTE", "0");
   });
 
   it("injects durable steering at Pi's next safe turn boundary", async () => {
@@ -816,6 +819,7 @@ describe("Pi connector tool dispatch", () => {
   afterEach(() => {
     if (previousMaxToolCalls === undefined) delete process.env.MAX_TOOL_CALLS_PER_TURN;
     else process.env.MAX_TOOL_CALLS_PER_TURN = previousMaxToolCalls;
+    vi.unstubAllEnvs();
   });
 
   it.each([undefined, "", ".", "/home/rakazo", "subdir"])(

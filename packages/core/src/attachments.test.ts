@@ -67,12 +67,15 @@ describe("attachment helpers", () => {
     }
     const larger = Buffer.alloc(11 * limit).toString("base64");
     expect(decodeAttachmentBase64(larger, 12 * limit).byteLength).toBe(11 * limit);
-    expect(() => decodeAttachmentBase64(larger)).toThrow("10 MiB limit");
+    // RAKAZO: the fork's default limit is 100 MiB, so 11 MiB passes without an explicit limit.
+    expect(decodeAttachmentBase64(larger).byteLength).toBe(11 * limit);
   });
   it("accepts zip archives and rejects unsupported mime types and empty payloads", () => {
     expect(() => validateAttachmentMimeType("application/zip")).not.toThrow();
-    // RAKAZO PATCH: octet-stream is the allowed any-type fallback.
-    expect(() => validateAttachmentMimeType("application/octet-stream")).not.toThrow();
+    // Same as prod 27d1568d7: octet-stream is still rejected (the any-type fallback never landed).
+    expect(() => validateAttachmentMimeType("application/octet-stream")).toThrow(
+      AttachmentValidationError,
+    );
     expect(() => validateAttachmentMimeType("application/x-unknown")).toThrow(
       AttachmentValidationError,
     );

@@ -17,10 +17,7 @@ import { AskCard } from "../../components/AskCard";
 import { CollaborationMarker } from "../../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../../components/CloudAgentCard";
 import { SubagentCard } from "../../components/SubagentCard";
-import {
-  StandaloneToolActivity,
-  ToolOnlyNarration,
-} from "../../components/ToolActivityDisclosure";
+import { StandaloneToolActivity, ToolOnlyNarration } from "../../components/ToolActivityDisclosure";
 import { SkillDraftCard } from "../../components/teach/SkillDraftCard";
 import type { ArtifactTarget } from "../../lib/artifact-open";
 import { messageProviderLabel } from "../../lib/messaging";
@@ -248,7 +245,9 @@ export const MessageView = memo(function MessageView({
                     }
                     return null;
                   })}
-                  {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
+                  {!isLive &&
+                  voiceReady &&
+                  message.blocks.some((block) => block.kind === "text") ? (
                     <Button
                       variant="text"
                       size="xs"

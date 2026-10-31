@@ -318,7 +318,6 @@ function reportAllowlistDrift(
   );
 }
 
-
 /** Build an Authorization value GitHub MCP and similar accept (`Bearer …`). */
 export function mcpBearerAuthorization(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
@@ -1187,9 +1186,9 @@ export class McpConnector implements ConnectorProvider {
         // reject Dynamic Client Registration and answer 400 (not 401) when the
         // Authorization header is missing, so an attached OAuth provider never
         // starts and the probe just fails. Prefer the stored access token.
-        const headerAuth =
-          material.headers?.Authorization ?? material.headers?.authorization;
-        const staticToken = mcpBearerAuthorization(material.secret) ?? mcpBearerAuthorization(headerAuth);
+        const headerAuth = material.headers?.Authorization ?? material.headers?.authorization;
+        const staticToken =
+          mcpBearerAuthorization(material.secret) ?? mcpBearerAuthorization(headerAuth);
         const headers = {
           ...(material.headers ?? {}),
           ...(staticToken ? { Authorization: staticToken } : {}),

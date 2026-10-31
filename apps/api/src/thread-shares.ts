@@ -1,12 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import type { AdapterContext, ArtifactStore } from "@rakazo/adapter-kit";
-import type {
-  Actor,
-  MessageBlock,
-  SharedMessage,
-  ThreadSharePublic,
-} from "@rakazo/contracts";
+import type { Actor, MessageBlock, SharedMessage, ThreadSharePublic } from "@rakazo/contracts";
 import type { PrismaClient } from "@rakazo/db";
 
 const DAY_MS = 86_400_000;
@@ -133,7 +128,9 @@ export async function createThreadShare(
     }))
     .filter((message) => message.blocks.length > 0);
   if (snapshot.length === 0) {
-    throw new ORPCError("BAD_REQUEST", { message: "The selected messages have no shareable content." });
+    throw new ORPCError("BAD_REQUEST", {
+      message: "The selected messages have no shareable content.",
+    });
   }
   const token = randomBytes(32).toString("base64url");
   const expiresAt = input.expiresInDays
@@ -213,8 +210,8 @@ export async function loadPublicShare(
   if (!row) return null;
   if (!isLiveShare(row)) return null;
   // Best-effort counter; a failure must not break the view.
-  void deps.prisma
-    .threadShare.update({ where: { id: row.id }, data: { viewCount: { increment: 1 } } })
+  void deps.prisma.threadShare
+    .update({ where: { id: row.id }, data: { viewCount: { increment: 1 } } })
     .catch(() => undefined);
   const thread = await deps.prisma.thread.findUnique({
     where: { id: row.threadId },

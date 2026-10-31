@@ -1687,14 +1687,10 @@ export function applyMobileThreadEvent(
     const streaming: MobileMessage = {
       id: progressId,
       role: "bot",
-      blocks: reduceLiveWithProgressAnchor(
-        (previous?.blocks ?? []) as MessageBlock[],
-        anchor,
-        {
-          type: "progress",
-          payload: event.payload,
-        },
-      ),
+      blocks: reduceLiveWithProgressAnchor((previous?.blocks ?? []) as MessageBlock[], anchor, {
+        type: "progress",
+        payload: event.payload,
+      }),
       ...(event.botId ? { botId: event.botId } : {}),
       ...(event.runId ? { runId: event.runId } : {}),
     };
@@ -1715,14 +1711,10 @@ export function applyMobileThreadEvent(
     const streaming: MobileMessage = {
       id: progressId,
       role: "bot",
-      blocks: reduceLiveWithProgressAnchor(
-        (previous?.blocks ?? []) as MessageBlock[],
-        anchor,
-        {
-          type: "tool",
-          name: String(event.payload?.name ?? ""),
-        },
-      ),
+      blocks: reduceLiveWithProgressAnchor((previous?.blocks ?? []) as MessageBlock[], anchor, {
+        type: "tool",
+        name: String(event.payload?.name ?? ""),
+      }),
       ...(event.botId ? { botId: event.botId } : {}),
       ...(event.runId ? { runId: event.runId } : {}),
     };

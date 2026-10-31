@@ -237,7 +237,6 @@ export function VoiceSettingsOverlay({
   const keyless = Boolean(selected?.keyless);
   const canConnect = keyless || (selfHosted ? Boolean(baseUrl.trim()) : apiKey.trim().length >= 8);
 
-
   useEffect(() => {
     if (scope !== "account") return;
     void accountRpc.voice

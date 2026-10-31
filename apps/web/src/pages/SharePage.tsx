@@ -27,7 +27,9 @@ export function SharePage() {
   useEffect(() => {
     let cancelled = false;
     setState({ status: "loading" });
-    void fetch(`/api/share/${encodeURIComponent(token)}`, { headers: { accept: "application/json" } })
+    void fetch(`/api/share/${encodeURIComponent(token)}`, {
+      headers: { accept: "application/json" },
+    })
       .then(async (response) => {
         if (response.status === 404) return { status: "not-found" } as const;
         if (!response.ok) return { status: "error" } as const;
@@ -89,7 +91,8 @@ export function SharePage() {
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground">
             <Trans>
-              Conversation with {data.botName} · shared {new Date(data.sharedAt).toLocaleDateString()}
+              Conversation with {data.botName} · shared{" "}
+              {new Date(data.sharedAt).toLocaleDateString()}
             </Trans>
           </p>
         </header>
@@ -100,9 +103,7 @@ export function SharePage() {
             return (
               <li
                 key={index}
-                className={
-                  isUser ? "flex min-w-0 justify-end" : "flex min-w-0 justify-start"
-                }
+                className={isUser ? "flex min-w-0 justify-end" : "flex min-w-0 justify-start"}
               >
                 <div
                   className={
@@ -158,7 +159,5 @@ export function SharePage() {
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid min-h-screen place-items-center bg-background px-4">{children}</div>
-  );
+  return <div className="grid min-h-screen place-items-center bg-background px-4">{children}</div>;
 }

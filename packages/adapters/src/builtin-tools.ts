@@ -1205,7 +1205,8 @@ export const builtinAgentTools: ConnectorTool[] = [
   },
   {
     name: "plan_cancel",
-    description: "Cancel the active plan (user abandoned the work). Prefer plan_complete when steps are done.",
+    description:
+      "Cancel the active plan (user abandoned the work). Prefer plan_complete when steps are done.",
     inputSchema: {
       type: "object",
       properties: {

@@ -1576,8 +1576,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 }));
               },
               resolveModel: async () => {
-                const choice =
-                  quickReplySettings.model ??
+                const choice = quickReplySettings.model ??
                   fallbackModels[0] ?? { provider: runModelProvider, modelId: runModelId };
                 const base =
                   choice.provider === runModelProvider && choice.modelId === runModelId
@@ -1604,11 +1603,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                             }
                           : undefined,
                       }
-                    : await resolveConnectedModel(
-                        run,
-                        choice.provider,
-                        choice.modelId,
-                        (values) => runSecrets.push(...values),
+                    : await resolveConnectedModel(run, choice.provider, choice.modelId, (values) =>
+                        runSecrets.push(...values),
                       );
                 return {
                   ...base,
@@ -1731,9 +1727,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 redactedTicketContext: ticketContext
                   ? redactSecrets(ticketContext, runSecrets)
                   : undefined,
-                planContext: planContext
-                  ? redactSecrets(planContext, runSecrets)
-                  : undefined,
+                planContext: planContext ? redactSecrets(planContext, runSecrets) : undefined,
                 hasHistoricalContext: historicalContext.length > 0,
                 historyRetrievalEnabled: contextStrategy !== "current",
                 computerInstruction,

@@ -2,10 +2,7 @@ import { getLogger } from "@rakazo/logging";
 import type { PrismaClient } from "@rakazo/db";
 import { createWebProvider } from "./web-provider-factory.js";
 
-export async function recordSearchStat(
-  prisma: PrismaClient,
-  service: string,
-): Promise<void> {
+export async function recordSearchStat(prisma: PrismaClient, service: string): Promise<void> {
   try {
     await prisma.searchStat.upsert({
       where: { service },
@@ -31,4 +28,3 @@ export function createCountingWebProvider(prisma: PrismaClient) {
     void recordSearchStat(prisma, service);
   });
 }
-

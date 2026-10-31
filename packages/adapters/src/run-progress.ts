@@ -23,10 +23,7 @@ import {
   USER_PROGRESS_MESSAGE_MAX_LENGTH,
   userProgressClientNonce,
 } from "./user-progress.js";
-import {
-  progressCadenceConfig,
-  shouldPromoteNarration,
-} from "./progress-cadence.js";
+import { progressCadenceConfig, shouldPromoteNarration } from "./progress-cadence.js";
 
 /** A fresh reply that knows the progress messages earlier attempts of this run posted. */
 export async function createReplyState(
@@ -191,8 +188,7 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   });
   if (
     text.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH &&
-    ((!fragment && canPublishDurableNarration(ctx) && gapAllows) ||
-      (beforeConnectCard && promotes))
+    ((!fragment && canPublishDurableNarration(ctx) && gapAllows) || (beforeConnectCard && promotes))
   ) {
     reply.workingNotes.length = 0;
     reply.narrationStatusShowing = false;

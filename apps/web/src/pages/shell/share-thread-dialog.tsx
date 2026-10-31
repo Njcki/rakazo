@@ -91,10 +91,7 @@ export function ShareThreadDialog({
 }) {
   const { t } = useLingui();
   const targetKey = botId ? botId : `group:${groupId ?? ""}`;
-  const threadInput = useMemo(
-    () => (botId ? { botId } : { groupId: groupId! }),
-    [botId, groupId],
-  );
+  const threadInput = useMemo(() => (botId ? { botId } : { groupId: groupId! }), [botId, groupId]);
   const [messages, setMessages] = useState<ThreadMessage[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -180,21 +177,15 @@ export function ShareThreadDialog({
   const allSelected = selectable.length > 0 && selectable.every((m) => selected.has(m.id));
 
   const setAll = (value: boolean) => {
-    const nextSelected: Set<string> = value
-      ? new Set(selectable.map((m) => m.id))
-      : new Set();
-    const nextExcluded: Set<string> = value
-      ? new Set()
-      : new Set(selectable.map((m) => m.id));
+    const nextSelected: Set<string> = value ? new Set(selectable.map((m) => m.id)) : new Set();
+    const nextExcluded: Set<string> = value ? new Set() : new Set(selectable.map((m) => m.id));
     setSelected(nextSelected);
     setExcluded(nextExcluded);
     saveExcluded(targetKey, nextExcluded);
   };
 
   const create = async () => {
-    const messageIds = (messages ?? [])
-      .filter((m) => selected.has(m.id))
-      .map((m) => m.id);
+    const messageIds = (messages ?? []).filter((m) => selected.has(m.id)).map((m) => m.id);
     if (messageIds.length === 0 || creating) return;
     setCreating(true);
     setCreateError(null);
@@ -239,7 +230,12 @@ export function ShareThreadDialog({
       <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-[640px]">
         <DialogHeader className="min-w-0">
           <DialogTitle className="flex items-center gap-2.5">
-            <Share2 size={17} strokeWidth={1.8} className="text-muted-foreground" aria-hidden="true" />
+            <Share2
+              size={17}
+              strokeWidth={1.8}
+              className="text-muted-foreground"
+              aria-hidden="true"
+            />
             <Trans>Share conversation</Trans>
           </DialogTitle>
           <DialogDescription>
@@ -261,13 +257,23 @@ export function ShareThreadDialog({
           <>
             <div className="flex min-w-0 items-center justify-between px-1">
               <Label className="text-[13px] text-muted-foreground">
-                <Trans>{selected.size} of {selectable.length} messages</Trans>
+                <Trans>
+                  {selected.size} of {selectable.length} messages
+                </Trans>
               </Label>
               <div className="flex items-center gap-3 text-[13px]">
-                <button type="button" className="text-foreground/75 hover:text-foreground" onClick={() => setAll(true)}>
+                <button
+                  type="button"
+                  className="text-foreground/75 hover:text-foreground"
+                  onClick={() => setAll(true)}
+                >
                   <Trans>Select all</Trans>
                 </button>
-                <button type="button" className="text-foreground/75 hover:text-foreground" onClick={() => setAll(false)}>
+                <button
+                  type="button"
+                  className="text-foreground/75 hover:text-foreground"
+                  onClick={() => setAll(false)}
+                >
                   <Trans>Clear</Trans>
                 </button>
               </div>
@@ -341,9 +347,7 @@ export function ShareThreadDialog({
                             : "rounded-lg border border-transparent px-2 py-1.5 text-[13px] text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                         }
                       >
-                        {option.value === ""
-                          ? t`No expiration`
-                          : t`After ${option.value} days`}
+                        {option.value === "" ? t`No expiration` : t`After ${option.value} days`}
                       </button>
                     );
                   })}

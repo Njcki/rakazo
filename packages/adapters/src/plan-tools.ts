@@ -271,7 +271,9 @@ export async function createPlanFromTool(
     if (notes.length > NOTES_MAX) {
       return { error: `steps[${i}].notes must be at most ${NOTES_MAX} characters.` };
     }
-    const blockedBy = parseBlockedBy(raw?.blockedBy).filter((idx) => idx >= 1 && idx <= input.steps.length && idx !== i + 1);
+    const blockedBy = parseBlockedBy(raw?.blockedBy).filter(
+      (idx) => idx >= 1 && idx <= input.steps.length && idx !== i + 1,
+    );
     normalized.push({ title: stepTitle, blockedBy, notes });
   }
 
@@ -350,12 +352,14 @@ export async function updatePlanStepFromTool(
   if (input.title !== undefined) {
     const title = input.title.trim();
     if (!title) return { error: "title cannot be empty." };
-    if (title.length > TITLE_MAX) return { error: `title must be at most ${TITLE_MAX} characters.` };
+    if (title.length > TITLE_MAX)
+      return { error: `title must be at most ${TITLE_MAX} characters.` };
     data.title = title;
   }
   if (input.notes !== undefined) {
     const notes = input.notes.trim();
-    if (notes.length > NOTES_MAX) return { error: `notes must be at most ${NOTES_MAX} characters.` };
+    if (notes.length > NOTES_MAX)
+      return { error: `notes must be at most ${NOTES_MAX} characters.` };
     data.notes = notes;
   }
   if (Object.keys(data).length === 0) {
@@ -492,23 +496,29 @@ export async function completePlanFromTool(
     return {
       error: `Cannot complete: ${open.length} step(s) still open (${open
         .map((s) => `${s.index}:${s.status}`)
-        .join(", ")}). Finish them with plan_update_step, or pass force=true with reason if the user cancelled remaining work.`,
+        .join(
+          ", ",
+        )}). Finish them with plan_update_step, or pass force=true with reason if the user cancelled remaining work.`,
       plan,
     };
   }
   if (input.force && open.length > 0) {
     const reason = (input.reason ?? "").trim();
     if (!reason) {
-      return { error: "force=true requires a short reason explaining why open steps are abandoned.", plan };
+      return {
+        error: "force=true requires a short reason explaining why open steps are abandoned.",
+        plan,
+      };
     }
   }
   const row = await deps.prisma.agentPlan.update({
     where: { id: plan.id },
     data: {
       status: "completed",
-      summary: input.force && open.length > 0
-        ? `${plan.summary}\n[forced complete] ${input.reason}`.trim()
-        : plan.summary,
+      summary:
+        input.force && open.length > 0
+          ? `${plan.summary}\n[forced complete] ${input.reason}`.trim()
+          : plan.summary,
     },
     include: planInclude,
   });

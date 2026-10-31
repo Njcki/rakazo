@@ -1,9 +1,5 @@
 import type { MessageBlock } from "@rakazo/contracts";
-import {
-  BOT_MESSAGE_MAX_LENGTH,
-  ensureSentenceSpacing,
-  isToolActivityBlock,
-} from "@rakazo/core";
+import { BOT_MESSAGE_MAX_LENGTH, ensureSentenceSpacing, isToolActivityBlock } from "@rakazo/core";
 
 /**
  * Keep mid-turn progress beats short; prefer a few high-signal updates. Mid-turn

@@ -1,24 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import type { SpaceMemoryConfig, UsageSummary } from "@rakazo/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
-import {
-  BarChart3,
-  Brain,
-  ChevronLeft,
-  ChevronRight,
-  CloudDownload,
-  Cpu,
-  CreditCard,
-  Gauge,
-  KeyRound,
-  MessageCircle,
-  Monitor,
-  Settings,
-  ShieldCheck,
-  Volume2,
-  XIcon,
-} from "lucide-react";
-import type { ComponentType } from "react";
+import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
@@ -37,16 +20,12 @@ import { BillingSettingsPanel } from "./BillingSettingsPanel";
 import { MemorySettingsOverlay } from "./MemorySettingsOverlay";
 import { MessagingSettingsPanel } from "./MessagingSettingsPanel";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { PaymentWalletSettingsPanel } from "./PaymentWalletSettingsPanel";
 import { SpaceSettingsPanel } from "./SpaceSettingsPanel";
+import { useSettingsNavItems } from "./settings-nav";
 import type { SettingsSpace } from "./shell/dialogs";
 import type { SettingsSection } from "./shell-overlay";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
-
-type NavItem = {
-  id: SettingsSection;
-  label: string;
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
-};
 
 export function SettingsOverlay({
   space,
@@ -63,10 +42,13 @@ export function SettingsOverlay({
   onNameSaved,
   timezone,
   onTimezoneChange,
+  onAccountImported,
+  onImportAgent,
   billingEnabled = false,
   sandboxProvider,
   onSandboxProviderChange,
   messagingEnabled = false,
+  paymentWalletProvider = null,
   memoryConfig,
   onMemoryConfigChange,
   onClose,
@@ -87,10 +69,14 @@ export function SettingsOverlay({
   onNameSaved?: () => Promise<void>;
   timezone: string | null;
   onTimezoneChange: (timezone: string) => Promise<void>;
+  onAccountImported?: () => Promise<void>;
+  onImportAgent?: () => void;
   billingEnabled?: boolean;
   sandboxProvider?: string | null;
   onSandboxProviderChange?: (sandboxProvider: string) => void;
   messagingEnabled?: boolean;
+  /** The wallet this deployment lets bots spend from; none hides Wallet. */
+  paymentWalletProvider?: { id: string; name: string } | null;
   memoryConfig: SpaceMemoryConfig | null | undefined;
   onMemoryConfigChange: (config: SpaceMemoryConfig | null) => void;
   onClose: () => void;
@@ -112,6 +98,7 @@ export function SettingsOverlay({
     (requestedSection === "computer" && !showComputer) ||
     (requestedSection === "billing" && !billingEnabled) ||
     (requestedSection === "messaging" && !messagingEnabled) ||
+    (requestedSection === "wallet" && !paymentWalletProvider) ||
     (requestedSection === "updates" && !showUpdates)
       ? "general"
       : requestedSection;
@@ -145,22 +132,13 @@ export function SettingsOverlay({
     }
   }, [section, onUsageOpen]);
 
-  const navItems: NavItem[] = [
-    { id: "general", label: t`General`, icon: Settings },
-    { id: "models", label: t`Models`, icon: Cpu },
-    { id: "voice", label: t`Voice`, icon: Volume2 },
-    { id: "confirmations", label: t`Approvals`, icon: ShieldCheck },
-    { id: "vault", label: t`Vault`, icon: KeyRound },
-    ...(messagingEnabled
-      ? [{ id: "messaging" as const, label: t`Messaging`, icon: MessageCircle }]
-      : []),
-    { id: "memory", label: t`Memory`, icon: Brain },
-    { id: "usage", label: t`Usage`, icon: Gauge },
-    { id: "stats", label: t`Statistics`, icon: BarChart3 },
-    ...(showComputer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
-    ...(billingEnabled ? [{ id: "billing" as const, label: t`Billing`, icon: CreditCard }] : []),
-    ...(showUpdates ? [{ id: "updates" as const, label: t`Updates`, icon: CloudDownload }] : []),
-  ];
+  const navItems = useSettingsNavItems({
+    messaging: messagingEnabled,
+    wallet: Boolean(paymentWalletProvider),
+    computer: showComputer,
+    billing: billingEnabled,
+    updates: showUpdates,
+  });
 
   useEffect(() => {
     const nav = navRef.current;
@@ -190,7 +168,15 @@ export function SettingsOverlay({
       nav.removeEventListener("scroll", measure);
       observer?.disconnect();
     };
-  }, [section, showComputer, billingEnabled, messagingEnabled, showUpdates, i18n.locale]);
+  }, [
+    section,
+    showComputer,
+    billingEnabled,
+    messagingEnabled,
+    paymentWalletProvider,
+    showUpdates,
+    i18n.locale,
+  ]);
 
   function scrollSections(direction: number) {
     const nav = navRef.current;
@@ -363,6 +349,8 @@ export function SettingsOverlay({
                         onNameSaved={onNameSaved}
                         timezone={timezone}
                         onTimezoneChange={onTimezoneChange}
+                        onAccountImported={onAccountImported}
+                        onImportAgent={onImportAgent}
                       />
                       {/* One space is just the app, so there is nothing to tell apart or manage. */}
                       {spaces.length > 1 && onOpenSpace ? (
@@ -401,6 +389,9 @@ export function SettingsOverlay({
                   {section === "confirmations" ? <ApprovalRulesSettings scope="account" /> : null}
                   {section === "vault" ? <VaultSettings scope="account" /> : null}
                   {section === "messaging" && messagingEnabled ? <MessagingSettingsPanel /> : null}
+                  {section === "wallet" && paymentWalletProvider ? (
+                    <PaymentWalletSettingsPanel provider={paymentWalletProvider} />
+                  ) : null}
                   {section === "usage" ? (
                     <UsageSettingsPanel usage={usage} panelRef={usageRef} />
                   ) : null}

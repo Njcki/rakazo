@@ -735,7 +735,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               }),
           messagingChannelRun
             ? Promise.resolve(undefined)
-            : loadAgentPlanContext(deps, { spaceId: run.spaceId, botId: bot.id }),
+            : // RAKAZO: the plan is optional context; a failed read must not fail the run.
+              loadAgentPlanContext(deps, { spaceId: run.spaceId, botId: bot.id }).catch(
+                (error: unknown) => {
+                  getLogger().warn("plan context unavailable", {
+                    error: error instanceof Error ? error.message : String(error),
+                  });
+                  return undefined;
+                },
+              ),
           recallPromise,
         ]);
         const semanticMemoryEnabled = Boolean(semanticMemory) && !messagingChannelRun;

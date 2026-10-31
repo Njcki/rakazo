@@ -748,6 +748,10 @@ function protectedValues(secrets: Iterable<string>): string[] {
   for (const secret of secrets) {
     if (!secret) continue;
     values.add(secret);
+    // RAKAZO 0050: reply text gets sentence spacing (`a!b` → `a! b`) before it is redacted,
+    // so hide the spaced form of a value too.
+    const spaced = ensureSentenceSpacing(secret);
+    if (spaced !== secret) values.add(spaced);
     if (!/[\r\n]/.test(secret)) continue;
     for (const line of secret.split(/\r\n?|\n/)) {
       const trimmed = line.trim();

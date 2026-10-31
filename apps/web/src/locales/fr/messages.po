@@ -70,6 +70,11 @@ msgstr ""
 msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 msgstr ""
 
+#. placeholder {0}: copied ? "Copied" : "Copy"
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0}"
+msgstr ""
+
 #. placeholder {0}: file.name
 #: src/pages/shell/use-composer-actions.ts
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
@@ -130,6 +135,17 @@ msgstr "{0} Ko"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} Mo"
+
+#. placeholder {0}: share.messageCount
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} messages"
+msgstr ""
+
+#. placeholder {0}: selected.size
+#. placeholder {1}: selectable.length
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} of {1} messages"
+msgstr ""
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -437,9 +453,14 @@ msgstr "Un identifiant d'abonnement est stocké de façon sécurisée."
 msgid "About {label}"
 msgstr "À propos de {label}"
 
+#: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Jeton d'accès (optionnel)"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Access token + Save for a PAT or API key. Advanced client ID/secret + Connect OAuth when the provider needs an app. On self-hosted installs, allowlist the redirect URI below."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
@@ -478,6 +499,10 @@ msgstr "Actions pour l'espace"
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
 msgstr "Actif"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Active shares"
+msgstr ""
 
 #: src/pages/shell/sidebar-header.tsx
 msgid "Activity"
@@ -597,6 +622,10 @@ msgstr "Ajouter une URL de serveur"
 msgid "Add skills"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Add this exact URL to the provider app redirect allowlist."
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Add to routine"
 msgstr "Ajouter à la routine"
@@ -634,6 +663,11 @@ msgstr "Avancé"
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
 msgstr "Avancé..."
+
+#. placeholder {0}: option.value
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "After {0} days"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Agents:"
@@ -1089,6 +1123,10 @@ msgstr "Libellé du cerveau"
 msgid "Browse"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Browse catalog"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr "Parcourir les serveurs MCP"
@@ -1326,6 +1364,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Clear"
 msgstr "Effacer"
 
@@ -1354,6 +1393,7 @@ msgstr "Effacement en cours…"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "Fermer"
@@ -1365,10 +1405,6 @@ msgstr "Fermer le graphique"
 #: src/pages/shell/computer-overlay.tsx
 msgid "Close computer"
 msgstr "Fermer l'ordinateur"
-
-#: src/pages/shell/message-cards.tsx
-msgid "Close image preview"
-msgstr "Fermer l'aperçu de l'image"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Close integrations"
@@ -1488,6 +1524,7 @@ msgid "Complete"
 msgstr "Terminé"
 
 #: src/components/SubagentCard.tsx
+#: src/pages/PlanSection.tsx
 msgid "Completed"
 msgstr "Terminé"
 
@@ -1686,6 +1723,7 @@ msgstr "Limite de contexte"
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/shell/composer.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
 msgstr "Continuer"
@@ -1703,6 +1741,12 @@ msgstr ""
 msgid "Continue with {0}"
 msgstr "Continuer avec {0}"
 
+#. placeholder {0}: data.botName
+#. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
+#: src/pages/SharePage.tsx
+msgid "Conversation with {0} · shared {1}"
+msgstr ""
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
 msgstr ""
@@ -1710,6 +1754,7 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1718,6 +1763,7 @@ msgid "Copied"
 msgstr "Copié"
 
 #: src/components/InviteDialog.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1736,6 +1782,10 @@ msgstr "Copier le code"
 #: src/components/markdown-copy.tsx
 msgid "Copy diagram source"
 msgstr "Copier la source du diagramme"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Copy prompt"
@@ -1863,6 +1913,10 @@ msgstr "Impossible de créer la section"
 msgid "Could not create space"
 msgstr "Impossible de créer l'espace"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not create the share"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
 msgstr "Impossible de créer votre bot"
@@ -1984,9 +2038,17 @@ msgstr "Impossible de charger les intégrations"
 msgid "Could not load MCP servers"
 msgstr "Impossible de charger les serveurs MCP"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not load messages"
+msgstr ""
+
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Could not load model settings"
 msgstr "Impossible de charger les paramètres du modèle"
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr ""
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -2001,6 +2063,10 @@ msgstr "Impossible de charger les options de connexion"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Impossible de charger la compétence"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2111,9 +2177,17 @@ msgstr "Impossible d'afficher le graphique"
 msgid "Could not reset password"
 msgstr "Impossible de réinitialiser le mot de passe"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "Impossible de révoquer la connexion"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not revoke the share"
+msgstr ""
 
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not run routine"
@@ -2164,6 +2238,10 @@ msgstr "Impossible d'enregistrer ce modèle de parole"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not save that voice"
 msgstr "Impossible d'enregistrer cette voix"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr ""
 
 #: src/components/VaultSettings.tsx
 msgid "Could not save the credential"
@@ -2295,13 +2373,29 @@ msgstr "Créer"
 msgid "Create a section and move {0} into it."
 msgstr "Créez une section et déplacez {0} dedans."
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create access token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "Créer un compte"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create an app in the developer portal, allowlist the redirect URI below, then put the client ID and secret under Advanced and use Connect OAuth."
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "Créer un groupe"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Create link"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create OAuth app"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Create Routine"
@@ -2425,6 +2519,10 @@ msgstr "Par défaut"
 msgid "Default ({0})"
 msgstr "Par défaut ({0})"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "Default from Hermes"
 msgstr "Par défaut de Hermes"
@@ -2517,6 +2615,10 @@ msgstr "Refusé"
 msgid "Deny"
 msgstr "Refuser"
 
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr ""
+
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2541,6 +2643,10 @@ msgstr "Détails"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Developer"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Developer portal"
 msgstr ""
 
 #: src/lib/dictation.ts
@@ -2704,13 +2810,13 @@ msgstr "Modifier"
 msgid "Edit first"
 msgstr "Modifier d'abord"
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit name"
-msgstr "Modifier le nom"
-
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
 msgstr "Modifier le profil"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Either paste an API token in Access token and Save, or use Connect OAuth (Advanced client fields if redirect is rejected)."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2865,6 +2971,11 @@ msgstr "Agrandir le tableau"
 msgid "expired"
 msgstr "expiré"
 
+#. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "expires {0}"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "Exporter"
@@ -2986,6 +3097,10 @@ msgstr "Terminé."
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finalisation de la connexion MCP…"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "For a PAT or API key, paste it here and Save. Bearer is added automatically when needed — skip Connect OAuth on self-hosted installs that block OAuth."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -3176,6 +3291,10 @@ msgstr "Comment les autres bots le voient"
 msgid "How to check"
 msgstr "Comment vérifier"
 
+#: src/components/McpAuthHelp.tsx
+msgid "How to get a token or OAuth app"
+msgstr ""
+
 #: src/components/SignupSurvey.tsx
 msgid "How will you use Rakazo?"
 msgstr ""
@@ -3186,6 +3305,10 @@ msgstr "J'ai terminé"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Icon set"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -3340,6 +3463,10 @@ msgstr "Isolé"
 msgid "Isolated preview — no access to your account"
 msgstr "Aperçu isolé — aucun accès à votre compte"
 
+#: src/pages/SharePage.tsx
+msgid "It may have been revoked or expired."
+msgstr ""
+
 #: src/pages/shell/shell-dialogs.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "Ses bots et groupes sont conservés et quittent la section."
@@ -3419,6 +3546,10 @@ msgstr ""
 msgid "Link DMs"
 msgstr "Lier les messages privés"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Link expires"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
 msgstr "Associer SSO"
@@ -3468,6 +3599,10 @@ msgstr "Chargement des intégrations…"
 msgid "Loading memory settings…"
 msgstr "Chargement des paramètres de mémoire…"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Loading messages…"
+msgstr ""
+
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -3488,11 +3623,13 @@ msgstr "Chargement des fournisseurs vocaux…"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/SharePage.tsx
 #: src/pages/shell/transcript.tsx
 msgid "Loading…"
 msgstr "Chargement…"
@@ -3681,6 +3818,7 @@ msgstr "Mentionne : {mentions}"
 
 #: src/pages/shell/chat-shared.ts
 #: src/pages/shell/composer.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Message"
 msgstr "Message"
@@ -3996,6 +4134,10 @@ msgstr "Page suivante"
 msgid "Next settings sections"
 msgstr ""
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No active shares."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "Aucune application ne correspond à votre recherche."
@@ -4016,6 +4158,10 @@ msgstr "Aucune authentification"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "Aucun bot ne correspond"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No expiration"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "No longer active"
@@ -4064,6 +4210,10 @@ msgstr "Aucun modèle listé."
 msgid "No OpenClaw, Hermes or agent document found."
 msgstr "Aucun fichier OpenClaw, Hermes ou document d'agent trouvé."
 
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr "Aucun serveur MCP distant trouvé"
@@ -4086,6 +4236,10 @@ msgstr ""
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
 msgstr "Aucune exécution pour le moment"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "No skills yet"
@@ -4165,6 +4319,10 @@ msgstr "Maintenant"
 msgid "OAuth authorization was cancelled."
 msgstr "L'autorisation OAuth a été annulée."
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth callback URL"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth client ID (optional)"
 msgstr "ID client OAuth (optionnel)"
@@ -4186,6 +4344,19 @@ msgstr "Échec de la connexion OAuth"
 #: src/pages/PluginsOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth expiré"
+
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth redirect URI"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Official docs"
+msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
 msgid "Offline"
@@ -4298,6 +4469,10 @@ msgstr "Optionnel"
 msgid "Optional header value"
 msgstr "Valeur d'en-tête optionnelle"
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
@@ -4383,6 +4558,10 @@ msgstr "Les mots de passe ne correspondent pas"
 msgid "Past due"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Paste a personal access token in Access token, then Save. Do not use Connect OAuth for this provider on self-hosted installs."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Paste a replacement key"
@@ -4403,6 +4582,14 @@ msgstr "Collez votre clé API"
 #: src/lib/model-connection-preflight.ts
 msgid "Paste your API key, then test again."
 msgstr "Collez votre clé API, puis testez à nouveau."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "PAT or Bearer token — stored encrypted"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "PAT or Bearer token (GitHub MCP, etc.)"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/import-status.ts
@@ -4451,6 +4638,10 @@ msgstr "Choisissez un modèle dans la liste ou saisissez un identifiant de modè
 msgid "Pick a tool to check"
 msgstr "Choisissez un outil à vérifier"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "Épingler"
@@ -4458,6 +4649,14 @@ msgstr "Épingler"
 #: src/pages/Shell.tsx
 msgid "Pinned"
 msgstr "Épinglés"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr ""
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
@@ -4881,6 +5080,7 @@ msgid "Research & writing"
 msgstr "Recherche et rédaction"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "Réinitialiser"
@@ -4906,6 +5106,7 @@ msgid "Reset your password"
 msgstr "Réinitialisez votre mot de passe"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 msgid "Resetting…"
 msgstr "Réinitialisation en cours…"
 
@@ -4978,6 +5179,7 @@ msgid "Review provider settings and test again."
 msgstr "Vérifiez les paramètres du fournisseur et testez à nouveau."
 
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Revoke"
 msgstr "Révoquer"
 
@@ -5190,6 +5392,10 @@ msgstr "Rechercher des exécutions"
 msgid "Search skills"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr ""
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -5211,6 +5417,10 @@ msgstr ""
 #: src/pages/shell/chat-header.tsx
 msgid "Select a bot"
 msgstr "Sélectionnez un bot"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Select all"
+msgstr ""
 
 #: src/pages/memory-providers/ConnectionModeFields.tsx
 msgid "Self-hosted"
@@ -5312,6 +5522,10 @@ msgstr "Paramètres : Utilisation"
 msgid "Setup complete"
 msgstr "Configuration terminée"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Setup for {title}"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Setup help"
 msgstr "Aide à la configuration"
@@ -5325,10 +5539,19 @@ msgstr "Forme"
 msgid "Shape {0}"
 msgstr ""
 
+#: src/pages/shell/chat-header.tsx
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Share conversation"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "Partagé"
+
+#: src/pages/SharePage.tsx
+msgid "Shared from Rakazo"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared memory"
@@ -5442,6 +5665,7 @@ msgstr "Compétence {position}"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/SidebarFooter.tsx
+#: src/pages/KnowledgeSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Skills"
@@ -5488,6 +5712,10 @@ msgstr ""
 #: src/pages/shell/agent-import.tsx
 msgid "Some settings are not imported"
 msgstr "Certains réglages ne sont pas importés"
+
+#: src/pages/SharePage.tsx
+msgid "Something went wrong loading this share."
+msgstr ""
 
 #: src/App.tsx
 #: src/lib/user-error.ts
@@ -5574,6 +5802,11 @@ msgstr "Démarrage"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "Démarrage en cours…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-nav.ts
+msgid "Statistics"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5813,6 +6046,10 @@ msgstr ""
 msgid "Thinking"
 msgstr "Réflexion"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Thinking in calls"
+msgstr ""
+
 #. placeholder {0}: thinkingLevelLabel(choice.thinkingLevel)
 #: src/pages/ModelRoleSettings.tsx
 msgid "Thinking: {0}"
@@ -5864,6 +6101,10 @@ msgstr "cet ordinateur"
 #: src/lib/run-error.ts
 msgid "This connection's request limit is too small. Choose another model."
 msgstr "La limite de requête de cette connexion est trop basse. Choisissez un autre modèle."
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "This conversation has no shareable messages yet."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5941,6 +6182,10 @@ msgstr "Ce serveur n'a pas demandé l'autorisation du navigateur."
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "Ce serveur est déjà connecté. Déconnectez-le d'abord pour l'autoriser à nouveau."
 
+#: src/pages/SharePage.tsx
+msgid "This share link is not available."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "Cette connexion par abonnement n'est pas encore disponible dans Rakazo. Utilisez un identifiant de déploiement ou choisissez un autre fournisseur."
@@ -5968,6 +6213,10 @@ msgstr "L’horaire peut varier"
 #: src/pages/Board.tsx
 msgid "Title"
 msgstr "Titre"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Title (optional)"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -6037,6 +6286,10 @@ msgstr ""
 msgid "Transcription response is too large."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Transport"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "Traiter comme une personne"
@@ -6061,6 +6314,10 @@ msgstr "Sites de confiance"
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "Réessayer"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Try Connect OAuth first. If you get an invalid redirect URI error, create an app and allowlist the redirect URI below, then fill Advanced client ID and secret."
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Try the test again."
@@ -6095,6 +6352,10 @@ msgstr "Annuler"
 msgid "Uninstall"
 msgstr "Désinstaller"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Unknown provider — check the catalog for auth details, then use Access token or Advanced OAuth as above."
+msgstr ""
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr "Déconnecter"
@@ -6111,6 +6372,10 @@ msgstr "Désépingler"
 #: src/pages/shell/use-composer-actions.ts
 msgid "Unsupported file type: {0}"
 msgstr "Type de fichier non pris en charge : {0}"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Untitled share"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Up to date"
@@ -6332,6 +6597,10 @@ msgstr "En attente…"
 msgid "Wallet"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Web, desktop and mobile"
 msgstr ""
@@ -6469,6 +6738,7 @@ msgstr "Hier"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/shell/shell-sidebar.tsx
 msgid "You"
 msgstr "Vous"

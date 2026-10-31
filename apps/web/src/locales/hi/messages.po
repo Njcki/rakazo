@@ -70,6 +70,11 @@ msgstr ""
 msgid "{0, plural, one {Waiting for sign-in — the link expires in about # minute.} other {Waiting for sign-in — the link expires in about # minutes.}}"
 msgstr ""
 
+#. placeholder {0}: copied ? "Copied" : "Copy"
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0}"
+msgstr ""
+
 #. placeholder {0}: file.name
 #: src/pages/shell/use-composer-actions.ts
 msgid "{0} (max {ATTACHMENT_MAX_COUNT} attachments)"
@@ -130,6 +135,17 @@ msgstr "{0} KB"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} MB"
+
+#. placeholder {0}: share.messageCount
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} messages"
+msgstr ""
+
+#. placeholder {0}: selected.size
+#. placeholder {1}: selectable.length
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "{0} of {1} messages"
+msgstr ""
 
 #. placeholder {0}: sender.name
 #: src/pages/ExternalConversationSettings.tsx
@@ -437,9 +453,14 @@ msgstr "एक सब्सक्रिप्शन क्रेडेंशि�
 msgid "About {label}"
 msgstr "{label} के बारे में"
 
+#: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "एक्सेस टोकन (वैकल्पिक)"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Access token + Save for a PAT or API key. Advanced client ID/secret + Connect OAuth when the provider needs an app. On self-hosted installs, allowlist the redirect URI below."
+msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Account"
@@ -477,6 +498,10 @@ msgstr ""
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Active"
+msgstr ""
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Active shares"
 msgstr ""
 
 #: src/pages/shell/sidebar-header.tsx
@@ -597,6 +622,10 @@ msgstr ""
 msgid "Add skills"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Add this exact URL to the provider app redirect allowlist."
+msgstr ""
+
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Add to routine"
 msgstr "रूटीन में जोड़ें"
@@ -633,6 +662,11 @@ msgstr "उन्नत"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Advanced..."
+msgstr ""
+
+#. placeholder {0}: option.value
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "After {0} days"
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
@@ -1089,6 +1123,10 @@ msgstr ""
 msgid "Browse"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Browse catalog"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Browse MCP servers"
 msgstr ""
@@ -1326,6 +1364,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Clear"
 msgstr "साफ़ करें"
 
@@ -1354,6 +1393,7 @@ msgstr "साफ़ किया जा रहा है…"
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/WindowChrome.tsx
 msgid "Close"
 msgstr "बंद करें"
@@ -1365,10 +1405,6 @@ msgstr "चार्ट बंद करें"
 #: src/pages/shell/computer-overlay.tsx
 msgid "Close computer"
 msgstr "कंप्यूटर बंद करें"
-
-#: src/pages/shell/message-cards.tsx
-msgid "Close image preview"
-msgstr "छवि प्रीव्यू बंद करें"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Close integrations"
@@ -1488,6 +1524,7 @@ msgid "Complete"
 msgstr "पूर्ण"
 
 #: src/components/SubagentCard.tsx
+#: src/pages/PlanSection.tsx
 msgid "Completed"
 msgstr "पूर्ण"
 
@@ -1686,6 +1723,7 @@ msgstr "कॉन्टेक्स्ट सीमा"
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/agent-import.tsx
+#: src/pages/shell/composer.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
 msgstr "जारी रखें"
@@ -1703,6 +1741,12 @@ msgstr ""
 msgid "Continue with {0}"
 msgstr "{0} के साथ जारी रखें"
 
+#. placeholder {0}: data.botName
+#. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
+#: src/pages/SharePage.tsx
+msgid "Conversation with {0} · shared {1}"
+msgstr ""
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
 msgstr ""
@@ -1710,6 +1754,7 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1718,6 +1763,7 @@ msgid "Copied"
 msgstr "कॉपी किया गया"
 
 #: src/components/InviteDialog.tsx
+#: src/components/McpAuthHelp.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1736,6 +1782,10 @@ msgstr "कोड कॉपी करें"
 #: src/components/markdown-copy.tsx
 msgid "Copy diagram source"
 msgstr "डायग्राम स्रोत कॉपी करें"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Copy link"
+msgstr ""
 
 #: src/pages/shell/agent-import.tsx
 msgid "Copy prompt"
@@ -1863,6 +1913,10 @@ msgstr "सेक्शन नहीं बनाया जा सका"
 msgid "Could not create space"
 msgstr ""
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not create the share"
+msgstr ""
+
 #: src/pages/Onboarding.tsx
 msgid "Could not create your bot"
 msgstr "आपका बॉट नहीं बनाया जा सका"
@@ -1984,9 +2038,17 @@ msgstr "इंटीग्रेशन लोड नहीं हो सके"
 msgid "Could not load MCP servers"
 msgstr "MCP सर्वर लोड नहीं हो सके"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not load messages"
+msgstr ""
+
 #: src/pages/model-settings/use-model-settings.ts
 msgid "Could not load model settings"
 msgstr "मॉडल सेटिंग्स लोड नहीं हो सकीं"
+
+#: src/pages/PlanSection.tsx
+msgid "Could not load plan"
+msgstr ""
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "Could not load run history"
@@ -2001,6 +2063,10 @@ msgstr "साइन इन के विकल्प लोड नहीं ह
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "स्किल लोड नहीं हो सकी"
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not load statistics"
+msgstr ""
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2111,9 +2177,17 @@ msgstr "चार्ट रेंडर नहीं हो सका"
 msgid "Could not reset password"
 msgstr "पासवर्ड रीसेट नहीं किया जा सका"
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Could not reset the statistics"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not revoke connection"
 msgstr "कनेक्शन रद्द नहीं किया जा सका"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Could not revoke the share"
+msgstr ""
 
 #: src/pages/shell/use-routine-editor.ts
 msgid "Could not run routine"
@@ -2164,6 +2238,10 @@ msgstr "वह वाक् मॉडल सहेजा नहीं जा स
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not save that voice"
 msgstr "वह आवाज़ सहेजी नहीं जा सकी"
+
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Could not save the call thinking level"
+msgstr ""
 
 #: src/components/VaultSettings.tsx
 msgid "Could not save the credential"
@@ -2295,13 +2373,29 @@ msgstr "बनाएं"
 msgid "Create a section and move {0} into it."
 msgstr "एक सेक्शन बनाएं और {0} को उसमें ले जाएं।"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create access token"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Create account"
 msgstr "खाता बनाएं"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Create an app in the developer portal, allowlist the redirect URI below, then put the client ID and secret under Advanced and use Connect OAuth."
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "समूह बनाएं"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Create link"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Create OAuth app"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Create Routine"
@@ -2425,6 +2519,10 @@ msgstr "डिफ़ॉल्ट"
 msgid "Default ({0})"
 msgstr "डिफ़ॉल्ट ({0})"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Default (low)"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "Default from Hermes"
 msgstr "Hermes का डिफ़ॉल्ट"
@@ -2517,6 +2615,10 @@ msgstr "अस्वीकृत"
 msgid "Deny"
 msgstr "अस्वीकार करें"
 
+#: src/pages/PlanSection.tsx
+msgid "Depends on"
+msgstr ""
+
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2541,6 +2643,10 @@ msgstr "विवरण"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Developer"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Developer portal"
 msgstr ""
 
 #: src/lib/dictation.ts
@@ -2704,13 +2810,13 @@ msgstr "संपादित करें"
 msgid "Edit first"
 msgstr "पहले संपादित करें"
 
-#: src/pages/shell/bot-panel.tsx
-msgid "Edit name"
-msgstr "नाम संपादित करें"
-
 #: src/pages/BotContextMenu.tsx
 msgid "Edit Profile"
 msgstr "प्रोफ़ाइल संपादित करें"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Either paste an API token in Access token and Save, or use Connect OAuth (Advanced client fields if redirect is rejected)."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Email"
@@ -2865,6 +2971,11 @@ msgstr "तालिका बड़ी करें"
 msgid "expired"
 msgstr "समाप्त"
 
+#. placeholder {0}: new Date(share.expiresAt).toLocaleDateString()
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "expires {0}"
+msgstr ""
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Export"
 msgstr "एक्सपोर्ट करें"
@@ -2986,6 +3097,10 @@ msgstr "पूरा हुआ।"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "MCP कनेक्शन पूरा हो रहा है…"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "For a PAT or API key, paste it here and Save. Bearer is added automatically when needed — skip Connect OAuth on self-hosted installs that block OAuth."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -3176,6 +3291,10 @@ msgstr "दूसरे बॉट इसे कैसे देखते है�
 msgid "How to check"
 msgstr "जांच कैसे करें"
 
+#: src/components/McpAuthHelp.tsx
+msgid "How to get a token or OAuth app"
+msgstr ""
+
 #: src/components/SignupSurvey.tsx
 msgid "How will you use Rakazo?"
 msgstr ""
@@ -3186,6 +3305,10 @@ msgstr "मेरा काम हो गया"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Icon set"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "If this provider rejects OAuth on self-hosted installs, paste a personal access token below and connect again."
 msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
@@ -3340,6 +3463,10 @@ msgstr "पृथक"
 msgid "Isolated preview — no access to your account"
 msgstr ""
 
+#: src/pages/SharePage.tsx
+msgid "It may have been revoked or expired."
+msgstr ""
+
 #: src/pages/shell/shell-dialogs.tsx
 msgid "Its bots and groups are kept and leave the section."
 msgstr "इसके बॉट और समूह बने रहेंगे और अनुभाग से बाहर हो जाएँगे।"
@@ -3419,6 +3546,10 @@ msgstr ""
 msgid "Link DMs"
 msgstr "निजी संदेश लिंक करें"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Link expires"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 msgid "Link SSO"
 msgstr "SSO लिंक करें"
@@ -3468,6 +3599,10 @@ msgstr "इंटीग्रेशन लोड हो रहे हैं…"
 msgid "Loading memory settings…"
 msgstr "मेमोरी सेटिंग्स लोड हो रही हैं…"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Loading messages…"
+msgstr ""
+
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Loading model catalog…"
@@ -3488,11 +3623,13 @@ msgstr "आवाज़ प्रोवाइडर्स लोड हो र�
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Artifacts.tsx
 #: src/pages/IntegrationSetup.tsx
 #: src/pages/PeerMessagesOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/RoutineRunHistory.tsx
+#: src/pages/SharePage.tsx
 #: src/pages/shell/transcript.tsx
 msgid "Loading…"
 msgstr "लोड हो रहा है…"
@@ -3681,6 +3818,7 @@ msgstr "ज़िक्र: {mentions}"
 
 #: src/pages/shell/chat-shared.ts
 #: src/pages/shell/composer.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Message"
 msgstr "संदेश"
@@ -3996,6 +4134,10 @@ msgstr "अगला पृष्ठ"
 msgid "Next settings sections"
 msgstr ""
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No active shares."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
 msgstr "आपकी खोज से कोई ऐप मेल नहीं खाता।"
@@ -4015,6 +4157,10 @@ msgstr "कोई प्रमाणीकरण नहीं"
 #: src/pages/GroupPanel.tsx
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
+msgstr ""
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "No expiration"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -4064,6 +4210,10 @@ msgstr "कोई मॉडल सूचीबद्ध नहीं।"
 msgid "No OpenClaw, Hermes or agent document found."
 msgstr "कोई OpenClaw, Hermes या एजेंट दस्तावेज़ नहीं मिला।"
 
+#: src/pages/PlanSection.tsx
+msgid "No plan yet. The bot creates one for multi-step work; completed plans stay here until replaced."
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "No remote MCP servers found"
 msgstr ""
@@ -4085,6 +4235,10 @@ msgstr ""
 
 #: src/pages/RoutineRunHistory.tsx
 msgid "No runs yet"
+msgstr ""
+
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "No searches recorded yet."
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -4165,6 +4319,10 @@ msgstr "अभी"
 msgid "OAuth authorization was cancelled."
 msgstr "OAuth ऑथराइज़ेशन रद्द कर दिया गया।"
 
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth callback URL"
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "OAuth client ID (optional)"
 msgstr "OAuth क्लाइंट ID (वैकल्पिक)"
@@ -4186,6 +4344,19 @@ msgstr "OAuth कनेक्शन विफल"
 #: src/pages/PluginsOverlay.tsx
 msgid "OAuth expired"
 msgstr "OAuth की समय-सीमा समाप्त हो गई"
+
+#: src/components/McpAuthHelp.tsx
+msgid "OAuth redirect URI"
+msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/model-catalog.ts
+msgid "Off"
+msgstr ""
+
+#: src/components/McpAuthHelp.tsx
+msgid "Official docs"
+msgstr ""
 
 #: src/components/ComputerDeviceSettings.tsx
 msgid "Offline"
@@ -4298,6 +4469,10 @@ msgstr "वैकल्पिक"
 msgid "Optional header value"
 msgstr "वैकल्पिक हेडर मान"
 
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "Optional. Providers that block OAuth on custom domains (GitHub MCP) need a personal access token here instead of Connect OAuth."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 msgid "Or paste an API key"
@@ -4383,6 +4558,10 @@ msgstr "पासवर्ड मेल नहीं खाते"
 msgid "Past due"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Paste a personal access token in Access token, then Save. Do not use Connect OAuth for this provider on self-hosted installs."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Paste a replacement key"
@@ -4403,6 +4582,14 @@ msgstr "अपनी API कुंजी पेस्ट करें"
 #: src/lib/model-connection-preflight.ts
 msgid "Paste your API key, then test again."
 msgstr "अपनी API कुंजी पेस्ट करें, फिर फिर से परीक्षण करें।"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "PAT or Bearer token — stored encrypted"
+msgstr ""
+
+#: src/components/integrations/IntegrationSetup.tsx
+msgid "PAT or Bearer token (GitHub MCP, etc.)"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/import-status.ts
@@ -4451,6 +4638,10 @@ msgstr "सूची से एक मॉडल चुनें या इस �
 msgid "Pick a tool to check"
 msgstr "जाँचने के लिए टूल चुनें"
 
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Pick the messages to include. The link is public: anyone who has it can read the conversation without an account. Only text and images are shared."
+msgstr ""
+
 #: src/pages/BotContextMenu.tsx
 msgid "Pin"
 msgstr "पिन करें"
@@ -4458,6 +4649,14 @@ msgstr "पिन करें"
 #: src/pages/Shell.tsx
 msgid "Pinned"
 msgstr "पिन किए गए"
+
+#: src/pages/PlanSection.tsx
+msgid "Plan"
+msgstr ""
+
+#: src/pages/PlanSection.tsx
+msgid "Plan progress"
+msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
 msgid "Play {name}"
@@ -4881,6 +5080,7 @@ msgid "Research & writing"
 msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Reset"
 msgstr "रीसेट करें"
@@ -4906,6 +5106,7 @@ msgid "Reset your password"
 msgstr "अपना पासवर्ड रीसेट करें"
 
 #: src/components/ComputerMaintenanceActions.tsx
+#: src/pages/AccountSettingsOverlay.tsx
 msgid "Resetting…"
 msgstr "रीसेट हो रहा है…"
 
@@ -4978,6 +5179,7 @@ msgid "Review provider settings and test again."
 msgstr "प्रोवाइडर सेटिंग्स की समीक्षा करें और फिर से परीक्षण करें।"
 
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 msgid "Revoke"
 msgstr ""
 
@@ -5190,6 +5392,10 @@ msgstr "रन खोजें"
 msgid "Search skills"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Search statistics reset."
+msgstr ""
+
 #. placeholder {0}: filters.query.trim()
 #: src/pages/ActivityList.tsx
 msgid "Search: {0}"
@@ -5211,6 +5417,10 @@ msgstr ""
 #: src/pages/shell/chat-header.tsx
 msgid "Select a bot"
 msgstr "एक बॉट चुनें"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Select all"
+msgstr ""
 
 #: src/pages/memory-providers/ConnectionModeFields.tsx
 msgid "Self-hosted"
@@ -5312,6 +5522,10 @@ msgstr "सेटिंग्स: उपयोग"
 msgid "Setup complete"
 msgstr "सेटअप पूरा हुआ"
 
+#: src/components/McpAuthHelp.tsx
+msgid "Setup for {title}"
+msgstr ""
+
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Setup help"
 msgstr "सेटअप सहायता"
@@ -5325,10 +5539,19 @@ msgstr "आकार"
 msgid "Shape {0}"
 msgstr ""
 
+#: src/pages/shell/chat-header.tsx
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Share conversation"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
 msgstr "साझा"
+
+#: src/pages/SharePage.tsx
+msgid "Shared from Rakazo"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Shared memory"
@@ -5442,6 +5665,7 @@ msgstr "स्किल {position}"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/SidebarFooter.tsx
+#: src/pages/KnowledgeSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Skills"
@@ -5488,6 +5712,10 @@ msgstr ""
 #: src/pages/shell/agent-import.tsx
 msgid "Some settings are not imported"
 msgstr "कुछ सेटिंग्स इंपोर्ट नहीं होतीं"
+
+#: src/pages/SharePage.tsx
+msgid "Something went wrong loading this share."
+msgstr ""
 
 #: src/App.tsx
 #: src/lib/user-error.ts
@@ -5574,6 +5802,11 @@ msgstr "शुरू हो रहा है"
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
 msgstr "शुरू हो रहा है…"
+
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/settings-nav.ts
+msgid "Statistics"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/Board.tsx
@@ -5813,6 +6046,10 @@ msgstr ""
 msgid "Thinking"
 msgstr "सोच रहा है"
 
+#: src/pages/VoiceSettingsOverlay.tsx
+msgid "Thinking in calls"
+msgstr ""
+
 #. placeholder {0}: thinkingLevelLabel(choice.thinkingLevel)
 #: src/pages/ModelRoleSettings.tsx
 msgid "Thinking: {0}"
@@ -5864,6 +6101,10 @@ msgstr "यह कंप्यूटर"
 #: src/lib/run-error.ts
 msgid "This connection's request limit is too small. Choose another model."
 msgstr "इस कनेक्शन की अनुरोध सीमा बहुत कम है। कोई दूसरा मॉडल चुनें।"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "This conversation has no shareable messages yet."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -5941,6 +6182,10 @@ msgstr "इस सर्वर ने ब्राउज़र ऑथराइ�
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "यह सर्वर पहले से कनेक्टेड है। पुनः ऑथराइज़ करने के लिए पहले इसे डिस्कनेक्ट करें।"
 
+#: src/pages/SharePage.tsx
+msgid "This share link is not available."
+msgstr ""
+
 #: src/pages/model-settings/connection-controls.tsx
 msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
 msgstr "यह सब्सक्रिप्शन साइन-इन अभी Rakazo में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
@@ -5968,6 +6213,10 @@ msgstr "समय अलग हो सकता है"
 #: src/pages/Board.tsx
 msgid "Title"
 msgstr "शीर्षक"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Title (optional)"
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "To"
@@ -6037,6 +6286,10 @@ msgstr ""
 msgid "Transcription response is too large."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Transport"
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr ""
@@ -6061,6 +6314,10 @@ msgstr "विश्वसनीय साइटें"
 #: src/pages/Onboarding.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
+
+#: src/components/McpAuthHelp.tsx
+msgid "Try Connect OAuth first. If you get an invalid redirect URI error, create an app and allowlist the redirect URI below, then fill Advanced client ID and secret."
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "Try the test again."
@@ -6095,6 +6352,10 @@ msgstr "पूर्ववत करें"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/McpAuthHelp.tsx
+msgid "Unknown provider — check the catalog for auth details, then use Access token or Advanced OAuth as above."
+msgstr ""
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr ""
@@ -6111,6 +6372,10 @@ msgstr "पिन हटाएं"
 #: src/pages/shell/use-composer-actions.ts
 msgid "Unsupported file type: {0}"
 msgstr "असमर्थित फ़ाइल प्रकार: {0}"
+
+#: src/pages/shell/share-thread-dialog.tsx
+msgid "Untitled share"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Up to date"
@@ -6332,6 +6597,10 @@ msgstr "प्रतीक्षा…"
 msgid "Wallet"
 msgstr ""
 
+#: src/pages/AccountSettingsOverlay.tsx
+msgid "Web searches answered by each service."
+msgstr ""
+
 #: src/components/ModelCredits.tsx
 msgid "Web, desktop and mobile"
 msgstr ""
@@ -6469,6 +6738,7 @@ msgstr "कल"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx
+#: src/pages/shell/share-thread-dialog.tsx
 #: src/pages/shell/shell-sidebar.tsx
 msgid "You"
 msgstr "आप"

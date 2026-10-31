@@ -16,6 +16,18 @@ vi.mock("../../lib/rpc", () => {
       list: vi.fn(async () => []),
     },
     me: vi.fn(async () => ({})),
+    plans: {
+      active: vi.fn(async () => ({
+        id: "plan-1",
+        title: "Launch",
+        status: "active",
+        progress: { done: 1, total: 2, percent: 50 },
+        steps: [
+          { id: "s1", index: 1, title: "Draft", status: "done", blockedBy: [], notes: null },
+          { id: "s2", index: 2, title: "Ship", status: "in_progress", blockedBy: [], notes: null },
+        ],
+      })),
+    },
   };
   return {
     rpc,
@@ -489,4 +501,54 @@ it("keeps cross-space communication off until explicitly enabled", async () => {
   await act(async () => toggle?.click());
   await flush();
   expect(onSave).toHaveBeenCalledWith({ crossSpaceCommunication: true });
+});
+
+describe("BotSettings plan placement", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("shows the plan right under Name, outside the Advanced tab, expanded by default", async () => {
+    await renderSettings(vi.fn(async () => undefined));
+    await flush();
+    const name = container.querySelector('[data-testid="bot-settings-name"]')!;
+    const plan = container.querySelector('[data-testid="bot-settings-plan"]')!;
+    const tabs = container.querySelector('[role="tablist"]')!;
+    const advanced = container.querySelector('[data-testid="bot-settings-advanced"]')!;
+    expect(name.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(plan.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(advanced.contains(plan)).toBe(false);
+    expect(advanced.querySelector('[data-testid="bot-plan"]')).toBeNull();
+    // Instructions stay in the Advanced tab.
+    expect(advanced.querySelector('[data-testid="bot-settings-instructions"]')).not.toBeNull();
+    const toggle = plan.querySelector<HTMLButtonElement>('[data-testid="bot-plan-toggle"]')!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const body = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    expect(body?.textContent).toContain("Ship");
+    expect(toggle.textContent).toContain("1/2 · 50%");
+  });
+
+  it("collapses, keeps title and progress visible, and remembers the choice", async () => {
+    await renderSettings(vi.fn(async () => undefined));
+    await flush();
+    let toggle = container.querySelector<HTMLButtonElement>('[data-testid="bot-plan-toggle"]')!;
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('[data-testid="plan-step-2"]')).toBeNull();
+    expect(toggle.textContent).toContain("Plan · Launch");
+    expect(toggle.textContent).toContain("1/2 · 50%");
+    expect(localStorage.getItem("rakazo.botPanel.planExpanded")).toBe("false");
+
+    act(() => root.unmount());
+    root = createRoot(container);
+    await renderSettings(
+      vi.fn(async () => undefined),
+      { ...bot, id: "bot-2" },
+    );
+    await flush();
+    toggle = container.querySelector<HTMLButtonElement>('[data-testid="bot-plan-toggle"]')!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => toggle.click());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector('[data-testid="plan-step-2"]')).not.toBeNull();
+    expect(localStorage.getItem("rakazo.botPanel.planExpanded")).toBe("true");
+  });
 });

@@ -54,6 +54,7 @@ import type { ReactNode } from "react";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { ErrorBoundary, SectionLoadFailed } from "../../components/ErrorBoundary";
 import { InstructionSettings } from "../../components/InstructionSettings";
+import { persistBotPlanExpanded, readBotPlanExpanded } from "../../lib/bot-plan-expanded-pref";
 import { botProfilePatch } from "../../lib/bot-profile-patch";
 import { thinkingLevelLabel } from "../../lib/model-catalog";
 import { lazyComponent } from "../../lib/preload-recovery";
@@ -188,6 +189,8 @@ export function BotSettings({
     }
   }, [tab, focusModel]);
   const [name, setName] = useState(bot.name);
+  // RAKAZO: Plan sits under Name, expanded until collapsed; the choice is remembered for all bots.
+  const [planExpanded, setPlanExpanded] = useState(() => readBotPlanExpanded());
   const savedNameRef = useRef(bot.name);
   const [description, setDescription] = useState(bot.description);
   // A roster refresh can skip replacing bots while a reorder is in flight, so
@@ -598,6 +601,22 @@ export function BotSettings({
           className="mt-1.5"
         />
       </label>
+      <div data-testid="bot-settings-plan">
+        <ErrorBoundary fallback={<SectionLoadFailed />}>
+          <Suspense fallback={null}>
+            <PlanSection
+              botId={bot.id}
+              expanded={planExpanded}
+              onToggle={() => {
+                const next = !planExpanded;
+                setPlanExpanded(next);
+                persistBotPlanExpanded(next);
+              }}
+              className="mt-5 border-t border-border/70 pt-4"
+            />
+          </Suspense>
+        </ErrorBoundary>
+      </div>
       <Tabs
         value={tab}
         onValueChange={(next) => onTabChange?.(next as BotPanelTab)}
@@ -622,16 +641,9 @@ export function BotSettings({
         </TabsContent>
         {/* Stays mounted so scratchpad and knowledge drafts survive a tab switch. */}
         <TabsContent value="settings" keepMounted data-testid="bot-settings-advanced">
-          {/* RAKAZO: Plan sits directly above Instructions, at the top of the settings tab. */}
-          <div className="pt-4" data-testid="bot-settings-plan-instructions">
-            <ErrorBoundary fallback={<SectionLoadFailed />}>
-              <Suspense fallback={null}>
-                <PlanSection botId={bot.id} />
-              </Suspense>
-            </ErrorBoundary>
-            <div className="mt-5">
-              <InstructionSettings key={bot.id} bot={bot} />
-            </div>
+          {/* RAKAZO: Instructions open the settings tab; the Plan lives under Name, above the tabs. */}
+          <div className="pt-4" data-testid="bot-settings-instructions">
+            <InstructionSettings key={bot.id} bot={bot} />
           </div>
           <section className="mt-6 border-t border-border/60 pt-5">
             <h3 className="mb-2 text-xs font-medium text-muted-foreground">

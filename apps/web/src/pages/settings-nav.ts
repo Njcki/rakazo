@@ -1,5 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import {
+  BarChart3,
   Brain,
   CloudDownload,
   Cpu,
@@ -43,6 +44,8 @@ export function useSettingsNavItems(available: {
     ...(available.wallet ? [{ id: "wallet" as const, label: t`Wallet`, icon: Wallet }] : []),
     { id: "memory", label: t`Memory`, icon: Brain },
     { id: "usage", label: t`Usage`, icon: Gauge },
+    // RAKAZO: search/usage statistics panel.
+    { id: "stats", label: t`Statistics`, icon: BarChart3 },
     ...(available.computer ? [{ id: "computer" as const, label: t`Computer`, icon: Monitor }] : []),
     ...(available.billing ? [{ id: "billing" as const, label: t`Billing`, icon: CreditCard }] : []),
     ...(available.updates

@@ -365,6 +365,7 @@ export function UriImageViewer({
   const [box, setBox] = useState<ImageSize | null>(null);
   const [natural, setNatural] = useState<ImageSize | null>(null);
   const [failed, setFailed] = useState(false);
+  const dismissY = useSharedValue(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,6 +428,7 @@ export function UriImageViewer({
             box={box}
             onClose={onClose}
             onError={() => setFailed(true)}
+            dismissY={dismissY}
           />
         ) : (
           <Text style={[styles.message, { color: tokens.mutedForeground }]}>
@@ -448,5 +450,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   stage: { flex: 1, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  title: { flex: 1, fontSize: 15, fontWeight: "500" },
   message: { fontSize: 15, textAlign: "center", padding: 24 },
 });

@@ -104,6 +104,7 @@ describe("activateUiLocale", () => {
       },
       it: async () => {
         throw new Error("it missing");
+      },
       he: async () => {
         throw new Error("he missing");
       },

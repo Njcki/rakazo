@@ -225,4 +225,27 @@ export function markDurableProgress(reply: ReplyState) {
   reply.steeringSinceDurableProgress = false;
   reply.publishedMidTurnUserMessage = true;
 }
+
+/**
+ * Replaces the text streamed so far with the note as the working line. Runs that hold their
+ * narration back (routines, peers, background work) keep their live view.
+ */
+export async function showNarrationStatus(ctx: RunContext, note: string | undefined) {
+  const { deps, run, runId, bot, thread } = ctx;
+  if (
+    !note ||
+    ctx.scripted ||
+    !runPromotesMidTurnNarration(run.trigger) ||
+    isBackgroundRunTrigger(run.trigger)
+  )
+    return;
+  ctx.state.reply.narrationStatusShowing = true;
+  await deps.events.append({
+    spaceId: run.spaceId,
+    threadId: thread.id,
+    botId: bot.id,
+    type: "thread.progress",
+    runId,
+    payload: { reset: true, text: narrationStatusLine(note), activity: true },
+  });
 }

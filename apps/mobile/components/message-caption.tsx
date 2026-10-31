@@ -10,7 +10,6 @@ export function MessageCaption({
   tokens,
   colorScheme,
   streaming,
-  onOpenImage,
 }: {
   role: MobileMessage["role"];
   text: string;
@@ -35,7 +34,6 @@ export function MessageCaption({
       palette={tokens}
       colorScheme={colorScheme}
       streaming={streaming}
-      onOpenImage={onOpenImage}
       renderMention={renderMention}
     >
       {text}

@@ -1018,16 +1018,41 @@ describe("native markdown type", () => {
 });
 
 describe("native markdown images", () => {
-  it("shows a raster image as a preview button instead of a full-size load", () => {
+  it("shows a remote image as a placeholder that loads it in place on tap", async () => {
     const markdown = '![chart](https://images.example.test/tap.png?d=secret "Q3 revenue")';
     const html = renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>);
     expect(html).not.toContain("<rn-stub");
-    expect(html).toContain('data-accessibility-role="imagebutton"');
-    expect(html).toContain('accessibilityLabel="chart"');
-    expect(html).toContain("<rn-image");
+    expect(html).toContain('data-accessibility-role="button"');
+    expect(html).toContain('accessibilityLabel="chart, images.example.test"');
+    expect(html).toContain('accessibilityHint="Q3 revenue"');
+    // A filled chip on the muted bubble reads as a control in both themes.
+    expect(html).toContain(`data-background-color="${darkTokens.background}"`);
+
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    linking.openURL.mockClear();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<ChatMarkdown>{markdown}</ChatMarkdown>);
+    });
+    expect(container.querySelector("rn-stub")).toBeNull();
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-accessibility-role='button']")?.click();
+    });
+    expect(container.querySelector("rn-stub")).not.toBeNull();
+    expect(container.querySelector("[data-accessibility-role='button']")).toBeNull();
+    expect(linking.openURL).not.toHaveBeenCalled();
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+
+    // The reader's choice holds for the session, so a remounted bubble keeps the image.
+    expect(renderToStaticMarkup(<ChatMarkdown>{markdown}</ChatMarkdown>)).toContain("<rn-stub");
   });
 
-  it("keeps the preview when the image url changes", async () => {
+  it("shows a placeholder when a tapped image is replaced with another url", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const container = document.createElement("div");
     document.body.appendChild(container);
@@ -1047,19 +1072,24 @@ describe("native markdown images", () => {
     await act(async () => {
       render("https://images.example.test/native-first.png");
     });
-    expect(container.querySelector("rn-image")).not.toBeNull();
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-accessibility-role='button']")?.click();
+    });
+    expect(container.querySelector("rn-stub")).not.toBeNull();
+
     await act(async () => {
       render("https://images.example.test/native-second.png");
     });
-    expect(container.querySelector("rn-image")).not.toBeNull();
     expect(container.querySelector("rn-stub")).toBeNull();
+    expect(container.querySelector("[data-accessibility-role='button']")).not.toBeNull();
+
     await act(async () => {
       root.unmount();
     });
     container.remove();
   });
 
-  it("previews a raster image and still links a non-raster badge", () => {
+  it("loads remote images at once when the reader turned that on", () => {
     const html = renderToStaticMarkup(
       <RemoteImagesContext.Provider value={true}>
         <ChatMarkdown>
@@ -1069,9 +1099,9 @@ describe("native markdown images", () => {
         </ChatMarkdown>
       </RemoteImagesContext.Provider>,
     );
-    expect(html.match(/<rn-stub/g)).toHaveLength(1);
-    expect(html).toContain('data-accessibility-role="imagebutton"');
+    expect(html.match(/<rn-stub/g)).toHaveLength(2);
     expect(html).toContain('data-accessibility-role="link"');
+    expect(html).not.toContain('data-accessibility-role="button"');
   });
 
   it("shows unopenable image sources and unsafe links as plain text", () => {

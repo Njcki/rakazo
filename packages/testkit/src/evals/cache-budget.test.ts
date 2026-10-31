@@ -138,17 +138,19 @@ async function anthropicUsage(cacheFields: Record<string, number> = {}, rawTotal
   return { measured, reserved, budget };
 }
 
-it("keeps omitted Anthropic cache measurements and synthesized totals unknown, retaining the reservation", async () => {
+it("keeps omitted Anthropic cache measurements unknown and derives the total from input and output (RAKAZO)", async () => {
   const result = await anthropicUsage();
   expect(result.measured).toMatchObject({
     inputTokens: 0,
     outputTokens: 10,
     cacheReadTokens: null,
     cacheWriteTokens: null,
-    totalTokens: null,
+    // RAKAZO pi-usage patch: unmeasured cache counts as zero, so input + output is a known total.
+    totalTokens: 10,
   });
   expect(result.budget.reservedUsd).toBe(0);
-  expect(result.budget.usedUsd).toBe(result.reserved);
+  // With a known total the measured output cost settles the budget instead of the reservation.
+  expect(result.budget.usedUsd).toBeCloseTo((10 * 2) / 1_000_000);
 });
 
 it("derives an Anthropic total when every input, output and cache bucket is measured, including zeros", async () => {

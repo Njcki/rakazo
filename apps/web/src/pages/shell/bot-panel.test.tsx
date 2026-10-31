@@ -254,10 +254,9 @@ it("shows the profile and the Advanced tab's controls", async () => {
     { id: "fixture-voice", label: "Fixture voice" },
   ]);
   await render("Billing", {}, true);
-  expect(container.querySelector('[data-testid="bot-profile-header"]')?.textContent).toContain(
-    "Ada",
-  );
-  expect(container.querySelector('input[aria-label="Name"]')).toBeNull();
+  // RAKAZO 39434b4: the name is an explicit field under the avatar, not an inline header edit.
+  expect(container.querySelector('[data-testid="bot-profile-header"]')).not.toBeNull();
+  expect(nameField().value).toBe("Ada");
   expect([...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual([
     "Computer",
     "Routines",
@@ -620,17 +619,26 @@ describe("instruction settings refresh", () => {
   });
 });
 
-it("cancels an inline name edit", async () => {
+function nameField() {
+  return container.querySelector<HTMLInputElement>('[data-testid="bot-settings-name"]')!;
+}
+
+async function typeName(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+it("cancels a name edit with Escape", async () => {
   await render();
-  await act(async () =>
-    container.querySelector<HTMLButtonElement>('[aria-label="Edit name"]')!.click(),
-  );
-  const input = container.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
+  const input = nameField();
   expect(input.value).toBe("Ada");
+  await typeName(input, "Atlas");
   await act(async () =>
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
   );
-  expect(container.querySelector('[aria-label="Name"]')).toBeNull();
+  expect(nameField().value).toBe("Ada");
   expect(onSave).not.toHaveBeenCalled();
 });
 
@@ -639,40 +647,25 @@ it("focuses the model control for a model deep link", async () => {
   expect(document.activeElement?.id.endsWith("-model")).toBe(true);
 });
 
-it("saves inline name edits on blur and on Enter", async () => {
+it("saves name edits on blur and on Enter", async () => {
   await render();
   for (const [value, event] of [
     ["Atlas", new FocusEvent("focusout", { bubbles: true })],
     ["Ada", new KeyboardEvent("keydown", { key: "Enter", bubbles: true })],
   ] as const) {
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Edit name"]')!.click(),
-    );
-    const input = container.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    const input = nameField();
+    await typeName(input, value);
     await act(async () => input.dispatchEvent(event));
     expect(onSave.mock.lastCall?.[0]).toHaveProperty("name", value);
   }
 });
 
 it.each([{ isComposing: true }, { keyCode: 229 }])(
-  "keeps an inline name edit open on IME Enter and Escape (%o)",
+  "keeps a name edit on IME Enter and Escape (%o)",
   async (composition) => {
     await render();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Edit name"]')!.click(),
-    );
-    const input = container.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        input,
-        "Atlas",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    const input = nameField();
+    await typeName(input, "Atlas");
     const windowKeys: string[] = [];
     const onWindowKey = (event: KeyboardEvent) => windowKeys.push(event.key);
     window.addEventListener("keydown", onWindowKey);
@@ -682,7 +675,7 @@ it.each([{ isComposing: true }, { keyCode: 229 }])(
       );
     }
     window.removeEventListener("keydown", onWindowKey);
-    expect(container.querySelector('[aria-label="Name"]')).toBe(input);
+    expect(nameField().value).toBe("Atlas");
     // A composing Escape must not reach page-level Escape listeners such as the reply chip.
     expect(windowKeys).not.toContain("Escape");
     expect(onSave).not.toHaveBeenCalled();
@@ -788,7 +781,7 @@ describe("BotSettings cached data", () => {
       computerMode: "dedicated",
       updatedAt: "2026-09-02T00:00:00.000Z",
     });
-    expect(container.querySelector('[aria-label="Edit name"]')?.textContent).toBe("Grace");
+    expect(nameField().value).toBe("Grace");
     expect(descriptionField().value).toBe("Invoices");
     await clickSave();
     const patch = onSave.mock.lastCall?.[0];

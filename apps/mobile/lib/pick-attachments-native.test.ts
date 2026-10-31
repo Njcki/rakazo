@@ -3,7 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const file = vi.hoisted(() => ({
-  size: 11 * 1024 * 1024,
+  size: 101 * 1024 * 1024,
   sizes: {} as Record<string, number>,
   info: vi.fn(),
   base64: vi.fn().mockResolvedValue("aGVsbG8="),
@@ -37,7 +37,7 @@ vi.mock("expo-modules-core", () => ({
 import { pickDocuments } from "./pick-attachments";
 
 beforeEach(() => {
-  file.size = 11 * 1024 * 1024;
+  file.size = 101 * 1024 * 1024;
   file.sizes = {};
   file.info.mockClear();
   file.base64.mockReset().mockResolvedValue("aGVsbG8=");
@@ -66,10 +66,10 @@ describe("native attachment reads", () => {
     expect(file.base64).toHaveBeenCalledTimes(limit);
   });
 
-  it("reads a file above 10 MiB when the server allows it", async () => {
+  it("reads a file above 100 MiB when the server allows it", async () => {
     const result = await pickDocuments(
       0,
-      attachmentMaxBytes({ maxUploadSizeBytes: 12 * 1024 * 1024 }),
+      attachmentMaxBytes({ maxUploadSizeBytes: 120 * 1024 * 1024 }),
     );
     expect(result.attachments).toHaveLength(1);
     expect(file.base64).toHaveBeenCalledOnce();
@@ -80,7 +80,7 @@ describe("native attachment reads", () => {
       const result = await pickDocuments(0, attachmentMaxBytes(config));
       expect(result.attachments).toHaveLength(0);
       expect(result.skipped[0]?.reason).toBe(
-        config.maxUploadSizeBytes ? "over 2 MiB" : "over 10 MiB",
+        config.maxUploadSizeBytes ? "over 2 MiB" : "over 100 MiB",
       );
     }
     expect(file.base64).not.toHaveBeenCalled();

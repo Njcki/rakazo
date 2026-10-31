@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
+import { i18n } from "@lingui/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { expect, it, vi } from "vitest";
+import { beforeAll, expect, it, vi } from "vitest";
 
 const voice = vi.hoisted(() => ({
   catalog: vi.fn(),
@@ -15,6 +16,9 @@ const voice = vi.hoisted(() => ({
   disconnect: vi.fn(),
   setVoice: vi.fn(),
   setSpeechModel: vi.fn(),
+  // RAKAZO: Thinking in calls.
+  callThinking: vi.fn(async () => ({ thinkingLevel: null })),
+  setCallThinking: vi.fn(async () => undefined),
 }));
 
 const { speak } = vi.hoisted(() => ({ speak: vi.fn(async () => undefined) }));
@@ -54,6 +58,12 @@ vi.mock("@rakazo/ui-web", () => {
 
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
+
+// RAKAZO: the "Thinking in calls" select labels levels through the runtime i18n.
+beforeAll(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
+});
 
 function withQueries(ui: ReactNode, client = new QueryClient()) {
   client.setDefaultOptions({ queries: { retry: false } });

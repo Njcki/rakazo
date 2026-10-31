@@ -580,6 +580,21 @@ export function BotSettings({
             }
             void enqueueSave({ name });
           }}
+          onKeyDown={(event) => {
+            // IME composition: Enter picks a candidate and Escape closes it; neither is ours.
+            if (event.nativeEvent.isComposing || event.keyCode === 229) {
+              if (event.key === "Escape") event.stopPropagation();
+              return;
+            }
+            if (event.key === "Enter") {
+              event.preventDefault();
+              if (!name.trim()) setName(savedNameRef.current);
+              else void enqueueSave({ name });
+            } else if (event.key === "Escape") {
+              event.stopPropagation();
+              setName(savedNameRef.current);
+            }
+          }}
           className="mt-1.5"
         />
       </label>
@@ -716,7 +731,11 @@ export function BotSettings({
                 ) : null}
               </div>
             </div>
-            <SettingsGroup label={t`Computer`} plain icon={<Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}>
+            <SettingsGroup
+              label={t`Computer`}
+              plain
+              icon={<Monitor size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}
+            >
               <ComputerModePicker value={computerMode} onChange={setComputerMode} />
               {memoryProviderConfigured ? (
                 <div className="mt-4 text-sm text-foreground">
@@ -746,7 +765,17 @@ export function BotSettings({
                 </div>
               ) : null}
             </SettingsGroup>
-            <SettingsGroup label={t`Voice`} icon={<Volume2 size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />}>
+            <SettingsGroup
+              label={t`Voice`}
+              icon={
+                <Volume2
+                  size={15}
+                  strokeWidth={1.8}
+                  aria-hidden
+                  className="shrink-0 text-muted-foreground"
+                />
+              }
+            >
               <label
                 htmlFor={`${ids}-auto-speak`}
                 className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm text-foreground"
@@ -782,7 +811,17 @@ export function BotSettings({
                 </label>
               ) : null}
             </SettingsGroup>
-            <SettingsGroup label={t`Permissions`} icon={<KeyRound size={15} strokeWidth={1.8} aria-hidden className="shrink-0 text-muted-foreground" />}>
+            <SettingsGroup
+              label={t`Permissions`}
+              icon={
+                <KeyRound
+                  size={15}
+                  strokeWidth={1.8}
+                  aria-hidden
+                  className="shrink-0 text-muted-foreground"
+                />
+              }
+            >
               <div className="flex min-h-11 items-center justify-between gap-3 text-sm">
                 <label htmlFor={`${ids}-cross-space`} className={rowLabelClass}>
                   <Trans>Allow cross-space bot communication</Trans>
@@ -829,7 +868,11 @@ export function BotSettings({
                 className="min-h-16 resize-none field-sizing-content"
               />
             </SettingsGroup>
-            <SettingsGroup label={t`Tools`} plain icon={<Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}>
+            <SettingsGroup
+              label={t`Tools`}
+              plain
+              icon={<Wrench size={15} strokeWidth={1.8} aria-hidden className="shrink-0" />}
+            >
               <section data-testid="bot-settings-tools">
                 <div className="space-y-2 [&>*]:mt-0">
                   <div>
@@ -967,9 +1010,7 @@ function SettingsGroup({
           label
         )}
       </h3>
-      <div className={plain ? "space-y-3 [&>*]:mt-0" : NK_ADVANCED_CARD_CLASS}>
-        {children}
-      </div>
+      <div className={plain ? "space-y-3 [&>*]:mt-0" : NK_ADVANCED_CARD_CLASS}>{children}</div>
     </section>
   );
 }

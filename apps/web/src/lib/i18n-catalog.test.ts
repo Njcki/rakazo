@@ -131,7 +131,7 @@ describe("lingui catalogs", () => {
         "Model",
         "Add open work",
         "Disable a tool",
-        "Edit name",
+        "Name", // RAKAZO: explicit Name field replaced the inline "Edit name" control
         "Enable {0}",
         "Model connections",
         "Permissions",

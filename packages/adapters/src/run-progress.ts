@@ -165,12 +165,10 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   const { deps, run } = ctx;
   const { reply } = ctx.state;
   const extracted = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
-  // RAKAZO 0040/0041/0050: hold a mid-clause fragment for a later sentence boundary instead of
-  // promoting it (or noting it) mid-word; the text stays in the segments for the next step.
-  {
-    const pending = extracted.text.trim();
-    if (pending && !endsSentence(pending) && !beforeConnectCard) return undefined;
-  }
+  // RAKAZO 0040/0041/0050: never promote a mid-clause fragment into a durable chat bubble;
+  // it becomes a note on the step instead (upstream's path), so it stays out of the reply.
+  const pendingText = extracted.text.trim();
+  const fragment = Boolean(pendingText) && !endsSentence(pendingText) && !beforeConnectCard;
   reply.messageSegments = extracted.remaining;
   reply.currentTextSegment = "";
   const text = redactSecretsAfter(reply.narrationSoFar, extracted.text, ctx.secrets).trim();
@@ -193,7 +191,8 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   });
   if (
     text.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH &&
-    ((canPublishDurableNarration(ctx) && gapAllows) || (beforeConnectCard && promotes))
+    ((!fragment && canPublishDurableNarration(ctx) && gapAllows) ||
+      (beforeConnectCard && promotes))
   ) {
     reply.workingNotes.length = 0;
     reply.narrationStatusShowing = false;

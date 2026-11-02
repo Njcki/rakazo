@@ -7,11 +7,13 @@ import {
   frameQuickAckedSteering,
   parseQuickReplyModel,
   type QuickReplyContext,
+  type QuickReplyFailureLog,
   type QuickReplyItem,
   quickReplyConfig,
   quickReplyEligible,
   sanitizeQuickReply,
   startRunQuickReply,
+  withQuickReplyTexts,
 } from "./quick-reply.js";
 
 const MODEL: AgentRunModel = { provider: "google", id: "gemini-3.8-flash" };
@@ -405,6 +407,132 @@ describe("startRunQuickReply", () => {
     quick.stop();
     await vi.advanceTimersByTimeAsync(5000);
     expect((base.pollSteering as ReturnType<typeof vi.fn>).mock.calls.length).toBe(calls);
+  });
+});
+
+describe("withQuickReplyTexts", () => {
+  it("looks up the posted reply by message id, not by steering row id (regression)", () => {
+    // settle() returns messageId -> text; the steering row id (s-1) must not be used.
+    const replies = new Map([["m-1", "Ricevuto, lo passo al lavoro in corso."]]);
+    const out = withQuickReplyTexts(
+      [
+        { id: "s-1", messageId: "m-1", text: "a che punto sei?" },
+        { id: "s-2", messageId: "m-2", text: "altro" },
+      ],
+      replies,
+    );
+    expect(out[0]!.quickReplyText).toBe("Ricevuto, lo passo al lavoro in corso.");
+    expect(out[1]!.quickReplyText).toBeUndefined();
+    expect(out[0]!.id).toBe("s-1");
+  });
+
+  it("feeds settle() results straight into the claim (end to end)", async () => {
+    const quick = startRunQuickReply({
+      config: quickReplyConfig({ QUICK_REPLY_DEBOUNCE_MS: "0" }),
+      pollSteering: vi.fn(async () => []),
+      resolveModel: vi.fn(async () => MODEL),
+      loadContext: vi.fn(async () => context()),
+      generate: vi.fn(async () => "Sono al passo 2 di 3."),
+      publish: vi.fn(async () => true),
+      logFailure: vi.fn(),
+    });
+    quick.arm([]);
+    const claimed = [{ id: "s-7", messageId: "m-7", text: "a che punto sei?" }];
+    const framed = withQuickReplyTexts(claimed, await quick.settle(claimed));
+    expect(framed[0]!.quickReplyText).toBe("Sono al passo 2 di 3.");
+    quick.stop();
+  });
+});
+
+describe("quick reply failure logging", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function start(overrides: Partial<Parameters<typeof startRunQuickReply>[0]>) {
+    const logs: QuickReplyFailureLog[] = [];
+    const quick = startRunQuickReply({
+      config: quickReplyConfig({ QUICK_REPLY_TIMEOUT_MS: "1000", QUICK_REPLY_DEBOUNCE_MS: "0" }),
+      runId: "run-42",
+      pollSteering: vi.fn(async () => []),
+      resolveModel: vi.fn(async () => MODEL),
+      loadContext: vi.fn(async () => context()),
+      generate: vi.fn(async () => "ok"),
+      publish: vi.fn(async () => true),
+      logFailure: (fields) => logs.push(fields),
+      ...overrides,
+    });
+    quick.arm([]);
+    return { quick, logs };
+  }
+
+  it("logs a timeout with run id, elapsed ms and model, never the content", async () => {
+    const { quick, logs } = start({
+      generate: vi.fn(() => new Promise<string | undefined>(() => undefined)),
+    });
+    const settled = quick.settle([item(1, "testo segreto dell'utente")]);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect((await settled).size).toBe(0);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      runId: "run-42",
+      reason: "timeout",
+      timeoutMs: 1000,
+      model: "google/gemini-3.8-flash",
+      messages: 1,
+    });
+    expect(logs[0]!.elapsedMs).toBeGreaterThanOrEqual(1000);
+    expect(JSON.stringify(logs)).not.toContain("segreto");
+    quick.stop();
+  });
+
+  it("logs an empty answer", async () => {
+    const { quick, logs } = start({ generate: vi.fn(async () => undefined) });
+    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect(logs.map((entry) => entry.reason)).toEqual(["empty_answer"]);
+    quick.stop();
+  });
+
+  it("logs a rejected (tool-shaped) answer", async () => {
+    const { quick, logs } = start({ generate: vi.fn(async () => "```json\n{}\n```") });
+    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect(logs.map((entry) => entry.reason)).toEqual(["rejected_answer"]);
+    quick.stop();
+  });
+
+  it("logs an error with the error class only", async () => {
+    const { quick, logs } = start({
+      generate: vi.fn(async () => {
+        throw new TypeError("https://secret.example/v1 key=abc");
+      }),
+    });
+    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ reason: "error", errorName: "TypeError" });
+    expect(JSON.stringify(logs)).not.toContain("secret.example");
+    quick.stop();
+  });
+
+  it("logs an unavailable model once", async () => {
+    const { quick, logs } = start({ resolveModel: vi.fn(async () => undefined) });
+    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect((await quick.settle([item(2)])).size).toBe(0);
+    expect(logs.map((entry) => entry.reason)).toEqual(["model_unavailable"]);
+    expect(logs[0]!.model).toBeUndefined();
+    quick.stop();
+  });
+
+  it("logs a reply that could not be published", async () => {
+    const { quick, logs } = start({ publish: vi.fn(async () => false) });
+    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect(logs.map((entry) => entry.reason)).toEqual(["not_published"]);
+    quick.stop();
+  });
+
+  it("logs nothing on success", async () => {
+    const { quick, logs } = start({});
+    expect((await quick.settle([item(1)])).get("m-1")).toBe("ok");
+    expect(logs).toEqual([]);
+    quick.stop();
   });
 });
 

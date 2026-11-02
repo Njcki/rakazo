@@ -193,6 +193,7 @@ import {
   quickReplyConfig,
   quickReplyEligible,
   startRunQuickReply,
+  withQuickReplyTexts,
 } from "./quick-reply.js";
 import { publishMessage } from "./run-messages.js";
 import { markDurableProgress } from "./run-progress.js";
@@ -1553,6 +1554,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         })
           ? startRunQuickReply({
               config: quickReplySettings,
+              runId,
               pollSteering: async (sinceMs) => {
                 const rows = await deps.prisma.steeringMessage.findMany({
                   where: {
@@ -1901,10 +1903,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                     text: item.historyText ?? item.text,
                   })),
                 );
-                return claimed.map((item) => ({
-                  ...item,
-                  quickReplyText: replies.get(item.id),
-                }));
+                // settle() keys replies by messageId, not by the steering row id.
+                return withQuickReplyTexts(claimed, replies);
               },
             },
             context,

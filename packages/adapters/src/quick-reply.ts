@@ -536,7 +536,15 @@ export async function callQuickReplyModel(
         break;
       }
     }
-  } catch {
+  } catch (error) {
+    if (!signal.aborted) {
+      // Metadata only: provider error messages can echo prompts or endpoints.
+      getLogger().warn("quick reply model call failed", {
+        "run.id": input.runId,
+        "model.id": `${input.model.provider}/${input.model.id}`,
+        "error.type": error instanceof Error ? error.name : typeof error,
+      });
+    }
     return undefined;
   }
   if (signal.aborted) return undefined;
@@ -561,11 +569,52 @@ export interface RunQuickReplyDeps {
   ) => Promise<string | undefined>;
   /** Posts the reply as the bot; false when the run is no longer ours to speak for. */
   publish: (text: string) => Promise<boolean>;
+  /** Run id for diagnostics only (logged on a failed quick reply). */
+  runId?: string;
+  /**
+   * Diagnostics sink for a quick reply that was not posted. Receives only metadata
+   * (run id, elapsed ms, reason, model); never the message or the answer. Defaults to
+   * a warn on the worker logger.
+   */
+  logFailure?: (fields: QuickReplyFailureLog) => void;
   now?: () => number;
   setInterval?: (callback: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
   setTimer?: QuickReplyCoordinatorOptions["setTimer"];
   clearTimer?: QuickReplyCoordinatorOptions["clearTimer"];
+}
+
+export type QuickReplyFailureReason =
+  | "model_unavailable"
+  | "timeout"
+  | "aborted"
+  | "empty_answer"
+  | "rejected_answer"
+  | "error"
+  | "not_published";
+
+export interface QuickReplyFailureLog {
+  runId?: string;
+  reason: QuickReplyFailureReason;
+  elapsedMs: number;
+  timeoutMs: number;
+  /** "provider/modelId", or undefined when no model was resolved. */
+  model?: string;
+  messages: number;
+  /** Error class/name only; error messages may echo prompts or endpoints. */
+  errorName?: string;
+}
+
+function defaultLogFailure(fields: QuickReplyFailureLog): void {
+  getLogger().warn("quick reply not posted", {
+    "run.id": fields.runId,
+    "quick_reply.reason": fields.reason,
+    "quick_reply.elapsed_ms": fields.elapsedMs,
+    "quick_reply.timeout_ms": fields.timeoutMs,
+    "quick_reply.messages": fields.messages,
+    ...(fields.model ? { "model.id": fields.model } : {}),
+    ...(fields.errorName ? { "error.type": fields.errorName } : {}),
+  });
 }
 
 export interface RunQuickReply {
@@ -575,6 +624,17 @@ export interface RunQuickReply {
   stop(): void;
   /** Visible for tests. */
   poll(): Promise<void>;
+}
+
+/**
+ * Attaches the posted quick-reply text to each claimed steering item. `settle` keys its
+ * result by **message id** (not the steering row id), so the lookup must use messageId.
+ */
+export function withQuickReplyTexts<T extends { messageId: string }>(
+  claimed: T[],
+  replies: Map<string, string>,
+): Array<T & { quickReplyText: string | undefined }> {
+  return claimed.map((item) => ({ ...item, quickReplyText: replies.get(item.messageId) }));
 }
 
 function withTimeout<T>(
@@ -626,30 +686,78 @@ export function startRunQuickReply(deps: RunQuickReplyDeps): RunQuickReply {
     clearTimer: deps.clearTimer,
     send: async (items, signal) => {
       if (disabled) return undefined;
+      const startedAt = now();
+      let modelLabel: string | undefined;
+      // Last stage reached; tells a timeout apart from an empty or rejected answer.
+      let outcome: QuickReplyFailureReason | "ok" | undefined;
+      let errorName: string | undefined;
+      const report = (reason: QuickReplyFailureReason) => {
+        try {
+          (deps.logFailure ?? defaultLogFailure)({
+            runId: deps.runId,
+            reason,
+            elapsedMs: Math.max(0, now() - startedAt),
+            timeoutMs: deps.config.timeoutMs,
+            model: modelLabel,
+            messages: items.length,
+            errorName,
+          });
+        } catch {
+          // Diagnostics must never break the run.
+        }
+      };
       const callSignal = AbortSignal.any([signal, AbortSignal.timeout(deps.config.timeoutMs)]);
       const text = await withTimeout(
         (async () => {
           const resolved = await model();
           if (!resolved) {
             disabled = true;
+            outcome = "model_unavailable";
             return undefined;
           }
-          const context = await deps.loadContext();
-          const raw = await deps.generate(
-            resolved,
-            buildQuickReplyPrompt(
-              context,
-              items.map((item) => item.text),
-            ),
-            callSignal,
-          );
-          return raw ? sanitizeQuickReply(raw, deps.config.maxChars) : undefined;
+          modelLabel = `${resolved.provider}/${resolved.id}`;
+          try {
+            const context = await deps.loadContext();
+            const raw = await deps.generate(
+              resolved,
+              buildQuickReplyPrompt(
+                context,
+                items.map((item) => item.text),
+              ),
+              callSignal,
+            );
+            if (!raw?.trim()) {
+              outcome = "empty_answer";
+              return undefined;
+            }
+            const clean = sanitizeQuickReply(raw, deps.config.maxChars);
+            outcome = clean ? "ok" : "rejected_answer";
+            return clean;
+          } catch (error) {
+            outcome = "error";
+            errorName = error instanceof Error ? error.name : typeof error;
+            throw error;
+          }
         })(),
         deps.config.timeoutMs,
         callSignal,
       );
-      if (!text || signal.aborted || coordinator.stopped) return undefined;
+      if (coordinator.stopped) return undefined;
+      if (!text) {
+        // withTimeout resolves undefined before the inner call finishes on a timeout/abort.
+        const reason: QuickReplyFailureReason =
+          outcome && outcome !== "ok" ? outcome : signal.aborted ? "aborted" : "timeout";
+        // A provider error that surfaces as an empty stream after the deadline is a timeout.
+        report(
+          reason === "empty_answer" && now() - startedAt >= deps.config.timeoutMs
+            ? "timeout"
+            : reason,
+        );
+        return undefined;
+      }
+      if (signal.aborted) return undefined;
       const posted = await deps.publish(`${deps.config.prefix}${text}`);
+      if (!posted) report("not_published");
       return posted ? text : undefined;
     },
   });

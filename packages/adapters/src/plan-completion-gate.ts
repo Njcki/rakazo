@@ -14,6 +14,7 @@ import {
 } from "./continue-later.js";
 import {
   AUTO_PLAN_STEP_TITLE,
+  completePlanFromTool,
   createPlanFromTool,
   ensureVerifyStep,
   getActivePlan,
@@ -156,6 +157,57 @@ export function decideAutoContinuation(input: {
   };
 }
 
+/** Summary of the plans the platform writes itself (see autoPlanInput). */
+export const AUTO_PLAN_SUMMARY = "Created automatically: long task without a plan.";
+
+export function isAutoPlan(plan: Pick<PlanDto, "summary"> | null | undefined): boolean {
+  return Boolean(plan?.summary?.startsWith("Created automatically"));
+}
+
+/**
+ * Whether the run's final answer already delivers the request although a plan is still open:
+ * the reply says the whole task is done (without an unfinished count) and the open part is only
+ * an automatic plan or the final verification. Then the request ends and the plan is closed.
+ */
+export function answeredInFull(input: {
+  verdict: PlanGateVerdict;
+  plan: PlanDto | null;
+  replyText: string;
+}): boolean {
+  if (!input.verdict.open || !input.plan) return false;
+  if (!closesWholeJob(input.replyText)) return false;
+  if (isAutoPlan(input.plan)) return true;
+  return input.verdict.openSteps.every((step) => isVerifyStepTitle(step.title));
+}
+
+/** Closes the plan a complete final answer satisfied (never throws). */
+export async function closeAnsweredPlan(
+  deps: PlanToolDeps,
+  input: { spaceId: string; botId: string },
+): Promise<boolean> {
+  const closed = await completePlanFromTool(deps, {
+    ...input,
+    force: true,
+    reason: "final answer delivered the request / risposta finale completa",
+  }).catch(() => undefined);
+  return Boolean(closed && "plan" in closed && !("error" in closed));
+}
+
+/**
+ * An automatic part that did no real work (no tool besides plan/message tools) ends the chain
+ * at once: another part would only repeat it. A part recovered after a restart (fence > 1)
+ * starts from zero and is exempt, as is the tool-call limit.
+ */
+export function isNoProgressPart(input: {
+  reason: AutoContinuationReason | undefined;
+  continuationIndex: number;
+  workToolCalls: number;
+  fence: number;
+}): boolean {
+  if (!input.reason || input.reason === "tool_budget") return false;
+  return input.continuationIndex > 0 && input.workToolCalls === 0 && input.fence <= 1;
+}
+
 /** The bot's active plan, with its verification step, and the verdict for this chain. */
 export async function loadPlanGate(
   deps: PlanToolDeps,
@@ -190,7 +242,7 @@ export function autoPlanInput(
     : AUTO_PLAN_STEP_TITLE;
   return {
     title,
-    summary: "Created automatically: long task without a plan.",
+    summary: AUTO_PLAN_SUMMARY,
     steps: [
       {
         title: AUTO_PLAN_STEP_TITLE,

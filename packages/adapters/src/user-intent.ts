@@ -37,9 +37,20 @@ export function needsAutoPlan(input: {
   requestTexts: readonly string[];
   workToolCalls: number;
   minTools?: number;
+  /** Only the first part of a request gets an automatic plan; later parts follow the chain. */
+  continuationIndex?: number;
+  /** The model used the plan tools in this run (and closed its plan): its plan stands. */
+  planToolUsedThisRun?: boolean;
+  /** The reply is empty or announces a next step that never ran (default: true). */
+  replyUnfinished?: boolean;
+  /** The reply says the whole task is done. */
+  replyClaimsDone?: boolean;
 }): boolean {
+  if ((input.continuationIndex ?? 0) > 0 || input.planToolUsedThisRun) return false;
+  if (input.replyClaimsDone) return false;
   const minTools = input.minTools ?? autoPlanMinTools();
-  if (input.workToolCalls >= minTools) return true;
+  // Many tool calls alone are not a long task: a complete answer after them ends the request.
+  if (input.workToolCalls >= minTools && (input.replyUnfinished ?? true)) return true;
   return (
     input.workToolCalls >= AUTO_PLAN_MIN_TOOLS_FOR_LONG_REQUEST &&
     input.requestTexts.some((text) => looksLikeLongTask(text))
@@ -77,7 +88,7 @@ const STANDBY_CLOSE =
 
 /** A claim that the whole requested job (not a chunk) is finished. */
 const WHOLE_TASK_DONE =
-  /(?:\b(?<!\bpiano\s+(?:di\s+)?)(?<!\bplan\s+)(?:il\s+)?(?:lavoro|task|compito|progetto|incarico)\s+(?:è\s+)?(?:stato\s+)?(?:interamente\s+|completamente\s+)?(?:complet\w+|finit\w+|terminat\w+|conclus\w+)\b|\b(?:tutto|tutti|tutte)\s+(?:è\s+|sono\s+)?(?:stat[oie]\s+)?(?:complet\w+|finit\w+|terminat\w+|fatt[oie])\b|\b100\s*%\s*(?:complet\w+|finit\w+|del\s+lavoro|del\s+progetto|done|complete)|\b(?:the\s+)?(?:whole\s+)?(?:task|job|work|project)\s+is\s+(?:now\s+)?(?:fully\s+)?(?:complete|done|finished)\b|\beverything\s+is\s+(?:now\s+)?(?:done|complete|finished)\b|\ball\s+done\b)/iu;
+  /(?:\b(?<!\bpiano\s+(?:di\s+)?)(?<!\bplan\s+)(?:il\s+)?(?:lavoro|task|compito|progetto|incarico)\s+(?:è\s+)?(?:stato\s+)?(?:interamente\s+|completamente\s+)?(?:complet\w+|finit\w+|terminat\w+|conclus\w+)\b|\b(?:tutto|tutti|tutte)\s+(?:è\s+|sono\s+)?(?:stat[oie]\s+)?(?:complet\w+|finit\w+|terminat\w+|fatt[oie])\b|\b100\s*%\s*(?:complet\w+|finit\w+|del\s+lavoro|del\s+progetto|done|complete)|\b(?:the\s+)?(?:whole\s+)?(?:task|job|work|project)\s+is\s+(?:now\s+)?(?:fully\s+)?(?:complete|done|finished)\b|\beverything\s+is\s+(?:now\s+)?(?:done|complete|finished)\b|\ball\s+done\b|\b(?:tutt[ie]\s+(?:gli\s+obiettivi|le\s+richieste|i\s+punti)|la\s+(?:tua\s+)?richiesta)(?:\s+\p{L}+){0,3}\s+(?:è|sono)\s+(?:stat[aieo]\s+)?(?:complet\w+|soddisfatt\w+|raggiunt\w+|evas\w+)|\ball\s+(?:the\s+)?(?:requested\s+)?(?:goals|requirements)\s+(?:have\s+been|are)\s+(?:met|done|complete\w*))/iu;
 
 /** Words that say only a part was finished ("il blocco corrente è concluso"). */
 const PARTIAL_SCOPE =

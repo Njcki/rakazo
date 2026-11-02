@@ -33,6 +33,7 @@ import {
   continuationMetaText,
   continuationPrompt,
 } from "./continue-later.js";
+import { looksLikeDanglingNarration } from "./final-answer-guard.js";
 import {
   COMPACTION_BATCH_SIZE,
   HISTORY_WINDOW_SIZE,
@@ -41,11 +42,14 @@ import {
 import { maxToolCallsPerTurn, toolCallBudgetExceededMessage } from "./pi-runtime-tools.js";
 import {
   type AutoContinuationReason,
+  answeredInFull,
+  closeAnsweredPlan,
   createAutoPlan,
   decideAutoContinuation,
   hitToolCallBudget,
   isCloseAttempt,
   isGoalUnfinished,
+  isNoProgressPart,
   latestVerifyNotes,
   loadPlanGate,
   planProgressLine,
@@ -1002,9 +1006,29 @@ async function applyCompletionGate(ctx: RunContext) {
     const asides = messages.filter((m) => m.aside).map((m) => m.text);
     const inheritedGoal = messages.some((m) => m.inherited);
     const firstVerdict = verdict;
-    // Multi-step work without a plan of this request gets one, so the gate applies to it too.
+    const replyUnfinished = !replyText.trim() || looksLikeDanglingNarration(replyText);
+    const replyClaimsDone = closesWholeJob(replyText);
+    // A complete final answer delivers the request even with an automatic plan (or only its
+    // verification) left open: the plan is closed and the request ends.
+    let answered = false;
+    if (!reason && answeredInFull({ verdict, plan, replyText })) {
+      answered = true;
+      await closeAnsweredPlan(deps, { spaceId: run.spaceId, botId: bot.id });
+      verdict = { open: false, why: "all_closed" };
+    }
+    // Unfinished multi-step work without a plan of this request gets one, so the gate applies
+    // to it too. A complete answer, a later part, or a plan the model closed itself never do.
     if (!reason && !verdict.open && (verdict.why === "no_plan" || verdict.why === "stale")) {
-      if (needsAutoPlan({ requestTexts: goalTexts, workToolCalls: continuation.workToolCalls })) {
+      if (
+        needsAutoPlan({
+          requestTexts: goalTexts,
+          workToolCalls: continuation.workToolCalls,
+          continuationIndex: run.continuationIndex,
+          planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+          replyUnfinished,
+          replyClaimsDone,
+        })
+      ) {
         ({ plan, verdict } = await createAutoPlan(deps, {
           spaceId: run.spaceId,
           botId: bot.id,
@@ -1072,6 +1096,15 @@ async function applyCompletionGate(ctx: RunContext) {
       }).catch(() => undefined);
       if (created?.plan) ({ plan, verdict } = created);
     }
+    // A part that did no real work ends the chain at once (not after three repeats).
+    const noProgress = isNoProgressPart({
+      reason,
+      continuationIndex: run.continuationIndex,
+      workToolCalls: continuation.workToolCalls,
+      fence: ctx.fence,
+    });
+    const gateReason = reason;
+    if (noProgress) reason = undefined;
     const decision = decideAutoContinuation({
       runId,
       chain: run,
@@ -1093,13 +1126,16 @@ async function applyCompletionGate(ctx: RunContext) {
       continuationIndex: run.continuationIndex,
       fence: ctx.fence,
       trigger: run.trigger,
-      reason: reason ?? "none",
-      outcome:
-        decision.kind === "continue"
+      reason: gateReason ?? "none",
+      outcome: noProgress
+        ? "no_progress"
+        : decision.kind === "continue"
           ? "scheduled"
           : decision.kind === "refused"
             ? decision.refused.state
             : "ended",
+      answeredInFull: answered,
+      replyUnfinished,
       nextIndex:
         decision.kind === "continue"
           ? decision.request.index

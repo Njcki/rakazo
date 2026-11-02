@@ -13,6 +13,8 @@ import {
   decideContinuation,
 } from "./continue-later.js";
 import {
+  AUTO_PLAN_STEP_TITLE,
+  createPlanFromTool,
   ensureVerifyStep,
   getActivePlan,
   isVerifyStepTitle,
@@ -22,7 +24,11 @@ import {
 } from "./plan-tools.js";
 import type { ContinueLaterRequest } from "./run-context.js";
 
-export type AutoContinuationReason = "plan_open" | "verification_pending" | "tool_budget";
+export type AutoContinuationReason =
+  | "plan_open"
+  | "verification_pending"
+  | "tool_budget"
+  | "plan_created";
 
 export type PlanGateVerdict =
   | { open: true; reason: "plan_open" | "verification_pending"; openSteps: PlanStepDto[] }
@@ -152,4 +158,56 @@ export async function loadPlanGate(
   if (!stored || !first.open) return { plan: stored, verdict: first };
   const plan = await ensureVerifyStep(deps, input, stored);
   return { plan, verdict: planGateVerdict({ ...input, plan }) };
+}
+
+/** The plan the platform writes for a long task the model did not plan. */
+export function autoPlanInput(requestTexts: readonly string[]): {
+  title: string;
+  summary: string;
+  steps: { title: string; notes: string }[];
+} {
+  const request = requestTexts.join("\n").replace(/\s+/g, " ").trim();
+  const title = request
+    ? request.slice(0, 80) + (request.length > 80 ? "…" : "")
+    : AUTO_PLAN_STEP_TITLE;
+  return {
+    title,
+    summary: "Created automatically: long task without a plan.",
+    steps: [
+      {
+        title: AUTO_PLAN_STEP_TITLE,
+        notes: `Created automatically. The user's request: ${request.slice(0, 600) || "(see the conversation)"}`,
+      },
+    ],
+  };
+}
+
+/** Writes the automatic plan (replacing a stale one) and returns it with its verdict. */
+export async function createAutoPlan(
+  deps: PlanToolDeps,
+  input: {
+    spaceId: string;
+    botId: string;
+    userId: string;
+    requestTexts: readonly string[];
+    replaceActive: boolean;
+    chainStartedAt: Date;
+  },
+): Promise<{ plan: PlanDto | null; verdict: PlanGateVerdict }> {
+  const created = await createPlanFromTool(deps, {
+    spaceId: input.spaceId,
+    botId: input.botId,
+    userId: input.userId,
+    replaceActive: input.replaceActive,
+    ...autoPlanInput(input.requestTexts),
+  });
+  if ("error" in created) return { plan: null, verdict: { open: false, why: "no_plan" } };
+  return {
+    plan: created.plan,
+    verdict: planGateVerdict({
+      plan: created.plan,
+      chainStartedAt: input.chainStartedAt,
+      planToolUsedThisRun: true,
+    }),
+  };
 }

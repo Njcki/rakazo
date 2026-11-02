@@ -469,6 +469,8 @@ function toAgentTool(
                 ) {
                   throw new Error("ask_user requires two to four unique, non-empty options");
                 }
+                const refusal = host.request.refuseAskUser?.(String(args.question ?? ""), options);
+                if (refusal) throw new Error(refusal);
                 host.pausePending = true;
                 host.queue.push({
                   type: "ask",

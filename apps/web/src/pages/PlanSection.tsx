@@ -37,9 +37,13 @@ function normalizeStepTitle(title: string) {
     .trim();
 }
 
+/** The work step of a plan the platform created for a long task. */
+const AUTO_PLAN_STEP_TITLE = normalizeStepTitle("Complete the requested work");
+
 function StepRow({ step }: { step: AgentPlanStep }) {
   const { t } = useLingui();
   const verifyStep = VERIFY_STEP_TITLES.has(normalizeStepTitle(step.title));
+  const autoStep = normalizeStepTitle(step.title) === AUTO_PLAN_STEP_TITLE;
   const meta = STATUS_ICON[step.status] ?? STATUS_ICON.todo;
   const Icon = meta.icon;
   const doneLike = step.status === "done" || step.status === "skipped";
@@ -68,7 +72,11 @@ function StepRow({ step }: { step: AgentPlanStep }) {
             }`}
             dir="auto"
           >
-            {verifyStep ? t`Verify all requested goals are met` : step.title}
+            {verifyStep
+              ? t`Verify all requested goals are met`
+              : autoStep
+                ? t`Complete the requested work`
+                : step.title}
           </span>
         </div>
         {step.blockedBy.length > 0 && !verifyStep ? (

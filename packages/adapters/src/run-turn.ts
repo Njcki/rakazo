@@ -41,6 +41,7 @@ import {
 import { maxToolCallsPerTurn, toolCallBudgetExceededMessage } from "./pi-runtime-tools.js";
 import {
   type AutoContinuationReason,
+  createAutoPlan,
   decideAutoContinuation,
   hitToolCallBudget,
   loadPlanGate,
@@ -82,6 +83,7 @@ import {
 } from "./run-replies.js";
 import { scheduleRoutineRetry } from "./run-routines.js";
 import { applyTool } from "./run-tools.js";
+import { currentRequestUserTexts, chainStartedAt as requestStartedAt } from "./run-tools-plan.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
 import {
   peerReplyWithoutSentinel,
@@ -91,6 +93,11 @@ import {
 import { takeoverCheckpointOf } from "./takeover-resume.js";
 import { appendToolCompletionAudit, toolCompletionFromResult } from "./tool-completion-audit.js";
 import { advanceToolCallLoopGuard, loopGuardStopText } from "./tool-loop.js";
+import {
+  replyMentionsComputerFallback,
+  userComputerFallbackNotice,
+} from "./user-computer-fallback.js";
+import { needsAutoPlan } from "./user-intent.js";
 import {
   assistantTurnSeparator,
   botMessageOutcomeFromMidTurn,
@@ -733,6 +740,7 @@ export async function completeRun(ctx: RunContext) {
   }
   flushPendingTools(reply);
   await applyCompletionGate(ctx);
+  appendUserComputerFallbackNotice(ctx);
   const continuation = await continuationForCompletion(ctx);
   // The progress summary is the reply of a turn that continues; runtimes that do not end the
   // turn on continue_later (or a reply that dropped it) still show it.
@@ -930,20 +938,28 @@ async function applyCompletionGate(ctx: RunContext) {
     )
       ? "tool_budget"
       : undefined;
-    const chainStartedAt = run.continuationRootRunId
-      ? ((
-          await deps.prisma.run.findUnique({
-            where: { id: run.continuationRootRunId },
-            select: { createdAt: true },
-          })
-        )?.createdAt ?? run.createdAt)
-      : run.createdAt;
-    const { plan, verdict } = await loadPlanGate(deps, {
+    const chainStartedAt = await requestStartedAt(ctx);
+    let { plan, verdict } = await loadPlanGate(deps, {
       spaceId: run.spaceId,
       botId: bot.id,
       chainStartedAt,
       planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
     });
+    // Multi-step work without a plan of this request gets one, so the gate applies to it too.
+    if (!reason && !verdict.open && (verdict.why === "no_plan" || verdict.why === "stale")) {
+      const requestTexts = await currentRequestUserTexts(ctx);
+      if (needsAutoPlan({ requestTexts, workToolCalls: continuation.workToolCalls })) {
+        ({ plan, verdict } = await createAutoPlan(deps, {
+          spaceId: run.spaceId,
+          botId: bot.id,
+          userId: run.userId,
+          requestTexts,
+          replaceActive: verdict.why === "stale",
+          chainStartedAt,
+        }));
+        if (verdict.open) reason = "plan_created";
+      }
+    }
     if (!reason && verdict.open) reason = verdict.reason;
     const decision = decideAutoContinuation({
       runId,
@@ -968,6 +984,27 @@ async function applyCompletionGate(ctx: RunContext) {
   } catch (error) {
     getLogger().warn("run.completion_gate failed", { runId, error: sanitizedError(error) });
   }
+}
+
+/**
+ * The run worked on the bot's own computer because the user's was offline: the reply says so
+ * once, in the reply's language, unless the model already did.
+ */
+function appendUserComputerFallbackNotice(ctx: RunContext) {
+  const fallback = ctx.state.userComputerFallback;
+  const { reply } = ctx.state;
+  if (!fallback || ctx.state.handedOff || reply.explicitNoResponse) return;
+  const used =
+    fallback.triggeredThisRun ||
+    (fallback.instructionsWantIt &&
+      fallback.state !== "connected" &&
+      ctx.run.continuationIndex === 0 &&
+      ctx.state.continuation.workToolCalls > 0);
+  if (!used || replyMentionsComputerFallback(reply.assembled)) return;
+  const notice = userComputerFallbackNotice(reply.assembled);
+  const separator = assistantTurnSeparator(reply.assembled, notice);
+  reply.assembled += separator + notice;
+  reply.currentTextSegment += separator + notice;
 }
 
 /** The accepted continue_later request of this run, ready for finalizeRun. */

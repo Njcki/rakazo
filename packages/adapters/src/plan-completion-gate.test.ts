@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoPlanInput,
   decideAutoContinuation,
   hitToolCallBudget,
   planGateVerdict,
@@ -150,5 +151,15 @@ describe("hitToolCallBudget", () => {
     expect(hitToolCallBudget("x STOP", 100, "STOP")).toBe(true);
     expect(hitToolCallBudget("x STOP", 0, "STOP")).toBe(false);
     expect(hitToolCallBudget("x", 100, "STOP")).toBe(false);
+  });
+});
+
+describe("autoPlanInput", () => {
+  it("titles the plan with the request and gives it one work step", () => {
+    const input = autoPlanInput(["Prosegui fino al 100%"]);
+    expect(input.title).toBe("Prosegui fino al 100%");
+    expect(input.steps).toHaveLength(1);
+    expect(input.steps[0]!.notes).toContain("Prosegui fino al 100%");
+    expect(autoPlanInput(["x".repeat(200)]).title.length).toBeLessThanOrEqual(81);
   });
 });

@@ -1539,6 +1539,10 @@ msgstr "Compact"
 msgid "Complete"
 msgstr "Complete"
 
+#: src/pages/PlanSection.tsx
+msgid "Complete the requested work"
+msgstr "Complete the requested work"
+
 #: src/components/SubagentCard.tsx
 #: src/pages/PlanSection.tsx
 msgid "Completed"

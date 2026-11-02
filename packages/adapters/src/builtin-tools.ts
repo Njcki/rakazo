@@ -1228,7 +1228,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "plan_complete",
     description:
-      "Close the active plan when every step is done or skipped. Rejects if open steps remain unless force=true with reason (user cancelled remaining work). Call this before telling the user the overall multi-step task is finished.",
+      "Close the active plan when every step is done or skipped. Rejects if open steps remain unless force=true with reason, which is accepted only when the user asked to stop, cancel or change the work (or every open step is blocked). Call this before telling the user the overall multi-step task is finished.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1240,7 +1240,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "plan_cancel",
     description:
-      "Cancel the active plan (user abandoned the work). Prefer plan_complete when steps are done.",
+      "Cancel the active plan when the user asked to stop, cancel or change the work; refused otherwise while steps are open (keep working or call continue_later). Prefer plan_complete when steps are done.",
     inputSchema: {
       type: "object",
       properties: {

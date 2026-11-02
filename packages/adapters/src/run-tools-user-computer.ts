@@ -17,6 +17,7 @@ import {
   observeShellCommand,
   SHELL_STILL_RUNNING_NOTICE,
 } from "./shell-command-stream.js";
+import { USER_COMPUTER_UNAVAILABLE_FALLBACK } from "./user-computer-fallback.js";
 
 export const USER_COMPUTER_SHELL_TOOL = "user_computer_shell";
 export const USER_COMPUTER_OBSERVE_TOOL = "user_computer_observe";
@@ -34,8 +35,10 @@ export const USER_COMPUTER_TOOLS: ReadonlySet<string> = new Set([
 /** Whether the run's owner has their desktop connected, or paired but offline. */
 export type UserComputerState = "connected" | "offline" | undefined;
 
-const USER_COMPUTER_UNAVAILABLE =
-  "The user's computer is not connected. Ask them to open the Rakazo desktop app.";
+function userComputerUnavailable(ctx: RunContext) {
+  if (ctx.state.userComputerFallback) ctx.state.userComputerFallback.triggeredThisRun = true;
+  return { error: USER_COMPUTER_UNAVAILABLE_FALLBACK };
+}
 
 /**
  * Whose own computer this run may reach: the person whose message started it, when they own the
@@ -152,7 +155,7 @@ async function connectedUserComputer(ctx: RunContext) {
 export async function userComputerShell(ctx: RunContext, call: ToolCall) {
   const { bot, runId } = ctx;
   const connected = await connectedUserComputer(ctx);
-  if (!connected) return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
+  if (!connected) return call.finish(userComputerUnavailable(ctx));
   const { owner, devices, deviceId } = connected;
   const { signal } = ctx.context;
   const command = String(call.args.command ?? "");
@@ -235,7 +238,7 @@ type ScreenRequest =
 async function userComputerScreen(ctx: RunContext, call: ToolCall, request: ScreenRequest) {
   if (!request.app) return call.finish({ error: "app must name an app on the user's computer." });
   const connected = await connectedUserComputer(ctx);
-  if (!connected) return call.finish({ error: USER_COMPUTER_UNAVAILABLE });
+  if (!connected) return call.finish(userComputerUnavailable(ctx));
   const { owner, devices, deviceId } = connected;
   const { signal } = ctx.context;
   try {

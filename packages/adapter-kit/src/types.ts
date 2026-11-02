@@ -563,6 +563,8 @@ export interface AgentRunRequest {
   turnCheckpoint?: string;
   /** Cheap per-call capture; serialize only when persisting that call’s human pause. */
   onCheckpoint?: (capture: () => string, executionId: string) => Promise<void>;
+  /** A reason to refuse this ask_user instead of pausing (the model gets it as the tool error). */
+  refuseAskUser?: (question: string, options: string[]) => string | undefined;
   /** Human answer or takeover outcome for the pending interaction. Never secret input. */
   resumeToolResult?: { content: Array<{ type: "text"; text: string }> };
   script?: ScriptedTurn[];

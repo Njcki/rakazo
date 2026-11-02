@@ -226,6 +226,10 @@ import {
 } from "./thread-artifacts.js";
 import { loadAgentTicketContext } from "./ticket-context.js";
 import { appendToolCompletionAudit } from "./tool-completion-audit.js";
+import {
+  instructionsWantUserComputer,
+  refuseAskUserAboutComputer,
+} from "./user-computer-fallback.js";
 import { userProgressClientNonce } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
 
@@ -1282,6 +1286,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             planToolUsedThisRun: false,
             planCreateNudged: false,
           },
+          userComputerFallback: {
+            state: userComputer,
+            instructionsWantIt: instructionsWantUserComputer(bot.instructions),
+            triggeredThisRun: false,
+          },
           continuation: {
             settings: builtins.some((tool) => tool.name === CONTINUE_LATER_TOOL)
               ? continueLater
@@ -1791,6 +1800,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 disabledBuiltinTools,
                 offeredFleetTools: offeredFleetTools(builtins),
                 userComputer,
+                userComputerFallback:
+                  userComputer !== "connected" && instructionsWantUserComputer(bot.instructions),
               })
                 .filter((instruction): instruction is string => Boolean(instruction))
                 .join("\n\n"),
@@ -1890,6 +1901,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
+              refuseAskUser: (question, options) =>
+                refuseAskUserAboutComputer(ctx, question, options),
               executeTool: scripted
                 ? undefined
                 : (name, args, executionId, route, observer) =>

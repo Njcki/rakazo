@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { createAutoPlan } from "./plan-completion-gate.js";
 import {
+  AUTO_PLAN_STEP_TITLE,
   addPlanStepFromTool,
+  cancelPlanFromTool,
   completePlanFromTool,
   createPlanFromTool,
   isVerifyStepTitle,
@@ -244,5 +247,66 @@ describe("plan verification step", () => {
     expect(status.plan?.steps.map((s) => s.title)).toEqual(["Only", PLAN_VERIFY_STEP_TITLE]);
     const refused = await completePlanFromTool(deps, ids);
     expect("error" in refused).toBe(true);
+  });
+
+  it("forced close and cancel need the user's stop, unless every open step is blocked", async () => {
+    const { deps } = fakePrisma();
+    await planWithTwoSteps(deps);
+    const no = async () => false;
+    const yes = async () => true;
+    const forced = await completePlanFromTool(deps, {
+      ...ids,
+      force: true,
+      reason: "enough",
+      mayAbandon: no,
+    });
+    expect("error" in forced && forced.error).toContain("did not ask to stop");
+    const cancelled = await cancelPlanFromTool(deps, { ...ids, reason: "enough", mayAbandon: no });
+    expect("error" in cancelled && cancelled.error).toContain("continue_later");
+
+    await updatePlanStepFromTool(deps, {
+      ...ids,
+      index: 1,
+      status: "blocked",
+      notes: "needs the user's key",
+    });
+    await updatePlanStepFromTool(deps, {
+      ...ids,
+      index: 2,
+      status: "blocked",
+      notes: "needs the user's key",
+    });
+    const blocked = await completePlanFromTool(deps, {
+      ...ids,
+      force: true,
+      reason: "blocked",
+      mayAbandon: no,
+    });
+    expect("plan" in blocked && blocked.plan?.status).toBe("completed");
+
+    await planWithTwoSteps(deps);
+    const asked = await cancelPlanFromTool(deps, {
+      ...ids,
+      reason: "user said stop",
+      mayAbandon: yes,
+    });
+    expect("plan" in asked && asked.plan.status).toBe("cancelled");
+  });
+
+  it("the automatic plan's step is a normal work step", () => {
+    expect(isVerifyStepTitle(AUTO_PLAN_STEP_TITLE)).toBe(false);
+  });
+
+  it("the platform's automatic plan keeps the run going until verified", async () => {
+    const { deps } = fakePrisma();
+    const { plan, verdict } = await createAutoPlan(deps, {
+      ...ids,
+      userId: "u1",
+      requestTexts: ["Prosegui fino al 100%"],
+      replaceActive: false,
+      chainStartedAt: new Date(0),
+    });
+    expect(plan?.steps.map((s) => s.title)).toEqual([AUTO_PLAN_STEP_TITLE, PLAN_VERIFY_STEP_TITLE]);
+    expect(verdict.open).toBe(true);
   });
 });

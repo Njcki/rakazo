@@ -193,7 +193,7 @@ export function normalizePercent(value: unknown): number | null {
 export function continuationPrompt(input: {
   index: number;
   max: number;
-  auto?: "plan_open" | "verification_pending" | "tool_budget";
+  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created";
 }): string {
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
@@ -211,6 +211,8 @@ const AUTO_CONTINUATION_NOTES = {
     "The previous part ended while your plan still had open steps, so the platform continued it automatically. Call plan_status, then keep working on the next open step. The task is finished only when every step is closed and the final verification step is ticked after checking the user's original request. If you truly need the user, use ask_user; if the user cancelled the rest, close the plan with plan_complete force=true and their reason.",
   verification_pending:
     "The previous part ended before the plan's final verification step was ticked, so the platform continued it automatically. Set that step in_progress to get the user's original request, check every requested goal against the real result, and either tick it (verified=true, with evidence) or add and do the missing work.",
+  plan_created:
+    "The previous part did multi-step work without a plan and ended, so the platform created a plan for it and continued automatically. Call plan_status. Replace the generic plan with the real remaining steps (plan_create with replaceActive=true), or, if the work is truly finished, tick its step and then the final verification step after checking the user's original request. Do not stop before that.",
   tool_budget:
     "The previous part stopped at the tool-call limit for one turn, so the platform continued it automatically. Pick up exactly where it stopped.",
 } as const;

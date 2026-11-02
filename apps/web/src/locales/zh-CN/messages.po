@@ -1539,6 +1539,10 @@ msgstr "紧凑"
 msgid "Complete"
 msgstr "完成"
 
+#: src/pages/PlanSection.tsx
+msgid "Complete the requested work"
+msgstr ""
+
 #: src/components/SubagentCard.tsx
 #: src/pages/PlanSection.tsx
 msgid "Completed"

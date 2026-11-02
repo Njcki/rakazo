@@ -1540,6 +1540,10 @@ msgstr "Compatta"
 msgid "Complete"
 msgstr "Completa"
 
+#: src/pages/PlanSection.tsx
+msgid "Complete the requested work"
+msgstr "Completa il lavoro richiesto"
+
 #: src/components/SubagentCard.tsx
 #: src/pages/PlanSection.tsx
 msgid "Completed"

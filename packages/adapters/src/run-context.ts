@@ -147,6 +147,14 @@ export interface ScreenState {
   unchangedVisualStreak: UnchangedVisualStreak;
 }
 
+export interface UserComputerFallbackState {
+  state: "connected" | "offline" | undefined;
+  /** The bot's instructions send work to the user's own machine. */
+  instructionsWantIt: boolean;
+  /** An ask_user about the computer was refused, or a user_computer tool found it gone. */
+  triggeredThisRun: boolean;
+}
+
 /** Patch 0028: plan_* reminder counters for this attempt. */
 export interface PlanReminderState {
   nonPlanToolsSincePlanUpdate: number;
@@ -178,6 +186,8 @@ export interface RunState {
   terminalCheckpointComplete: boolean;
   planReminder: PlanReminderState;
   continuation: ContinuationState;
+  /** The user's computer could not be used, so the run works on its own (user-computer-fallback.ts). */
+  userComputerFallback?: UserComputerFallbackState;
 }
 
 /** The explicit continuation chain (continue_later) as this attempt sees it. */
@@ -202,7 +212,7 @@ export interface ContinueLaterRequest {
   repeats: number;
   percent: number | null;
   /** Scheduled by the completion gate, not by the model (plan-completion-gate.ts). */
-  auto?: "plan_open" | "verification_pending" | "tool_budget";
+  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created";
 }
 
 export interface RunComputerContext {

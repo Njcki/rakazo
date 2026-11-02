@@ -1539,6 +1539,10 @@ msgstr "צפוף"
 msgid "Complete"
 msgstr "הושלם"
 
+#: src/pages/PlanSection.tsx
+msgid "Complete the requested work"
+msgstr ""
+
 #: src/components/SubagentCard.tsx
 #: src/pages/PlanSection.tsx
 msgid "Completed"

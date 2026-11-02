@@ -1539,6 +1539,10 @@ msgstr ""
 msgid "Complete"
 msgstr "Terminé"
 
+#: src/pages/PlanSection.tsx
+msgid "Complete the requested work"
+msgstr ""
+
 #: src/components/SubagentCard.tsx
 #: src/pages/PlanSection.tsx
 msgid "Completed"

@@ -9,6 +9,7 @@ import {
 } from "./plan-tools.js";
 import type { RunContext } from "./run-context.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
+import { asksToStopOrChange } from "./user-intent.js";
 
 function blocksText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return typeof blocks === "string" ? blocks : "";
@@ -66,6 +67,78 @@ export async function loadOriginalRequest(ctx: RunContext): Promise<OriginalRequ
     // The checklist falls back to "re-read the conversation".
   }
   return undefined;
+}
+
+/** When the current request (with its automatic continuations) started. */
+export async function chainStartedAt(ctx: RunContext): Promise<Date> {
+  const { deps, run } = ctx;
+  if (!run.continuationRootRunId) return run.createdAt;
+  const root = await deps.prisma.run
+    .findUnique({ where: { id: run.continuationRootRunId }, select: { createdAt: true } })
+    .catch(() => null);
+  return root?.createdAt ?? run.createdAt;
+}
+
+/**
+ * The user's own words in the current request: the message that started it and every user
+ * message written since (steering included), plus a routine's prompt.
+ */
+export async function currentRequestUserTexts(ctx: RunContext): Promise<string[]> {
+  const { deps, run } = ctx;
+  const texts: string[] = [];
+  try {
+    const since = await chainStartedAt(ctx);
+    const source = run.sourceMessageId
+      ? await deps.prisma.message.findUnique({
+          where: { id: run.sourceMessageId },
+          select: { blocks: true, role: true },
+        })
+      : null;
+    if (source?.role === "user") texts.push(blocksText(source.blocks));
+    const later = await deps.prisma.message.findMany({
+      where: {
+        threadId: run.threadId,
+        role: "user",
+        createdAt: { gte: since },
+        ...(run.sourceMessageId ? { id: { not: run.sourceMessageId } } : {}),
+      },
+      orderBy: { seq: "asc" },
+      take: 20,
+      select: { blocks: true },
+    });
+    texts.push(...later.map((row) => blocksText(row.blocks)));
+    if (run.routineId) {
+      const routine = await deps.prisma.routine.findUnique({
+        where: { id: run.routineId },
+        select: { prompt: true },
+      });
+      if (routine?.prompt) texts.push(routine.prompt);
+    }
+  } catch {
+    // Unknown wording counts as "not asked".
+  }
+  return texts.filter((text) => text.trim());
+}
+
+/**
+ * Whether the user asked to stop, cancel or change the work: in their messages of this request,
+ * or by pressing Stop on the run just before it.
+ */
+export async function userAskedToStopOrChange(ctx: RunContext): Promise<boolean> {
+  const { deps, run } = ctx;
+  const texts = await currentRequestUserTexts(ctx);
+  if (texts.some((text) => asksToStopOrChange(text))) return true;
+  try {
+    const since = await chainStartedAt(ctx);
+    const previous = await deps.prisma.run.findFirst({
+      where: { threadId: run.threadId, botId: run.botId, createdAt: { lt: since } },
+      orderBy: { createdAt: "desc" },
+      select: { status: true },
+    });
+    return previous?.status === "cancelled";
+  } catch {
+    return false;
+  }
 }
 
 /** Piano / plan_* tools (NK 0013/0017/0028). */
@@ -144,6 +217,7 @@ export const planTools: ToolHandlers = {
         botId: bot.id,
         force: Boolean(args.force),
         reason: args.reason !== undefined ? String(args.reason) : undefined,
+        mayAbandon: () => userAskedToStopOrChange(ctx),
       }),
     );
   },
@@ -156,6 +230,7 @@ export const planTools: ToolHandlers = {
         spaceId: run.spaceId,
         botId: bot.id,
         reason: args.reason !== undefined ? String(args.reason) : undefined,
+        mayAbandon: () => userAskedToStopOrChange(ctx),
       }),
     );
   },

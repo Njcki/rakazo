@@ -20,6 +20,8 @@ const MAX_STEPS = 40;
 export const PLAN_VERIFY_STEP_TITLE = "Verify all requested goals are met";
 export const PLAN_VERIFY_STEP_TITLE_IT =
   "Verifica che tutti gli obiettivi richiesti siano raggiunti";
+/** The single work step of a plan the platform creates for a long task (plan-completion-gate.ts). */
+export const AUTO_PLAN_STEP_TITLE = "Complete the requested work";
 const PLAN_VERIFY_STEP_NOTES =
   "Added automatically. Before ticking: set this step in_progress to get the user's original request, check every requested goal against what is actually done, then set done with verified=true and notes listing each goal and its evidence. / Aggiunto automaticamente: va spuntato solo dopo aver verificato ogni obiettivo della richiesta originale.";
 const VERIFY_NOTES_MIN = 20;
@@ -707,9 +709,37 @@ export async function planStatusFromTool(
   return { plan: ensured, guidance: ensured.guidance };
 }
 
+/**
+ * Open work may be dropped only when its steps are all marked blocked, or the user asked to stop,
+ * cancel or change it (mayAbandon, given for model calls).
+ */
+async function abandonRefusal(
+  open: readonly PlanStepDto[],
+  mayAbandon: (() => Promise<boolean>) | undefined,
+): Promise<string | undefined> {
+  if (open.length === 0 || !mayAbandon) return undefined;
+  const work = open.filter((step) => !isVerifyStepTitle(step.title));
+  if (work.length > 0 && work.every((step) => step.status === "blocked")) return undefined;
+  if (await mayAbandon().catch(() => false)) return undefined;
+  return `Not closed: the user did not ask to stop, cancel or change this work, so the open steps (${open
+    .map((step) => `${step.index}:${step.status}`)
+    .join(
+      ", ",
+    )}) must be done. Keep working on the next open step now; if it will not fit in this turn, call continue_later with a progress summary. Mark a step blocked (with notes) only when it truly cannot proceed without the user.`;
+}
+
+export const PLAN_ABANDON_REFUSED_PREFIX = "Not closed: the user did not ask to stop";
+
 export async function completePlanFromTool(
   deps: PlanToolDeps,
-  input: { spaceId: string; botId: string; force?: boolean; reason?: string },
+  input: {
+    spaceId: string;
+    botId: string;
+    force?: boolean;
+    reason?: string;
+    /** Model calls: whether the user asked to stop, cancel or change the work. */
+    mayAbandon?: () => Promise<boolean>;
+  },
 ): Promise<{ plan: PlanDto } | { error: string; plan?: PlanDto }> {
   const stored = await getActivePlan(deps, input);
   if (!stored) return { error: "No active plan to complete." };
@@ -736,6 +766,8 @@ export async function completePlanFromTool(
         plan,
       };
     }
+    const refused = await abandonRefusal(open, input.mayAbandon);
+    if (refused) return { error: refused, plan };
   }
   const row = await deps.prisma.agentPlan.update({
     where: { id: plan.id },
@@ -753,10 +785,21 @@ export async function completePlanFromTool(
 
 export async function cancelPlanFromTool(
   deps: PlanToolDeps,
-  input: { spaceId: string; botId: string; reason?: string },
+  input: {
+    spaceId: string;
+    botId: string;
+    reason?: string;
+    /** Model calls: whether the user asked to stop, cancel or change the work. */
+    mayAbandon?: () => Promise<boolean>;
+  },
 ): Promise<{ plan: PlanDto } | { error: string }> {
   const plan = await getActivePlan(deps, input);
   if (!plan) return { error: "No active plan to cancel." };
+  const refused = await abandonRefusal(
+    plan.steps.filter((s) => openStatuses(s.status)),
+    input.mayAbandon,
+  );
+  if (refused) return { error: refused };
   const reason = (input.reason ?? "").trim();
   const row = await deps.prisma.agentPlan.update({
     where: { id: plan.id },

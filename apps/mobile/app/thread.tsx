@@ -2,6 +2,7 @@ import { isRetryableError } from "@rakazo/core";
 import { useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ThreadErrorBoundary } from "../components/thread/thread-error-boundary";
 import { Thread } from "../components/thread/thread-screen";
 import { currentApiBase, selectedSpaceId, selectSpace } from "../lib/api";
 import { t, useI18n } from "../lib/i18n";
@@ -114,7 +115,11 @@ export default function ThreadRoute() {
       <>
         {owner?.generation !== generation ? <ActivityIndicator color={tokens.foreground} /> : null}
         <View style={{ flex: 1, display: owner?.generation === generation ? "flex" : "none" }}>
-          {owner ? <Thread key={owner.key} sessionEpoch={ready} userId={owner.userId} /> : null}
+          {owner ? (
+            <ThreadErrorBoundary key={owner.key}>
+              <Thread sessionEpoch={ready} userId={owner.userId} />
+            </ThreadErrorBoundary>
+          ) : null}
         </View>
       </>
     );

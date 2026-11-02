@@ -2,6 +2,14 @@
 
 Neutral notes for the public `android-app-onto-rebase` branch (package `com.rakazo.fork`). Personal install package and VPS hostnames stay out of this file.
 
+## 1.0.30 (vc30) — 2026-11-02
+
+- A render error in a chat no longer replaces the whole app with a full-screen "Try again": the chat has its own error boundary that remounts it right away and then with backoff (0.4 s → 10 s), keeps the conversation (it lives outside the tree), and shows only a small inline note. The manual retry appears only after 3 failures in a minute.
+- The app-wide boundary also retries on its own before showing the retry screen.
+- Render failures are kept on the device (last 10, stack + component stack); "Copy details" copies them for a bug report, because a release build without a crash-reporting DSN otherwise loses them.
+- Automatic-continuation status line from the server meta block (`continuation {state,index,max,percent}`), with the same wording as the web and a "Stop" button on the latest scheduled continuation.
+- Italian strings for all of the above.
+
 ## 1.0.27 (vc27) — 2026-10-27
 
 Port of local Android custom features onto the rebase tip (`rebase/onto-upstream-main`):

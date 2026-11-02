@@ -20,6 +20,7 @@ import { mobileTokens } from "../../lib/appearance";
 import type { MobileArtifactTarget } from "../../lib/artifact-open";
 import { openMobileArtifact } from "../../lib/artifact-open";
 import { plainAskTitle } from "../../lib/ask-title";
+import { continuationOf } from "../../lib/continuation";
 import { t, useI18n } from "../../lib/i18n";
 import { isInlineImageMimeType } from "../../lib/inline-image";
 import { messagePresentationSegments } from "../../lib/message-presentation";
@@ -36,15 +37,16 @@ import { BotAvatar } from "../bot-avatar";
 import { MessageMentions } from "../bot-mention";
 import { ChoiceCard } from "../ChoiceCard";
 import { ComputerCard } from "../ComputerCard";
+import { ChartBlockView } from "../chart-block";
 import type { ImageArtifactPreviewTarget } from "../image-artifact-viewer";
 import { InlineImageAttachment } from "../inline-image-attachment";
 import { InstructionUndo } from "../instruction-undo";
 import { McpApprovalCard } from "../McpApprovalCard";
 import type { MarkdownArtifactPreviewTarget } from "../markdown-artifact-preview";
 import { MessageCaption } from "../message-caption";
-import { ChartBlockView } from "../chart-block";
 import { NativeSymbol } from "../native-symbol";
 import { AskBlock } from "./ask-block";
+import { ContinuationLine } from "./continuation-line";
 import type { MessageRowActions } from "./message-row";
 import { isSpecialMessageBlock, SpecialMessageCard } from "./special-message-card";
 
@@ -502,6 +504,44 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
             onAccessibilityAction={actionProps.onAccessibilityAction}
           />
         ))}
+      </View>
+    );
+  }
+  const continuationAt = message.blocks.findIndex((block) => continuationOf(block));
+  const continuation =
+    continuationAt >= 0 ? continuationOf(message.blocks[continuationAt]!) : undefined;
+  if (continuation) {
+    const rest = {
+      ...message,
+      blocks: message.blocks.filter((_, index) => index !== continuationAt),
+    };
+    return (
+      <View style={{ maxWidth: "100%", gap: 6 }}>
+        {rest.blocks.length > 0 ? (
+          <MessageBubbleContent
+            botId={botId}
+            botName={botName}
+            showBotSenderName={showBotSenderName}
+            bots={bots}
+            groupId={groupId}
+            message={rest}
+            members={members}
+            canAnswer={canAnswer}
+            canDismiss={canDismiss}
+            onAnswer={onAnswer}
+            onOpenComputer={onOpenComputer}
+            onChoiceDismissed={onChoiceDismissed}
+            onPreviewMarkdown={onPreviewMarkdown}
+            onPreviewImage={onPreviewImage}
+            peerReplies={peerReplies}
+            onTogglePeerReplies={onTogglePeerReplies}
+            onOpenPeerChat={onOpenPeerChat}
+            actionProps={actionProps}
+            doubleTapSurface={doubleTapSurface}
+            userBubble={userBubble}
+          />
+        ) : null}
+        <ContinuationLine status={continuation} messageId={message.id} />
       </View>
     );
   }

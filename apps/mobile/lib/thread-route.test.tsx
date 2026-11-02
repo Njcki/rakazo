@@ -32,6 +32,9 @@ vi.mock("react-native", () => ({
   Text: element("span"),
   View: element("div"),
 }));
+vi.mock("../components/thread/thread-error-boundary", () => ({
+  ThreadErrorBoundary: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock("../components/thread/thread-screen", () => ({
   Thread: ({ userId }: { userId: string }) => createElement("main", null, `thread:${userId}`),
 }));

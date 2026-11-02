@@ -18,23 +18,24 @@ import { Platform, View } from "react-native";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { readableGutters } from "../../lib/adaptive-layout";
-import { rpc, type MobileMessage } from "../../lib/api";
+import { type MobileMessage, rpc } from "../../lib/api";
 import { useAppForeground } from "../../lib/app-foreground";
 import { mobileTokens } from "../../lib/appearance";
 import type { MobileArtifactTarget } from "../../lib/artifact-open";
 import { useCallSession } from "../../lib/call-session";
+import { ContinuationControlContext } from "../../lib/continuation";
 import { cronLabels } from "../../lib/cron";
 import { useI18n } from "../../lib/i18n";
 import { useKeyboardLayout } from "../../lib/keyboard-layout";
 import { useThemedStyles } from "../../lib/native";
+import { reconcileOutgoing } from "../../lib/outgoing-reconcile";
 import { useInboxBot } from "../../lib/search-inbox";
 import { useSplitView } from "../../lib/split-view";
 import { useThreadAttachments } from "../../lib/thread-attachments";
 import { useThreadBots } from "../../lib/thread-bots";
 import { threadHeaderClearance, threadHeaderFloats } from "../../lib/thread-edges";
-import { useThreadFeedback } from "../../lib/thread-feedback";
 import type { SendAttempt } from "../../lib/thread-feedback";
-import { reconcileOutgoing } from "../../lib/outgoing-reconcile";
+import { useThreadFeedback } from "../../lib/thread-feedback";
 import { useThreadFocus } from "../../lib/thread-focus";
 import { useThreadSnapshot } from "../../lib/thread-history";
 import { threadKeyboardOffset } from "../../lib/thread-keyboard-offset";
@@ -405,6 +406,15 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     // The voice hook below owns bot switching; a send only switches after this render.
     openBotChat: (target, ring) => openBotChat(target, ring),
   });
+  const latestMessageId = threadMessages.at(-1)?.id;
+  // The stop action changes every render; the status lines only need the latest one.
+  const stopRef = useRef(composer.stop);
+  stopRef.current = composer.stop;
+  const stopContinuation = useCallback(() => stopRef.current(), []);
+  const continuationControl = useMemo(
+    () => ({ latestMessageId, stop: stopContinuation }),
+    [latestMessageId, stopContinuation],
+  );
   const { replyTarget, setReplyTarget, replyQuote, setReplyQuote, quoteTarget, setQuoteTarget } =
     composer;
 
@@ -583,24 +593,26 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
           paddingRight: 20 + columnInsets.right,
         }}
       >
-        <ThreadMessageList
-          scroll={scroll}
-          pinnedListHandlers={paging.pinnedListHandlers}
-          threadKey={threadKey}
-          headerClearance={headerClearance}
-          bottomInset={bottomInset}
-          visibleMessages={threadMessages}
-          liveItems={liveItems}
-          renderItem={renderItem}
-          renderMessageRow={renderMessageRow}
-          messageKey={outgoing.keyOf}
-          loadEarlierControl={loadEarlierControl}
-          failedSendBubbles={failedSendBubbles}
-          errorNotice={errorNotice}
-          workingFooter={workingFooter}
-          loadingNewer={paging.loadingNewer}
-          showLatest={showLatest}
-        />
+        <ContinuationControlContext.Provider value={continuationControl}>
+          <ThreadMessageList
+            scroll={scroll}
+            pinnedListHandlers={paging.pinnedListHandlers}
+            threadKey={threadKey}
+            headerClearance={headerClearance}
+            bottomInset={bottomInset}
+            visibleMessages={threadMessages}
+            liveItems={liveItems}
+            renderItem={renderItem}
+            renderMessageRow={renderMessageRow}
+            messageKey={outgoing.keyOf}
+            loadEarlierControl={loadEarlierControl}
+            failedSendBubbles={failedSendBubbles}
+            errorNotice={errorNotice}
+            workingFooter={workingFooter}
+            loadingNewer={paging.loadingNewer}
+            showLatest={showLatest}
+          />
+        </ContinuationControlContext.Provider>
         <ThreadFetchErrorNotice error={error} showingSaved={showingSaved} />
         {/* Shrinks (the suggestion lists scroll) so the input and Send stay above the keyboard. */}
         <ThreadComposerDock

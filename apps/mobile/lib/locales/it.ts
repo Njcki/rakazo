@@ -4,6 +4,16 @@
  * Placeholder `{nome}` invariati. Tono: tu.
  */
 export const IT_MESSAGES: Record<string, string> = {
+  "Reloading the chat…": "Ricarico la chat…",
+  "The chat keeps hitting an error. Retrying…": "La chat continua a dare errore. Riprovo…",
+  "The chat hit an error and reloaded.": "La chat ha avuto un errore e si è ricaricata.",
+  "Copy details": "Copia dettagli",
+  "Continuing automatically ({index}/{max})": "Continua automaticamente ({index}/{max})",
+  "Continuing automatically ({index}/{max}) · {percent}%": "Continua automaticamente ({index}/{max}) · {percent}%",
+  "Automatic continuation stopped: limit reached ({max})": "Continuazione automatica interrotta: limite raggiunto ({max})",
+  "Automatic continuation stopped: no progress": "Continuazione automatica interrotta: nessun progresso",
+  "Automatic continuation skipped: other work is in progress": "Continuazione automatica saltata: c'è altro lavoro in corso",
+  "Automatic continuation stopped": "Continuazione automatica interrotta",
   "Not sent. Tap for options": "Non inviato. Tocca per le opzioni",
   "Image input is not configured for this model.": "L'input di immagini non è configurato per questo modello.",
   "Send as file": "Invia come file",

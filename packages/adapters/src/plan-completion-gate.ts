@@ -25,7 +25,9 @@ import {
 import type { ContinueLaterRequest } from "./run-context.js";
 import {
   AUTO_PLAN_MIN_TOOLS_FOR_LONG_REQUEST,
+  autoPlanMinTools,
   claimsWholeTaskDone,
+  closesWholeJob,
   isStandbyClose,
 } from "./user-intent.js";
 
@@ -35,7 +37,12 @@ export type AutoContinuationReason =
   | "tool_budget"
   | "plan_created"
   /** A part of a long task ended with a stand-by line, or only answered a side question. */
-  | "close_attempt";
+  | "close_attempt"
+  /**
+   * The user asked for the whole job ("fino al 100%"), the bot closed its plan for one batch
+   * and the reply does not say the whole job is done.
+   */
+  | "goal_unfinished";
 
 export type PlanGateVerdict =
   | { open: true; reason: "plan_open" | "verification_pending"; openSteps: PlanStepDto[] }
@@ -250,4 +257,47 @@ export function isCloseAttempt(input: {
   if (claimsWholeTaskDone(text)) return false;
   if (text && isStandbyClose(text)) return true;
   return input.lastUserMessageIsAside && input.workToolCalls < AUTO_PLAN_MIN_TOOLS_FOR_LONG_REQUEST;
+}
+
+/**
+ * Whether a "fino al 100%"-style request ends after one part of the job: the plan is closed
+ * (finished batch, or no plan), real long-task work happened in this request, the user did not
+ * ask to stop, and neither the reply nor the plan's verification notes say the whole job is
+ * done ("completato al 100%") without an unfinished count ("337 su 4363").
+ */
+export function isGoalUnfinished(input: {
+  wholeJobGoal: boolean;
+  verdict: PlanGateVerdict;
+  continuationIndex: number;
+  planToolUsedThisRun: boolean;
+  workToolCalls: number;
+  replyText: string;
+  verifyNotes?: string;
+  userAskedToStopOrChange: boolean;
+  minTools?: number;
+}): boolean {
+  if (!input.wholeJobGoal || input.userAskedToStopOrChange) return false;
+  if (input.verdict.open || input.verdict.why === "all_blocked") return false;
+  const worked =
+    input.continuationIndex > 0 ||
+    input.planToolUsedThisRun ||
+    input.workToolCalls >= (input.minTools ?? autoPlanMinTools());
+  if (!worked) return false;
+  if (closesWholeJob(input.replyText)) return false;
+  if (input.verifyNotes && closesWholeJob(input.verifyNotes)) return false;
+  return true;
+}
+
+/** Notes of the verification step of the bot's latest plan (active or just closed). */
+export async function latestVerifyNotes(
+  deps: PlanToolDeps,
+  input: { spaceId: string; botId: string; since: Date },
+): Promise<string | undefined> {
+  const row = await deps.prisma.agentPlan.findFirst({
+    where: { spaceId: input.spaceId, botId: input.botId, updatedAt: { gte: input.since } },
+    orderBy: { updatedAt: "desc" },
+    select: { steps: { select: { title: true, notes: true, status: true } } },
+  });
+  const verify = row?.steps.find((step) => isVerifyStepTitle(step.title));
+  return verify?.status === "done" ? verify.notes : undefined;
 }

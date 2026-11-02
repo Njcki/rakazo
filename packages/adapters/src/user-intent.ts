@@ -77,11 +77,18 @@ const STANDBY_CLOSE =
 
 /** A claim that the whole requested job (not a chunk) is finished. */
 const WHOLE_TASK_DONE =
-  /(?:\b(?:il\s+)?(?:lavoro|task|compito|progetto|incarico)\s+(?:è\s+)?(?:stato\s+)?(?:interamente\s+|completamente\s+)?(?:complet\w+|finit\w+|terminat\w+|conclus\w+)\b|\b(?:tutto|tutti|tutte)\s+(?:è\s+|sono\s+)?(?:stat[oie]\s+)?(?:complet\w+|finit\w+|terminat\w+|fatt[oie])\b|\b100\s*%\s*(?:complet\w+|finit\w+|del\s+lavoro|del\s+progetto|done|complete)|\b(?:the\s+)?(?:whole\s+)?(?:task|job|work|project)\s+is\s+(?:now\s+)?(?:fully\s+)?(?:complete|done|finished)\b|\beverything\s+is\s+(?:now\s+)?(?:done|complete|finished)\b|\ball\s+done\b)/iu;
+  /(?:\b(?<!\bpiano\s+(?:di\s+)?)(?<!\bplan\s+)(?:il\s+)?(?:lavoro|task|compito|progetto|incarico)\s+(?:è\s+)?(?:stato\s+)?(?:interamente\s+|completamente\s+)?(?:complet\w+|finit\w+|terminat\w+|conclus\w+)\b|\b(?:tutto|tutti|tutte)\s+(?:è\s+|sono\s+)?(?:stat[oie]\s+)?(?:complet\w+|finit\w+|terminat\w+|fatt[oie])\b|\b100\s*%\s*(?:complet\w+|finit\w+|del\s+lavoro|del\s+progetto|done|complete)|\b(?:the\s+)?(?:whole\s+)?(?:task|job|work|project)\s+is\s+(?:now\s+)?(?:fully\s+)?(?:complete|done|finished)\b|\beverything\s+is\s+(?:now\s+)?(?:done|complete|finished)\b|\ball\s+done\b)/iu;
 
 /** Words that say only a part was finished ("il blocco corrente è concluso"). */
 const PARTIAL_SCOPE =
   /\b(?:blocco|lotto|batch|chunk|tranche|parte|porzione|fase|sezione|gruppo|step|passo)\s+(?:corrente|attuale|in\s+corso|current|this)\b|\b(?:current|this)\s+(?:batch|chunk|part|block|phase|section|step)\b/iu;
+
+/** Only for "is the whole job done": a batch or the plan being closed is not the job. */
+const PART_ONLY = /\b(?:lotto|lotti|tranche|chunk|batch(?:es)?)\b/iu;
+
+/** "Completato al 100%", "100% done": an explicit whole-job claim outweighs batch wording. */
+const EXPLICIT_FULL =
+  /\b(?:complet\w+|finit\w+|terminat\w+|conclus\w+|fatt[oaie]|done|finished|complete)\s+(?:al|at)\s+100\s*%|\b100\s*%\s*(?:complet\w+|finit\w+|terminat\w+|conclus\w+|del\s+lavoro|del\s+totale|done|complete|finished)/iu;
 
 export function isStandbyClose(text: string): boolean {
   return STANDBY_CLOSE.test(text.normalize("NFKC"));
@@ -90,7 +97,8 @@ export function isStandbyClose(text: string): boolean {
 /** Whether the reply claims the whole job is done, with no "only this part" wording. */
 export function claimsWholeTaskDone(text: string): boolean {
   const value = text.normalize("NFKC");
-  return WHOLE_TASK_DONE.test(value) && !PARTIAL_SCOPE.test(value);
+  if (!WHOLE_TASK_DONE.test(value) || PARTIAL_SCOPE.test(value)) return false;
+  return !PART_ONLY.test(value) || EXPLICIT_FULL.test(value);
 }
 
 /** The reply without its trailing stand-by sentences (the work goes on after it). */
@@ -119,4 +127,76 @@ export function stripStandbyClose(text: string): string {
     index = end;
   }
   return text.slice(0, end).trimEnd();
+}
+
+/**
+ * A bare "go on" that carries no goal of its own ("Continua", "prosegui pure", "keep going").
+ * The goal of such a request is the one the user gave before it.
+ */
+const BARE_CONTINUATION =
+  /^\s*(?:(?:ok(?:ay)?|va\s+bene|bene|si|sì|yes|allora|dai|ora|adesso|now|please|per\s+favore)[\s,.!]*)*(?:continua(?:re)?|continue|prosegui(?:re)?|procedi|vai(?:\s+avanti)?|avanti|andiamo|riprendi|riparti|go\s+on|go\s+ahead|keep\s+going|carry\s+on|resume|proceed|next)(?:\s+(?:pure|pure\s+tu|tu|per\s+favore|please|cos[iì]|il\s+lavoro|col\s+lavoro|con\s+il\s+lavoro|da\s+dove\s+eri\s+rimasto|where\s+you\s+left\s+off|the\s+work|with\s+the\s+work|sul\s+tuo\s+(?:pc|computer)))*[\s.!…]*$/iu;
+
+export function isBareContinuation(text: string): boolean {
+  return BARE_CONTINUATION.test(text.normalize("NFKC"));
+}
+
+/** A rule about how to work ("non lavorare sul mio PC", "never touch X"), not a goal. */
+const CONSTRAINT_ONLY =
+  /^\s*(?:(?:e|and|ma|but|ok|poi|anche|also|mi\s+raccomando|ricorda(?:ti)?|remember)[\s,]+)*(?:non\b|mai\b|never\b|don'?t\b|do\s+not\b|always\b|sempre\b|d'?ora\s+in\s+poi\b|da\s+(?:ora|adesso)\b|from\s+now\s+on\b|attento\b|attenzione\b|careful\b)/iu;
+
+export function isConstraintOnly(text: string): boolean {
+  const value = text.normalize("NFKC").trim();
+  return value.length <= 400 && CONSTRAINT_ONLY.test(value) && !looksLikeWholeJobGoal(value);
+}
+
+/** The request asks for the whole job, not one part ("fino al 100%", "tutto", "every file"). */
+const WHOLE_JOB_GOAL =
+  /(fino\s+(al|a)\s*100\s*%|\b100\s*%|\bfino\s+(alla\s+fine|in\s+fondo)|\bricorsivamente\b|\bfinch[eé]\s+non\s+(hai|avrai|è|e')\s+(finito|completato|terminato)|\bfai\s+tutto|\btutt[oaie]\s+(il|lo|la|i|gli|le|quant[oaie])\b|\bogni\s+(file|riga|voce|capitolo|pagina|battuta|elemento)|\ball\s+of\s+(it|them)|\beverything\b|\bthe\s+whole\b|\buntil\s+(it'?s\s+)?(done|finished|complete|the\s+end)|\bcomplete\s+(it\s+all|all|everything)|\bevery\s+(file|line|item|page|chapter))/iu;
+
+export function looksLikeWholeJobGoal(text: string): boolean {
+  return WHOLE_JOB_GOAL.test(text.normalize("NFKC"));
+}
+
+const NUMBER = String.raw`(\d{1,3}(?:[.\u2009 ]\d{3})+|\d+)(?:[,.](\d+))?`;
+const FRACTION = new RegExp(
+  String.raw`${NUMBER}\s*(?:[\p{L}'’]+\s+){0,3}?(?:\/|su|of|out\s+of)\s*${NUMBER}(?!\s*%)`,
+  "giu",
+);
+const PROGRESS_PERCENT = new RegExp(
+  String.raw`${NUMBER}\s*%\s*(?:\(|del\b|dell[ae']|of\b|complet\w*|fatt\w*|done\b|total\w*|avanzamento|progress)|(?:avanzamento|progress[oi]?|completamento|completion)\s*[:=]?\s*(?:al|at|del|of)?\s*${NUMBER}\s*%`,
+  "giu",
+);
+
+function toNumber(whole: string | undefined, frac: string | undefined): number {
+  if (!whole) return Number.NaN;
+  const digits = whole.replace(/[.\u2009 ]/g, "");
+  return Number(frac ? `${digits}.${frac}` : digits);
+}
+
+/**
+ * Whether the text reports a progress count that is not the end: "337 su 4363", "12/40",
+ * "7,72% del totale", "avanzamento: 40%". A reply that says so is not the whole job done.
+ */
+export function reportsPartialProgress(text: string): boolean {
+  const value = text.normalize("NFKC");
+  for (const match of value.matchAll(FRACTION)) {
+    const done = toNumber(match[1], match[2]);
+    const total = toNumber(match[3], match[4]);
+    if (Number.isFinite(done) && Number.isFinite(total) && total >= 2 && done < total) return true;
+  }
+  for (const match of value.matchAll(PROGRESS_PERCENT)) {
+    const percent = Number.isFinite(toNumber(match[1], match[2]))
+      ? toNumber(match[1], match[2])
+      : toNumber(match[3], match[4]);
+    if (Number.isFinite(percent) && percent < 100) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a reply closes the whole job of a "fino al 100%"-style request: it claims the whole
+ * task done, says nothing that limits it to a part, and reports no unfinished count.
+ */
+export function closesWholeJob(text: string): boolean {
+  return claimsWholeTaskDone(text) && !reportsPartialProgress(text);
 }

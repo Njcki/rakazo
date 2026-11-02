@@ -45,6 +45,8 @@ import {
   decideAutoContinuation,
   hitToolCallBudget,
   isCloseAttempt,
+  isGoalUnfinished,
+  latestVerifyNotes,
   loadPlanGate,
   planProgressLine,
 } from "./plan-completion-gate.js";
@@ -102,7 +104,16 @@ import {
   replyMentionsComputerFallback,
   userComputerFallbackNotice,
 } from "./user-computer-fallback.js";
-import { looksLikeLongTask, needsAutoPlan, stripStandbyClose } from "./user-intent.js";
+import {
+  claimsWholeTaskDone,
+  closesWholeJob,
+  isStandbyClose,
+  looksLikeLongTask,
+  looksLikeWholeJobGoal,
+  needsAutoPlan,
+  reportsPartialProgress,
+  stripStandbyClose,
+} from "./user-intent.js";
 import {
   assistantTurnSeparator,
   botMessageOutcomeFromMidTurn,
@@ -989,6 +1000,8 @@ async function applyCompletionGate(ctx: RunContext) {
     const messages = await currentRequestMessages(ctx);
     const goalTexts = messages.filter((m) => !m.aside).map((m) => m.text);
     const asides = messages.filter((m) => m.aside).map((m) => m.text);
+    const inheritedGoal = messages.some((m) => m.inherited);
+    const firstVerdict = verdict;
     // Multi-step work without a plan of this request gets one, so the gate applies to it too.
     if (!reason && !verdict.open && (verdict.why === "no_plan" || verdict.why === "stale")) {
       if (needsAutoPlan({ requestTexts: goalTexts, workToolCalls: continuation.workToolCalls })) {
@@ -1007,6 +1020,8 @@ async function applyCompletionGate(ctx: RunContext) {
     if (!reason && verdict.open) reason = verdict.reason;
     // A side question never ends a long task: a part that only answered it, or that closes
     // with a stand-by line, continues the original request.
+    const stopAsked = await userAskedToStopOrChange(ctx);
+    const standby = Boolean(replyText.trim()) && isStandbyClose(replyText);
     if (
       !reason &&
       isCloseAttempt({
@@ -1016,10 +1031,46 @@ async function applyCompletionGate(ctx: RunContext) {
         replyText,
         workToolCalls: continuation.workToolCalls,
         lastUserMessageIsAside: messages.length > 1 && messages.at(-1)!.aside,
-        userAskedToStopOrChange: await userAskedToStopOrChange(ctx),
+        userAskedToStopOrChange: stopAsked,
       })
     ) {
       reason = "close_attempt";
+    }
+    // "Fino al 100%" is the whole job: one finished batch with its plan closed is not the end.
+    const wholeJobGoal = goalTexts.some((t) => looksLikeWholeJobGoal(t));
+    const verifyNotes =
+      !reason && wholeJobGoal
+        ? await latestVerifyNotes(deps, {
+            spaceId: run.spaceId,
+            botId: bot.id,
+            since: chainStartedAt,
+          }).catch(() => undefined)
+        : undefined;
+    if (
+      !reason &&
+      isGoalUnfinished({
+        wholeJobGoal,
+        verdict,
+        continuationIndex: run.continuationIndex,
+        planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+        workToolCalls: continuation.workToolCalls,
+        replyText,
+        verifyNotes,
+        userAskedToStopOrChange: stopAsked,
+      })
+    ) {
+      reason = "goal_unfinished";
+      // The next part starts from a plan that quotes the request, with its verification step.
+      const created = await createAutoPlan(deps, {
+        spaceId: run.spaceId,
+        botId: bot.id,
+        userId: run.userId,
+        requestTexts: goalTexts,
+        asides,
+        replaceActive: true,
+        chainStartedAt,
+      }).catch(() => undefined);
+      if (created?.plan) ({ plan, verdict } = created);
     }
     const decision = decideAutoContinuation({
       runId,
@@ -1035,14 +1086,41 @@ async function applyCompletionGate(ctx: RunContext) {
       continuation.requested = decision.request;
       if (reason === "close_attempt") dropStandbyClose(ctx.state.reply);
     } else if (decision.kind === "refused") continuation.refused = decision.refused;
-    if (decision.kind !== "none") {
-      getLogger().info("run.completion_gate", {
-        runId,
-        reason,
-        outcome: decision.kind === "continue" ? "scheduled" : decision.refused.state,
-        index: decision.kind === "continue" ? decision.request.index : decision.refused.index,
-      });
-    }
+    // One line per finished run, continued or not, so "why did it stop?" has an answer.
+    getLogger().info("run.completion_gate", {
+      runId,
+      rootRunId: run.continuationRootRunId ?? runId,
+      continuationIndex: run.continuationIndex,
+      fence: ctx.fence,
+      trigger: run.trigger,
+      reason: reason ?? "none",
+      outcome:
+        decision.kind === "continue"
+          ? "scheduled"
+          : decision.kind === "refused"
+            ? decision.refused.state
+            : "ended",
+      nextIndex:
+        decision.kind === "continue"
+          ? decision.request.index
+          : decision.kind === "refused"
+            ? decision.refused.index
+            : undefined,
+      plan: firstVerdict.open ? firstVerdict.reason : firstVerdict.why,
+      planStatus: plan?.status,
+      planSteps: plan ? `${plan.progress.done}/${plan.progress.total}` : undefined,
+      planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+      workToolCalls: continuation.workToolCalls,
+      goalMessages: goalTexts.length,
+      inheritedGoal,
+      wholeJobGoal,
+      asides: asides.length,
+      stopAsked,
+      standby,
+      claimsWholeDone: claimsWholeTaskDone(replyText),
+      partialProgress: reportsPartialProgress(replyText),
+      verifyNotesWholeDone: verifyNotes ? closesWholeJob(verifyNotes) : undefined,
+    });
   } catch (error) {
     getLogger().warn("run.completion_gate failed", { runId, error: sanitizedError(error) });
   }

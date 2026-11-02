@@ -9,7 +9,68 @@ import {
 } from "./plan-tools.js";
 import type { RunContext } from "./run-context.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
-import { asksToStopOrChange, isAsideMessage } from "./user-intent.js";
+import {
+  asksToStopOrChange,
+  isAsideMessage,
+  isBareContinuation,
+  isConstraintOnly,
+} from "./user-intent.js";
+
+/** User messages searched back for the goal of a bare "continua". */
+export const STANDING_GOAL_LOOKBACK = 80;
+
+export type StandingGoal = {
+  /** The user's last message that gave the work a goal. */
+  text: string;
+  seq: number;
+  /** Rules about how to work written after it ("non lavorare sul mio PC"), oldest first. */
+  constraints: string[];
+};
+
+function channelOf(blocks: unknown): string | undefined {
+  if (!Array.isArray(blocks)) return undefined;
+  for (const block of blocks) {
+    if (
+      block &&
+      typeof block === "object" &&
+      (block as { kind?: unknown }).kind === "channel_message"
+    )
+      return String((block as { channelId?: unknown }).channelId ?? "");
+  }
+  return undefined;
+}
+
+/**
+ * The goal a bare follow-up ("Continua", "prosegui") continues: the user's latest earlier
+ * message that is not itself a bare follow-up, a side question or a rule about how to work.
+ * A message asking to stop or change the work ends the search: there is no goal to resume.
+ * Channel runs only read messages of their own channel.
+ */
+export async function findStandingGoal(
+  prisma: RunContext["deps"]["prisma"],
+  input: { threadId: string; beforeSeq: number; channelId?: string | undefined },
+): Promise<StandingGoal | undefined> {
+  const rows = await prisma.message.findMany({
+    where: { threadId: input.threadId, role: "user", seq: { lt: input.beforeSeq } },
+    orderBy: { seq: "desc" },
+    take: STANDING_GOAL_LOOKBACK,
+    select: { blocks: true, seq: true },
+  });
+  const constraints: string[] = [];
+  for (const row of rows) {
+    if (input.channelId && channelOf(row.blocks) !== input.channelId) continue;
+    const text = blocksText(row.blocks);
+    if (!text) continue;
+    if (asksToStopOrChange(text) && !isBareContinuation(text)) return undefined;
+    if (isBareContinuation(text) || isAsideMessage(text)) continue;
+    if (isConstraintOnly(text)) {
+      if (constraints.length < 5) constraints.unshift(text);
+      continue;
+    }
+    return { text, seq: row.seq, constraints };
+  }
+  return undefined;
+}
 
 /**
  * The text of stored message blocks. Blocks are `{ kind: "text", text }`; reading `type` here
@@ -21,7 +82,10 @@ export function blocksText(blocks: unknown): string {
     .map((block) => {
       if (!block || typeof block !== "object") return "";
       const { kind, type, text } = block as { kind?: unknown; type?: unknown; text?: unknown };
-      return kind === "text" || type === "text" ? String(text ?? "") : "";
+      // Channel (Telegram, SMS…) messages carry the user's words in their own block kind.
+      return kind === "text" || type === "text" || kind === "channel_message"
+        ? String(text ?? "")
+        : "";
     })
     .filter((text) => text.trim())
     .join("\n")
@@ -42,6 +106,31 @@ export async function loadOriginalRequest(ctx: RunContext): Promise<OriginalRequ
         select: { blocks: true, threadId: true, seq: true },
       });
       const text = source ? blocksText(source.blocks) : "";
+      if (source && text && isBareContinuation(text)) {
+        const standing = await findStandingGoal(deps.prisma, {
+          threadId: source.threadId,
+          beforeSeq: source.seq,
+          channelId: ctx.source?.channelId,
+        });
+        if (standing) {
+          const later = await currentRequestMessages(ctx);
+          const asides = later
+            .filter((m) => !m.source && !m.inherited && m.aside)
+            .map((m) => m.text);
+          const instructions = [
+            ...standing.constraints,
+            ...later.filter((m) => !m.source && !m.inherited && !m.aside).map((m) => m.text),
+          ];
+          return {
+            text: standing.text,
+            ...(instructions.length ? { instructions } : {}),
+            ...(asides.length ? { asides } : {}),
+            ...(run.continuationIndex > 0
+              ? { continuation: { index: run.continuationIndex, percent: run.continuationPercent } }
+              : {}),
+          };
+        }
+      }
       if (source && text) {
         const earlier =
           text.length < 300
@@ -58,8 +147,10 @@ export async function loadOriginalRequest(ctx: RunContext): Promise<OriginalRequ
                 .reverse()
             : [];
         const later = await currentRequestMessages(ctx);
-        const asides = later.filter((m) => !m.source && m.aside).map((m) => m.text);
-        const instructions = later.filter((m) => !m.source && !m.aside).map((m) => m.text);
+        const asides = later.filter((m) => !m.source && !m.inherited && m.aside).map((m) => m.text);
+        const instructions = later
+          .filter((m) => !m.source && !m.inherited && !m.aside)
+          .map((m) => m.text);
         return {
           text,
           earlier,
@@ -108,6 +199,11 @@ export type RequestMessage = {
   source: boolean;
   /** A side question or aside written during the work: answered, never the goal. */
   aside: boolean;
+  /**
+   * The request itself was a bare "continua": this is the earlier message whose goal it
+   * continues (or a rule written after that message).
+   */
+  inherited?: boolean;
 };
 
 /**
@@ -122,11 +218,12 @@ export async function currentRequestMessages(ctx: RunContext): Promise<RequestMe
     const source = run.sourceMessageId
       ? await deps.prisma.message.findUnique({
           where: { id: run.sourceMessageId },
-          select: { blocks: true, role: true },
+          select: { blocks: true, role: true, seq: true },
         })
       : null;
     if (source?.role === "user")
       out.push({ text: blocksText(source.blocks), source: true, aside: false });
+    const sourceSeq = source && "seq" in source ? (source as { seq?: number }).seq : undefined;
     const later = await deps.prisma.message.findMany({
       where: {
         threadId: run.threadId,
@@ -141,6 +238,30 @@ export async function currentRequestMessages(ctx: RunContext): Promise<RequestMe
     for (const row of later) {
       const text = blocksText(row.blocks);
       out.push({ text, source: false, aside: isAsideMessage(text) });
+    }
+    // "Continua" alone has no goal: it continues the user's earlier one ("fino al 100%").
+    const goals = out.filter((message) => !message.aside && message.text.trim());
+    if (
+      typeof sourceSeq === "number" &&
+      goals.some((message) => isBareContinuation(message.text)) &&
+      goals.every((message) => isBareContinuation(message.text) || isConstraintOnly(message.text))
+    ) {
+      const standing = await findStandingGoal(deps.prisma, {
+        threadId: run.threadId,
+        beforeSeq: sourceSeq,
+        channelId: ctx.source?.channelId,
+      });
+      if (standing) {
+        out.unshift(
+          { text: standing.text, source: false, aside: false, inherited: true },
+          ...standing.constraints.map((text) => ({
+            text,
+            source: false,
+            aside: false,
+            inherited: true,
+          })),
+        );
+      }
     }
     if (run.routineId) {
       const routine = await deps.prisma.routine.findUnique({
@@ -161,7 +282,9 @@ export async function currentRequestMessages(ctx: RunContext): Promise<RequestMe
  */
 export async function userAskedToStopOrChange(ctx: RunContext): Promise<boolean> {
   const { deps, run } = ctx;
-  const texts = await currentRequestUserTexts(ctx);
+  const texts = (await currentRequestMessages(ctx))
+    .filter((message) => !message.inherited)
+    .map((message) => message.text);
   if (texts.some((text) => asksToStopOrChange(text))) return true;
   try {
     const since = await chainStartedAt(ctx);

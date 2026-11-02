@@ -101,7 +101,9 @@ describe("side question during a long task", () => {
 
   it("keeps the original request as the goal and the asides apart", async () => {
     const messages = await currentRequestMessages(ctx());
+    // "Continua" plus rules has no goal of its own: the earlier goal comes first.
     expect(messages.map((m) => [m.text, m.source, m.aside])).toEqual([
+      ["Prosegui fino al 100% del gioco base", false, false],
       ["Continua", true, false],
       ["non lavorare sul mio PC, lavora sul tuo!!", false, false],
       ["e non fare confusione tra i file miei e tuoi", false, false],
@@ -117,15 +119,14 @@ describe("side question during a long task", () => {
 
   it("shows the verification step the original request, not the side question", async () => {
     const request = await loadOriginalRequest(ctx());
+    // A bare "Continua" continues the earlier goal: that is the request to verify against.
     expect(request).toMatchObject({
-      text: "Continua",
-      earlier: ["Prosegui fino al 100% del gioco base"],
+      text: "Prosegui fino al 100% del gioco base",
       asides: ["stai lavorando anche sul lip-sync?", "si potrà fare in seguito?"],
       continuation: { index: 10, percent: null },
     });
     const checklist = verificationChecklist(request);
-    expect(checklist).toContain("<<<\nContinua\n>>>");
-    expect(checklist).toContain("Prosegui fino al 100% del gioco base");
+    expect(checklist).toContain("<<<\nProsegui fino al 100% del gioco base\n>>>");
     expect(checklist).toMatch(/Side questions .*NOT the goal/);
     expect(checklist).toContain("automatic part 10 of a long task");
     expect(checklist).not.toContain("not available");

@@ -217,7 +217,13 @@ export interface ContinueLaterRequest {
   repeats: number;
   percent: number | null;
   /** Scheduled by the completion gate, not by the model (plan-completion-gate.ts). */
-  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created" | "close_attempt";
+  auto?:
+    | "plan_open"
+    | "verification_pending"
+    | "tool_budget"
+    | "plan_created"
+    | "close_attempt"
+    | "goal_unfinished";
 }
 
 export interface RunComputerContext {

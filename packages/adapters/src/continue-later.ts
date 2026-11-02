@@ -193,7 +193,13 @@ export function normalizePercent(value: unknown): number | null {
 export function continuationPrompt(input: {
   index: number;
   max: number;
-  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created" | "close_attempt";
+  auto?:
+    | "plan_open"
+    | "verification_pending"
+    | "tool_budget"
+    | "plan_created"
+    | "close_attempt"
+    | "goal_unfinished";
 }): string {
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
@@ -202,7 +208,7 @@ export function continuationPrompt(input: {
       "Use the conversation, your plan (if any) and the progress summary you left to pick up the next unfinished step. " +
       "Do not redo finished steps and do not re-announce the task. " +
       "If more work still remains after this part, call continue_later again with a fresh summary; " +
-      "when everything is done, reply with the final result and say clearly that the task is complete.",
+      "when everything is done, reply with the final result and say clearly that the whole task is complete (e.g. 'Lavoro completato al 100%').",
   ].join("\n");
 }
 
@@ -217,6 +223,8 @@ const AUTO_CONTINUATION_NOTES = {
     "The previous part stopped at the tool-call limit for one turn, so the platform continued it automatically. Pick up exactly where it stopped.",
   close_attempt:
     "The previous part ended the long task without finishing it: it only answered a side question, or closed with a stand-by line (e.g. 'sono a disposizione per le prossime istruzioni'). A question the user asks during the work is answered on the way; it never completes or replaces the original request. Call plan_status, then resume the original request from its next unfinished part (make a plan of the remaining work if there is none). If the whole original request is really finished, tick the verification step with evidence against it and say clearly that the whole task is complete.",
+  goal_unfinished:
+    "The previous part finished one batch and closed its plan, but the user asked for the whole job (e.g. 'fino al 100%'), and the reply did not say the whole job is done, so the platform continued it automatically. A finished batch, chunk or plan is not the end of the job. Call plan_status: the platform's plan quotes the user's request. Replace it with the real next part of the remaining work (plan_create replaceActive=true) and keep the final verification step. Only when the whole job is done (every item, 100%), tick the verification step with evidence against the original request and say clearly 'Lavoro completato al 100%' (or 'The whole task is complete'). If something needs the user, use ask_user.",
 } as const;
 
 /**

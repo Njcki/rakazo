@@ -6575,6 +6575,10 @@ msgstr "Value"
 msgid "Vault"
 msgstr "Vault"
 
+#: src/pages/PlanSection.tsx
+msgid "Verify all requested goals are met"
+msgstr "Verify all requested goals are met"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Verify and add"

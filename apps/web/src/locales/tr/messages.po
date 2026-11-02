@@ -6575,6 +6575,10 @@ msgstr "Değer"
 msgid "Vault"
 msgstr "Kasa"
 
+#: src/pages/PlanSection.tsx
+msgid "Verify all requested goals are met"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Doğrula ve ekle"

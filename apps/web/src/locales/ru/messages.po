@@ -6575,6 +6575,10 @@ msgstr "Значение"
 msgid "Vault"
 msgstr "Хранилище"
 
+#: src/pages/PlanSection.tsx
+msgid "Verify all requested goals are met"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Проверить и добавить"

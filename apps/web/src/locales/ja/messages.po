@@ -6575,6 +6575,10 @@ msgstr "値"
 msgid "Vault"
 msgstr "保管庫"
 
+#: src/pages/PlanSection.tsx
+msgid "Verify all requested goals are met"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "確認して追加"

@@ -190,9 +190,14 @@ export function normalizePercent(value: unknown): number | null {
 }
 
 /** The note a continuation run starts from. It carries no user content. */
-export function continuationPrompt(input: { index: number; max: number }): string {
+export function continuationPrompt(input: {
+  index: number;
+  max: number;
+  auto?: "plan_open" | "verification_pending" | "tool_budget";
+}): string {
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
+    ...(input.auto ? [AUTO_CONTINUATION_NOTES[input.auto]] : []),
     "This run continues your own earlier work on the user's request; nobody wrote a new message. " +
       "Use the conversation, your plan (if any) and the progress summary you left to pick up the next unfinished step. " +
       "Do not redo finished steps and do not re-announce the task. " +
@@ -200,6 +205,15 @@ export function continuationPrompt(input: { index: number; max: number }): strin
       "when everything is done, reply with the final result and say clearly that the task is complete.",
   ].join("\n");
 }
+
+const AUTO_CONTINUATION_NOTES = {
+  plan_open:
+    "The previous part ended while your plan still had open steps, so the platform continued it automatically. Call plan_status, then keep working on the next open step. The task is finished only when every step is closed and the final verification step is ticked after checking the user's original request. If you truly need the user, use ask_user; if the user cancelled the rest, close the plan with plan_complete force=true and their reason.",
+  verification_pending:
+    "The previous part ended before the plan's final verification step was ticked, so the platform continued it automatically. Set that step in_progress to get the user's original request, check every requested goal against the real result, and either tick it (verified=true, with evidence) or add and do the missing work.",
+  tool_budget:
+    "The previous part stopped at the tool-call limit for one turn, so the platform continued it automatically. Pick up exactly where it stopped.",
+} as const;
 
 /**
  * For runs that do not read the thread (routines) or only see their own channel replies, the

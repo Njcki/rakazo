@@ -1149,7 +1149,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "plan_create",
     description:
-      "Create an ordered execution plan for multi-step work (2+ distinct actions). Call this BEFORE starting such work. Pass replaceActive=true to replace an existing active plan. Each step needs a short title; optional blockedBy lists 1-based step indexes that must finish first. After creating, mark steps in_progress/done with plan_update_step as you work. Do not claim the overall task finished while steps remain open.",
+      "Create an ordered execution plan for multi-step work (2+ distinct actions). Call this BEFORE starting such work. Pass replaceActive=true to replace an existing active plan. Each step needs a short title; optional blockedBy lists 1-based step indexes that must finish first. After creating, mark steps in_progress/done with plan_update_step as you work. Plan the whole requested job, not only the next chunk. A final step «Verify all requested goals are met» is added automatically: it is ticked only after checking the user's original request, and while any step is open a run that ends continues automatically. Do not claim the overall task finished while steps remain open.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1190,7 +1190,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "plan_update_step",
     description:
-      "Update a plan step: set status to in_progress when you start it, done when finished, blocked if stuck (with notes), or skipped if no longer needed. Identify the step by stepId or index from plan_create/plan_status. Keep the plan accurate — the user sees it in the sidebar.",
+      "Update a plan step: set status to in_progress when you start it, done when finished, blocked if stuck (with notes), or skipped if no longer needed. Identify the step by stepId or index from plan_create/plan_status. Keep the plan accurate — the user sees it in the sidebar. The final verification step: set it in_progress to get the user's original request, then done only with verified=true and notes giving each goal's evidence.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1202,13 +1202,18 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
         title: { type: "string" },
         notes: { type: "string" },
+        verified: {
+          type: "boolean",
+          description:
+            "Final verification step only: true after you checked every goal of the user's original request against the real result.",
+        },
       },
     },
   },
   {
     name: "plan_add_step",
     description:
-      "Add a step to the active plan when you discover more work mid-flight (decomposition). Optional afterIndex inserts after that step; default appends.",
+      "Add a step to the active plan when you discover more work mid-flight (decomposition). Optional afterIndex inserts after that step; default inserts before the final verification step.",
     inputSchema: {
       type: "object",
       properties: {

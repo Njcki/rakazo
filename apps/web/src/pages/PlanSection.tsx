@@ -21,7 +21,25 @@ const STATUS_ICON: Record<
   todo: { icon: Circle, className: "text-muted-foreground/60", label: "todo" },
 };
 
+/** The platform's final plan step; stored in English, matched on either language. */
+const VERIFY_STEP_TITLES = new Set(
+  [
+    "Verify all requested goals are met",
+    "Verifica che tutti gli obiettivi richiesti siano raggiunti",
+  ].map(normalizeStepTitle),
+);
+
+function normalizeStepTitle(title: string) {
+  return title
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\p{P}]+/gu, " ")
+    .trim();
+}
+
 function StepRow({ step }: { step: AgentPlanStep }) {
+  const { t } = useLingui();
+  const verifyStep = VERIFY_STEP_TITLES.has(normalizeStepTitle(step.title));
   const meta = STATUS_ICON[step.status] ?? STATUS_ICON.todo;
   const Icon = meta.icon;
   const doneLike = step.status === "done" || step.status === "skipped";
@@ -50,10 +68,10 @@ function StepRow({ step }: { step: AgentPlanStep }) {
             }`}
             dir="auto"
           >
-            {step.title}
+            {verifyStep ? t`Verify all requested goals are met` : step.title}
           </span>
         </div>
-        {step.blockedBy.length > 0 ? (
+        {step.blockedBy.length > 0 && !verifyStep ? (
           <div className="mt-0.5 text-[11.5px] text-muted-foreground/70">
             <Trans>Depends on</Trans> {step.blockedBy.map((n) => `#${n}`).join(", ")}
           </div>

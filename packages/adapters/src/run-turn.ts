@@ -27,12 +27,25 @@ import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { holdComputerExecutionLeaseForTakeover } from "./computer-lifecycle.js";
 import { resolveBotWorkspacePath } from "./computer-support.js";
-import { CONTINUE_LATER_TOOL, continuationMetaText, continuationPrompt } from "./continue-later.js";
+import {
+  CONTINUE_LATER_SUMMARY_MAX_CHARS,
+  CONTINUE_LATER_TOOL,
+  continuationMetaText,
+  continuationPrompt,
+} from "./continue-later.js";
 import {
   COMPACTION_BATCH_SIZE,
   HISTORY_WINDOW_SIZE,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
+import { maxToolCallsPerTurn, toolCallBudgetExceededMessage } from "./pi-runtime-tools.js";
+import {
+  type AutoContinuationReason,
+  decideAutoContinuation,
+  hitToolCallBudget,
+  loadPlanGate,
+  planProgressLine,
+} from "./plan-completion-gate.js";
 import {
   backOffRoutineAfterAccountError,
   clearRoutineBackoff,
@@ -719,10 +732,15 @@ export async function completeRun(ctx: RunContext) {
     reply.currentTextSegment = reply.assembled;
   }
   flushPendingTools(reply);
+  await applyCompletionGate(ctx);
   const continuation = await continuationForCompletion(ctx);
   // The progress summary is the reply of a turn that continues; runtimes that do not end the
   // turn on continue_later (or a reply that dropped it) still show it.
-  if (continuation && !reply.assembled.includes(continuation.request.summary)) {
+  if (
+    continuation &&
+    !continuation.request.auto &&
+    !reply.assembled.includes(continuation.request.summary)
+  ) {
     const separator = assistantTurnSeparator(reply.assembled, continuation.request.summary);
     reply.assembled += separator + continuation.request.summary;
     reply.currentTextSegment += separator + continuation.request.summary;
@@ -883,6 +901,75 @@ export async function completeRun(ctx: RunContext) {
   }
 }
 
+/**
+ * The completion gate (plan-completion-gate.ts): a run that ends with the plan still open, its
+ * verification unticked, or at the tool-call limit, continues as if it had called
+ * continue_later. Never throws: on any error the run completes as before.
+ */
+async function applyCompletionGate(ctx: RunContext) {
+  const { deps, run, runId, bot } = ctx;
+  const continuation = ctx.state.continuation;
+  const settings = continuation.settings;
+  if (
+    !settings ||
+    continuation.requested ||
+    continuation.refused ||
+    ctx.state.handedOff ||
+    ctx.scripted ||
+    ctx.abortController.signal.aborted
+  ) {
+    return;
+  }
+  try {
+    const replyText = ctx.state.reply.assembled;
+    const limit = maxToolCallsPerTurn();
+    let reason: AutoContinuationReason | undefined = hitToolCallBudget(
+      replyText,
+      limit,
+      toolCallBudgetExceededMessage(limit),
+    )
+      ? "tool_budget"
+      : undefined;
+    const chainStartedAt = run.continuationRootRunId
+      ? ((
+          await deps.prisma.run.findUnique({
+            where: { id: run.continuationRootRunId },
+            select: { createdAt: true },
+          })
+        )?.createdAt ?? run.createdAt)
+      : run.createdAt;
+    const { plan, verdict } = await loadPlanGate(deps, {
+      spaceId: run.spaceId,
+      botId: bot.id,
+      chainStartedAt,
+      planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+    });
+    if (!reason && verdict.open) reason = verdict.reason;
+    const decision = decideAutoContinuation({
+      runId,
+      chain: run,
+      settings,
+      workToolCalls: continuation.workToolCalls,
+      reason,
+      replyText: redactSecrets(replyText, ctx.secrets),
+      progressLine: plan && verdict.open ? planProgressLine(plan) : undefined,
+      maxSummaryChars: CONTINUE_LATER_SUMMARY_MAX_CHARS,
+    });
+    if (decision.kind === "continue") continuation.requested = decision.request;
+    else if (decision.kind === "refused") continuation.refused = decision.refused;
+    if (decision.kind !== "none") {
+      getLogger().info("run.completion_gate", {
+        runId,
+        reason,
+        outcome: decision.kind === "continue" ? "scheduled" : decision.refused.state,
+        index: decision.kind === "continue" ? decision.request.index : decision.refused.index,
+      });
+    }
+  } catch (error) {
+    getLogger().warn("run.completion_gate failed", { runId, error: sanitizedError(error) });
+  }
+}
+
 /** The accepted continue_later request of this run, ready for finalizeRun. */
 async function continuationForCompletion(ctx: RunContext) {
   const request = ctx.state.continuation.requested;
@@ -906,7 +993,7 @@ async function continuationForCompletion(ctx: RunContext) {
       // Whatever this run read from outside follows the task into the next run.
       tainted: await isRunTainted(ctx),
       delayMs: settings.delayMs,
-      prompt: continuationPrompt({ index: request.index, max: request.max }),
+      prompt: continuationPrompt({ index: request.index, max: request.max, auto: request.auto }),
       metaText: {
         scheduled: continuationMetaText({ state: "scheduled", ...meta }),
         superseded: continuationMetaText({ state: "superseded", ...meta }),

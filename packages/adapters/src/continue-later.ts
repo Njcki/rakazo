@@ -200,10 +200,23 @@ export function continuationPrompt(input: {
     | "plan_created"
     | "close_attempt"
     | "goal_unfinished";
+  /** Plan steps already finished in this request (model-written titles). */
+  doneSteps?: readonly string[];
 }): string {
+  const done = (input.doneSteps ?? [])
+    .map((title) => title.replace(/\s+/g, " ").trim().slice(0, 100))
+    .filter(Boolean)
+    .slice(0, 30);
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
     ...(input.auto ? [AUTO_CONTINUATION_NOTES[input.auto]] : []),
+    ...(done.length
+      ? [
+          `These plan steps are already DONE in this task. Do not redo, re-verify or re-report them; move to the next unfinished part of the work: ${done
+            .map((title) => `«${title}»`)
+            .join("; ")}. A part that only repeats finished steps ends the task.`,
+        ]
+      : []),
     "This run continues your own earlier work on the user's request; nobody wrote a new message. " +
       "Use the conversation, your plan (if any) and the progress summary you left to pick up the next unfinished step. " +
       "Do not redo finished steps and do not re-announce the task. " +

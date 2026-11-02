@@ -51,6 +51,7 @@ import {
   isGoalUnfinished,
   isNoProgressPart,
   latestVerifyNotes,
+  loadChainStepProgress,
   loadPlanGate,
   planProgressLine,
 } from "./plan-completion-gate.js";
@@ -1096,12 +1097,21 @@ async function applyCompletionGate(ctx: RunContext) {
       }).catch(() => undefined);
       if (created?.plan) ({ plan, verdict } = created);
     }
-    // A part that did no real work ends the chain at once (not after three repeats).
+    // Real progress of this part, from the plans: steps newly finished vs redone.
+    const steps = await loadChainStepProgress(deps, {
+      spaceId: run.spaceId,
+      botId: bot.id,
+      chainStartedAt,
+      runStartedAt: run.startedAt ?? chainStartedAt,
+    }).catch(() => ({ fresh: [], redone: [], doneBefore: [] }));
+    // A part that did no real work, or only redid finished steps, ends the chain at once.
     const noProgress = isNoProgressPart({
       reason,
       continuationIndex: run.continuationIndex,
       workToolCalls: continuation.workToolCalls,
       fence: ctx.fence,
+      planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+      freshDoneSteps: steps.fresh.length,
     });
     const gateReason = reason;
     if (noProgress) reason = undefined;
@@ -1116,7 +1126,10 @@ async function applyCompletionGate(ctx: RunContext) {
       maxSummaryChars: CONTINUE_LATER_SUMMARY_MAX_CHARS,
     });
     if (decision.kind === "continue") {
-      continuation.requested = decision.request;
+      continuation.requested = {
+        ...decision.request,
+        doneSteps: [...steps.fresh, ...steps.doneBefore].slice(0, 30),
+      };
       if (reason === "close_attempt") dropStandbyClose(ctx.state.reply);
     } else if (decision.kind === "refused") continuation.refused = decision.refused;
     // One line per finished run, continued or not, so "why did it stop?" has an answer.
@@ -1135,6 +1148,9 @@ async function applyCompletionGate(ctx: RunContext) {
             ? decision.refused.state
             : "ended",
       answeredInFull: answered,
+      freshDoneSteps: steps.fresh.length,
+      redoneSteps: steps.redone.length,
+      doneBefore: steps.doneBefore.length,
       replyUnfinished,
       nextIndex:
         decision.kind === "continue"
@@ -1206,7 +1222,12 @@ async function continuationForCompletion(ctx: RunContext) {
       // Whatever this run read from outside follows the task into the next run.
       tainted: await isRunTainted(ctx),
       delayMs: settings.delayMs,
-      prompt: continuationPrompt({ index: request.index, max: request.max, auto: request.auto }),
+      prompt: continuationPrompt({
+        index: request.index,
+        max: request.max,
+        auto: request.auto,
+        doneSteps: request.doneSteps,
+      }),
       metaText: {
         scheduled: continuationMetaText({ state: "scheduled", ...meta }),
         superseded: continuationMetaText({ state: "superseded", ...meta }),

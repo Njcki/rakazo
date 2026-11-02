@@ -203,9 +203,78 @@ export function isNoProgressPart(input: {
   continuationIndex: number;
   workToolCalls: number;
   fence: number;
+  /** The part used the plan tools. */
+  planToolUsedThisRun?: boolean;
+  /** Work steps this part finished that no earlier part of the chain had finished. */
+  freshDoneSteps?: number;
 }): boolean {
   if (!input.reason || input.reason === "tool_budget") return false;
-  return input.continuationIndex > 0 && input.workToolCalls === 0 && input.fence <= 1;
+  if (input.continuationIndex <= 0 || input.fence > 1) return false;
+  if (input.workToolCalls === 0) return true;
+  // Progress is real state, not new wording: a part that worked on the plan but only closed
+  // steps already done earlier in the chain (or only the automatic/verification step) redid
+  // finished work.
+  return Boolean(input.planToolUsedThisRun) && (input.freshDoneSteps ?? 0) === 0;
+}
+
+/** A plan step title compared across plans: case, spacing and punctuation do not matter. */
+export function stepKey(title: string): string {
+  return title
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[\s\p{P}]+/gu, " ")
+    .trim();
+}
+
+const DONE = new Set(["done", "skipped"]);
+
+export type ChainStepProgress = {
+  /** Work steps finished in this part that no earlier part had finished. */
+  fresh: string[];
+  /** Work steps finished in this part that an earlier part had already finished. */
+  redone: string[];
+  /** Work steps finished before this part (newest first, unique). */
+  doneBefore: string[];
+};
+
+/**
+ * What the plans of this request say was really finished, per part: steps closed in this run
+ * versus steps closed earlier in the chain. Automatic and verification steps never count.
+ */
+export function chainStepProgressOf(
+  plans: readonly { steps: readonly { title: string; status: string; updatedAt: Date }[] }[],
+  runStartedAt: Date,
+): ChainStepProgress {
+  const before = new Map<string, string>();
+  const now = new Map<string, string>();
+  for (const plan of plans) {
+    for (const step of plan.steps) {
+      if (!DONE.has(step.status)) continue;
+      if (step.title === AUTO_PLAN_STEP_TITLE || isVerifyStepTitle(step.title)) continue;
+      const key = stepKey(step.title);
+      if (!key) continue;
+      const target = step.updatedAt.getTime() >= runStartedAt.getTime() ? now : before;
+      if (!target.has(key)) target.set(key, step.title);
+    }
+  }
+  const fresh: string[] = [];
+  const redone: string[] = [];
+  for (const [key, title] of now) (before.has(key) ? redone : fresh).push(title);
+  return { fresh, redone, doneBefore: [...before.values()] };
+}
+
+/** Loads the plans of this request (bot-wide, newest first) for chainStepProgressOf. */
+export async function loadChainStepProgress(
+  deps: PlanToolDeps,
+  input: { spaceId: string; botId: string; chainStartedAt: Date; runStartedAt: Date },
+): Promise<ChainStepProgress> {
+  const plans = await deps.prisma.agentPlan.findMany({
+    where: { spaceId: input.spaceId, botId: input.botId, updatedAt: { gte: input.chainStartedAt } },
+    orderBy: { updatedAt: "desc" },
+    take: 60,
+    select: { steps: { select: { title: true, status: true, updatedAt: true } } },
+  });
+  return chainStepProgressOf(plans, input.runStartedAt);
 }
 
 /** The bot's active plan, with its verification step, and the verdict for this chain. */

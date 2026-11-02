@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { continuationPrompt } from "./continue-later.js";
 import { looksLikeDanglingNarration } from "./final-answer-guard.js";
 import {
   AUTO_PLAN_SUMMARY,
   answeredInFull,
+  chainStepProgressOf,
   isAutoPlan,
   isGoalUnfinished,
   isNoProgressPart,
@@ -212,5 +214,105 @@ describe("long whole-job request (dubbing to 100%)", () => {
         userAskedToStopOrChange: false,
       }),
     ).toBe(false);
+  });
+});
+
+describe("a part that redoes finished work (generic batches)", () => {
+  const t = (iso: string) => new Date(`2026-03-02T${iso}Z`);
+  const runStart = t("10:30:00");
+  const s = (title: string, status: string, at: string) => ({
+    title,
+    status,
+    updatedAt: t(at),
+  });
+
+  it("counts only steps no earlier part had finished", () => {
+    const plans = [
+      // this part: a new plan with the same work steps as the batch finished before
+      {
+        steps: [
+          s("Batch 7: write items 1-3", "done", "10:31:00"),
+          s(AUTO_PLAN_STEP_TITLE, "done", "10:31:00"),
+        ],
+      },
+      {
+        steps: [
+          s("batch 7 — write items 1-3", "done", "10:10:00"),
+          s(PLAN_VERIFY_STEP_TITLE, "done", "10:11:00"),
+        ],
+      },
+    ];
+    const progress = chainStepProgressOf(plans, runStart);
+    expect(progress.fresh).toEqual([]);
+    expect(progress.redone).toHaveLength(1);
+    expect(progress.doneBefore).toEqual(["batch 7 — write items 1-3"]);
+    expect(
+      isNoProgressPart({
+        reason: "goal_unfinished",
+        continuationIndex: 3,
+        workToolCalls: 9,
+        fence: 1,
+        planToolUsedThisRun: true,
+        freshDoneSteps: progress.fresh.length,
+      }),
+    ).toBe(true);
+  });
+
+  it("a part that only closes the automatic plan is no progress", () => {
+    const progress = chainStepProgressOf(
+      [
+        {
+          steps: [
+            s(AUTO_PLAN_STEP_TITLE, "done", "10:31:00"),
+            s(PLAN_VERIFY_STEP_TITLE, "done", "10:32:00"),
+          ],
+        },
+      ],
+      runStart,
+    );
+    expect(progress.fresh).toEqual([]);
+    expect(
+      isNoProgressPart({
+        reason: "plan_open",
+        continuationIndex: 1,
+        workToolCalls: 14,
+        fence: 1,
+        planToolUsedThisRun: true,
+        freshDoneSteps: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it("the next batch is progress and the chain goes on", () => {
+    const progress = chainStepProgressOf(
+      [
+        { steps: [s("Batch 8: write items 4-6", "done", "10:40:00")] },
+        { steps: [s("Batch 7: write items 1-3", "done", "10:10:00")] },
+      ],
+      runStart,
+    );
+    expect(progress.fresh).toEqual(["Batch 8: write items 4-6"]);
+    expect(
+      isNoProgressPart({
+        reason: "goal_unfinished",
+        continuationIndex: 2,
+        workToolCalls: 20,
+        fence: 1,
+        planToolUsedThisRun: true,
+        freshDoneSteps: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it("the next prompt lists the finished steps as DONE", () => {
+    const prompt = continuationPrompt({
+      index: 2,
+      max: 50,
+      auto: "goal_unfinished",
+      doneSteps: ["Batch 7: write items 1-3"],
+    });
+    expect(prompt).toContain("already DONE");
+    expect(prompt).toContain("«Batch 7: write items 1-3»");
+    expect(prompt).toContain("Do not redo");
   });
 });

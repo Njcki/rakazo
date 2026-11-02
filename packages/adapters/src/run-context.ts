@@ -216,6 +216,8 @@ export interface ContinueLaterRequest {
   digest: string;
   repeats: number;
   percent: number | null;
+  /** Plan steps already finished in this request: the next part must not redo them. */
+  doneSteps?: string[];
   /** Scheduled by the completion gate, not by the model (plan-completion-gate.ts). */
   auto?:
     | "plan_open"

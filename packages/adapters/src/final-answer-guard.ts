@@ -276,6 +276,7 @@ export function steeringContinueNoteEnabled(env: NodeJS.ProcessEnv = process.env
 export const MID_RUN_STEERING_NOTE =
   "[The user sent the message below while you are still working on the current task. " +
   "Acknowledge it in one short line in the user's language (if it asks for status or a summary, give that briefly), with the message_user tool if available or in text alongside your next tool call, then continue the original task. " +
+  "A question or aside does not complete or replace the task: answer it on the way and keep the original request, its plan and its verification as the goal. " +
   "Stop or change course only if the user explicitly asks you to.]";
 
 /** Frames a mid-run steering message so a status question does not end the work. */

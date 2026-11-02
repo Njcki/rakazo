@@ -1668,10 +1668,34 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 };
               },
               loadContext: async () => {
-                const plan = await getDisplayPlan(deps, {
-                  spaceId: run.spaceId,
-                  botId: bot.id,
-                }).catch(() => null);
+                const [plan, recentRows] = await Promise.all([
+                  getDisplayPlan(deps, { spaceId: run.spaceId, botId: bot.id }).catch(() => null),
+                  // The new message(s) are in the prompt already; these give the conversation.
+                  Promise.resolve()
+                    .then(() =>
+                      deps.prisma.message.findMany({
+                        where: {
+                          threadId: thread.id,
+                          role: { in: ["user", "bot"] },
+                          steeringMessages: { none: { claimedAt: null } },
+                        },
+                        orderBy: { seq: "desc" },
+                        take: 8,
+                        select: { role: true, blocks: true },
+                      }),
+                    )
+                    .catch(() => []),
+                ]);
+                const recent = recentRows
+                  .reverse()
+                  .map((row) => ({
+                    role: row.role === "user" ? ("user" as const) : ("bot" as const),
+                    text: redactSecrets(
+                      blocksToAgentHistoryText(row.blocks as MessageBlock[]),
+                      runSecrets,
+                    ),
+                  }))
+                  .filter((row) => row.text.trim());
                 return {
                   botName: bot.name,
                   persona: redactSecrets(runIdentityInstruction(bot, run.trigger), runSecrets),
@@ -1685,11 +1709,24 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                           index: step.index,
                           title: step.title,
                           status: step.status,
+                          ...(step.notes ? { notes: redactSecrets(step.notes, runSecrets) } : {}),
                         })),
                       }
                     : null,
-                  recentActivity: [],
+                  recentActivity: (reply.toolActivity ?? []).map((item) => ({
+                    text: redactSecrets(item.text, runSecrets),
+                    at: item.at,
+                  })),
                   recentUpdates: reply.midTurnUserTexts.slice(-2),
+                  recentMessages: recent,
+                  continuation:
+                    run.continuationIndex > 0
+                      ? {
+                          index: run.continuationIndex,
+                          max: continueLater.maxContinuations,
+                          percent: run.continuationPercent ?? null,
+                        }
+                      : null,
                   runStartedAt: runStartedAtMs,
                   now: Date.now(),
                 };

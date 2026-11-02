@@ -1,16 +1,19 @@
 import type { AgentRunModel, AgentRuntime, AgentRuntimeEvent } from "@rakazo/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildFallbackQuickReply,
   buildQuickReplyPrompt,
   callQuickReplyModel,
   createQuickReplyCoordinator,
   frameQuickAckedSteering,
+  isFillerQuickReply,
   parseQuickReplyModel,
   QUICK_ACKED_FOLLOWUP_NOTE,
   QUICK_ACKED_STEERING_NOTE,
   type QuickReplyContext,
   type QuickReplyFailureLog,
   type QuickReplyItem,
+  type QuickReplyPostedLog,
   quickReplyConfig,
   quickReplyEligible,
   sanitizeQuickReply,
@@ -66,7 +69,8 @@ describe("quickReplyConfig", () => {
       enabled: true,
       model: undefined,
       reasoning: "low",
-      timeoutMs: 8000,
+      timeoutMs: 9000,
+      smartMs: 7000,
       debounceMs: 1500,
       pollMs: 1500,
       maxChars: 300,
@@ -509,9 +513,10 @@ describe("quick reply failure logging", () => {
       pollSteering: vi.fn(async () => []),
       resolveModel: vi.fn(async () => MODEL),
       loadContext: vi.fn(async () => context()),
-      generate: vi.fn(async () => "ok"),
+      generate: vi.fn(async () => "Sono al passo 2 di 3, scrivo l'HTML."),
       publish: vi.fn(async () => true),
       logFailure: (fields) => logs.push(fields),
+      logPosted: vi.fn(),
       ...overrides,
     });
     quick.arm([]);
@@ -538,16 +543,17 @@ describe("quick reply failure logging", () => {
     quick.stop();
   });
 
-  it("logs an empty answer", async () => {
+  it("logs an empty answer and posts the status fallback", async () => {
     const { quick, logs } = start({ generate: vi.fn(async () => undefined) });
-    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect((await quick.settle([item(1)])).get("m-1")).toContain("Sono al passo 2/3");
     expect(logs.map((entry) => entry.reason)).toEqual(["empty_answer"]);
+    expect(logs[0]!.fallback).toBe(true);
     quick.stop();
   });
 
   it("logs a rejected (tool-shaped) answer", async () => {
     const { quick, logs } = start({ generate: vi.fn(async () => "```json\n{}\n```") });
-    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect((await quick.settle([item(1)])).get("m-1")).toContain("Sono al passo 2/3");
     expect(logs.map((entry) => entry.reason)).toEqual(["rejected_answer"]);
     quick.stop();
   });
@@ -558,9 +564,9 @@ describe("quick reply failure logging", () => {
         throw new TypeError("https://secret.example/v1 key=abc");
       }),
     });
-    expect((await quick.settle([item(1)])).size).toBe(0);
+    expect((await quick.settle([item(1)])).get("m-1")).toContain("Sono al passo 2/3");
     expect(logs).toHaveLength(1);
-    expect(logs[0]).toMatchObject({ reason: "error", errorName: "TypeError" });
+    expect(logs[0]).toMatchObject({ reason: "error", errorName: "TypeError", fallback: true });
     expect(JSON.stringify(logs)).not.toContain("secret.example");
     quick.stop();
   });
@@ -583,9 +589,180 @@ describe("quick reply failure logging", () => {
 
   it("logs nothing on success", async () => {
     const { quick, logs } = start({});
-    expect((await quick.settle([item(1)])).get("m-1")).toBe("ok");
+    expect((await quick.settle([item(1)])).get("m-1")).toBe("Sono al passo 2 di 3, scrivo l'HTML.");
     expect(logs).toEqual([]);
     quick.stop();
+  });
+});
+
+describe("smart reply with status fallback", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function start(overrides: Partial<Parameters<typeof startRunQuickReply>[0]>) {
+    const logs: QuickReplyFailureLog[] = [];
+    const posted: QuickReplyPostedLog[] = [];
+    const published: string[] = [];
+    const quick = startRunQuickReply({
+      config: quickReplyConfig({
+        QUICK_REPLY_TIMEOUT_MS: "1000",
+        QUICK_REPLY_SMART_MS: "600",
+        QUICK_REPLY_DEBOUNCE_MS: "0",
+      }),
+      runId: "run-7",
+      pollSteering: vi.fn(async () => []),
+      resolveModel: vi.fn(async () => MODEL),
+      loadContext: vi.fn(async () => context()),
+      generate: vi.fn(async () => "Sono al passo 2 di 3, scrivo l'HTML."),
+      publish: vi.fn(async (text: string) => {
+        published.push(text);
+        return true;
+      }),
+      logFailure: (fields) => logs.push(fields),
+      logPosted: (fields) => posted.push(fields),
+      ...overrides,
+    });
+    quick.arm([]);
+    return { quick, logs, posted, published };
+  }
+
+  it("posts a specific status line when the model is slower than the smart budget", async () => {
+    const { quick, logs, posted, published } = start({
+      generate: vi.fn(() => new Promise<string | undefined>(() => undefined)),
+    });
+    const settled = quick.settle([item(1, "a che punto sei?")]);
+    await vi.advanceTimersByTimeAsync(700);
+    const text = (await settled).get("m-1");
+    expect(text).toBe(
+      "Sono al passo 2/3 «Scrivere l'HTML» (piano al 33%), al lavoro da 3m 5s; ultima operazione: Running shell: chromium --headless (20s fa). Leggo il tuo messaggio appena finisce l'operazione in corso e ti rispondo nel merito.",
+    );
+    expect(published).toEqual([`⚡ ${text}`]);
+    expect(logs).toMatchObject([{ reason: "timeout", fallback: true }]);
+    expect(posted).toMatchObject([{ runId: "run-7", source: "fallback" }]);
+    quick.stop();
+  });
+
+  it("replaces a bare acknowledgement with the status line", async () => {
+    const { quick, logs, posted } = start({
+      generate: vi.fn(async () => "Ricevuto, poi vedo!"),
+    });
+    const text = (await quick.settle([item(1, "hai visto il file?")])).get("m-1");
+    expect(text).toContain("Sono al passo 2/3");
+    expect(logs).toMatchObject([{ reason: "filler_answer", fallback: true }]);
+    expect(posted[0]!.source).toBe("fallback");
+    quick.stop();
+  });
+
+  it("logs a posted model reply with its timing, not its text", async () => {
+    const { quick, posted } = start({});
+    await quick.settle([item(1, "testo privato")]);
+    expect(posted).toMatchObject([
+      { runId: "run-7", source: "model", model: "google/gemini-3.8-flash", messages: 1 },
+    ]);
+    expect(JSON.stringify(posted)).not.toContain("privato");
+    quick.stop();
+  });
+
+  it("posts nothing when even the context cannot load in time", async () => {
+    const { quick, published } = start({
+      loadContext: vi.fn(() => new Promise<QuickReplyContext>(() => undefined)),
+    });
+    const settled = quick.settle([item(1)]);
+    await vi.advanceTimersByTimeAsync(1100);
+    expect((await settled).size).toBe(0);
+    expect(published).toEqual([]);
+    quick.stop();
+  });
+});
+
+describe("buildQuickReplyPrompt (status context)", () => {
+  it("carries plan percent, current step, notes, continuation and the recent conversation", () => {
+    const base = context();
+    const { instructions, prompt } = buildQuickReplyPrompt(
+      context({
+        plan: {
+          ...base.plan!,
+          steps: base.plan!.steps.map((step) =>
+            step.index === 2 ? { ...step, notes: "pagina indice fatta" } : step,
+          ),
+        },
+        continuation: { index: 3, max: 10, percent: 55 },
+        recentMessages: [
+          { role: "user", text: "Fammi un sito sulle fonti" },
+          { role: "bot", text: "Parto dalla raccolta fonti." },
+        ],
+      }),
+      ["a che punto sei?"],
+    );
+    expect(instructions).toContain("ricevuto, poi vedo");
+    expect(instructions).toContain("never invent facts");
+    expect(prompt).toContain("(33%)");
+    expect(prompt).toContain("current_step: 2");
+    expect(prompt).toContain("pagina indice fatta");
+    expect(prompt).toContain("automatic_continuation: 3/10 (last reported 55%)");
+    expect(prompt).toContain("<recent_conversation>");
+    expect(prompt).toContain("Fammi un sito sulle fonti");
+  });
+
+  it("caps the recent conversation", () => {
+    const long = "x".repeat(2000);
+    const { prompt } = buildQuickReplyPrompt(
+      context({
+        recentMessages: Array.from({ length: 12 }, (_, i) => ({
+          role: i % 2 ? ("bot" as const) : ("user" as const),
+          text: `${i} ${long}`,
+        })),
+      }),
+      ["ok?"],
+    );
+    const block = prompt.split("<recent_conversation>")[1]!.split("</recent_conversation>")[0]!;
+    expect(block.length).toBeLessThanOrEqual(1600);
+  });
+});
+
+describe("isFillerQuickReply", () => {
+  it.each([
+    "Ricevuto, poi vedo.",
+    "⚡ Ok, ne terrò conto!",
+    "Messaggio ricevuto, ti aggiorno a breve.",
+    "Got it, will check.",
+    "Noted, thanks!",
+    "Perfetto, lo considero al prossimo passaggio.",
+  ])("flags %j", (text) => expect(isFillerQuickReply(text)).toBe(true));
+
+  it.each([
+    "Sono al passo 2 di 3, scrivo l'HTML.",
+    "Ricevuto: aggiungo il PDF dopo il passo 3 «Tavole».",
+    "Parigi è la capitale della Francia.",
+    "Got it, I'll switch the chart to euros after the current step.",
+    "62%",
+  ])("keeps %j", (text) => expect(isFillerQuickReply(text)).toBe(false));
+});
+
+describe("buildFallbackQuickReply", () => {
+  it("answers in English for an English message, with continuation", () => {
+    const text = buildFallbackQuickReply(
+      context({ continuation: { index: 2, max: 5, percent: 40 } }),
+      ["what's the status?"],
+    );
+    expect(text).toBe(
+      "I'm on step 2/3 \"Scrivere l'HTML\" (plan 33% done), working for 3m 5s; automatic continuation 2/5; last step: Running shell: chromium --headless (20s ago). I'll read your message as soon as the current operation ends and answer it properly.",
+    );
+  });
+
+  it("works without a plan or activity", () => {
+    const text = buildFallbackQuickReply(context({ plan: null, recentActivity: [] }), [
+      "ci sei ancora?",
+    ]);
+    expect(text).toBe(
+      "Sto ancora lavorando alla richiesta in corso, da 3m 5s. Leggo il tuo messaggio appena finisce l'operazione in corso e ti rispondo nel merito.",
+    );
+  });
+
+  it("stays within the character cap", () => {
+    expect(
+      buildFallbackQuickReply(context(), ["a che punto sei?"], 300).length,
+    ).toBeLessThanOrEqual(300);
   });
 });
 

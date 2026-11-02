@@ -23,12 +23,19 @@ import {
   type PlanToolDeps,
 } from "./plan-tools.js";
 import type { ContinueLaterRequest } from "./run-context.js";
+import {
+  AUTO_PLAN_MIN_TOOLS_FOR_LONG_REQUEST,
+  claimsWholeTaskDone,
+  isStandbyClose,
+} from "./user-intent.js";
 
 export type AutoContinuationReason =
   | "plan_open"
   | "verification_pending"
   | "tool_budget"
-  | "plan_created";
+  | "plan_created"
+  /** A part of a long task ended with a stand-by line, or only answered a side question. */
+  | "close_attempt";
 
 export type PlanGateVerdict =
   | { open: true; reason: "plan_open" | "verification_pending"; openSteps: PlanStepDto[] }
@@ -161,12 +168,16 @@ export async function loadPlanGate(
 }
 
 /** The plan the platform writes for a long task the model did not plan. */
-export function autoPlanInput(requestTexts: readonly string[]): {
+export function autoPlanInput(
+  requestTexts: readonly string[],
+  asides: readonly string[] = [],
+): {
   title: string;
   summary: string;
   steps: { title: string; notes: string }[];
 } {
   const request = requestTexts.join("\n").replace(/\s+/g, " ").trim();
+  const side = asides.join(" | ").replace(/\s+/g, " ").trim();
   const title = request
     ? request.slice(0, 80) + (request.length > 80 ? "…" : "")
     : AUTO_PLAN_STEP_TITLE;
@@ -176,7 +187,11 @@ export function autoPlanInput(requestTexts: readonly string[]): {
     steps: [
       {
         title: AUTO_PLAN_STEP_TITLE,
-        notes: `Created automatically. The user's request: ${request.slice(0, 600) || "(see the conversation)"}`,
+        notes: `Created automatically. The user's request: ${request.slice(0, 600) || "(see the conversation)"}${
+          side
+            ? `. Side questions asked during the work (answer them; they are not the goal): ${side.slice(0, 300)}`
+            : ""
+        }`,
       },
     ],
   };
@@ -190,6 +205,7 @@ export async function createAutoPlan(
     botId: string;
     userId: string;
     requestTexts: readonly string[];
+    asides?: readonly string[];
     replaceActive: boolean;
     chainStartedAt: Date;
   },
@@ -199,7 +215,7 @@ export async function createAutoPlan(
     botId: input.botId,
     userId: input.userId,
     replaceActive: input.replaceActive,
-    ...autoPlanInput(input.requestTexts),
+    ...autoPlanInput(input.requestTexts, input.asides),
   });
   if ("error" in created) return { plan: null, verdict: { open: false, why: "no_plan" } };
   return {
@@ -210,4 +226,28 @@ export async function createAutoPlan(
       planToolUsedThisRun: true,
     }),
   };
+}
+
+/**
+ * Whether a part of a long task (an automatic continuation) is closing the task without
+ * finishing it: it ends with a stand-by line ("sono a disposizione per le prossime istruzioni")
+ * or, right after a side question, it did almost no work, and it does not claim the whole job
+ * done. The user asking to stop or change the work always lets it end.
+ */
+export function isCloseAttempt(input: {
+  continuationIndex: number;
+  /** Index 0 counts too when the request is a long task whose plan this run worked on. */
+  longTaskPlanned?: boolean;
+  replyText: string;
+  workToolCalls: number;
+  /** The latest user message of this request is a side question. */
+  lastUserMessageIsAside: boolean;
+  userAskedToStopOrChange: boolean;
+}): boolean {
+  if (input.continuationIndex <= 0 && !input.longTaskPlanned) return false;
+  if (input.userAskedToStopOrChange) return false;
+  const text = input.replyText.trim();
+  if (claimsWholeTaskDone(text)) return false;
+  if (text && isStandbyClose(text)) return true;
+  return input.lastUserMessageIsAside && input.workToolCalls < AUTO_PLAN_MIN_TOOLS_FOR_LONG_REQUEST;
 }

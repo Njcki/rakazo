@@ -193,7 +193,7 @@ export function normalizePercent(value: unknown): number | null {
 export function continuationPrompt(input: {
   index: number;
   max: number;
-  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created";
+  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created" | "close_attempt";
 }): string {
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
@@ -215,6 +215,8 @@ const AUTO_CONTINUATION_NOTES = {
     "The previous part did multi-step work without a plan and ended, so the platform created a plan for it and continued automatically. Call plan_status. Replace the generic plan with the real remaining steps (plan_create with replaceActive=true), or, if the work is truly finished, tick its step and then the final verification step after checking the user's original request. Do not stop before that.",
   tool_budget:
     "The previous part stopped at the tool-call limit for one turn, so the platform continued it automatically. Pick up exactly where it stopped.",
+  close_attempt:
+    "The previous part ended the long task without finishing it: it only answered a side question, or closed with a stand-by line (e.g. 'sono a disposizione per le prossime istruzioni'). A question the user asks during the work is answered on the way; it never completes or replaces the original request. Call plan_status, then resume the original request from its next unfinished part (make a plan of the remaining work if there is none). If the whole original request is really finished, tick the verification step with evidence against it and say clearly that the whole task is complete.",
 } as const;
 
 /**
@@ -228,7 +230,8 @@ export function continuationProgressContext(summary: string): string {
 export const CONTINUE_LATER_GUIDANCE =
   "Long tasks: if real work remains that you will not finish in this turn (for example a long batch, many files, or a multi-step plan), call continue_later with a short progress summary (and percent if known) instead of writing a final answer: the platform ends this turn and starts the next part automatically. " +
   "Never promise in a final answer that you will continue, proceed, or keep working later (e.g. 'continuo…', 'proseguo…', 'I'll continue…'): a final answer ends the task and nothing runs afterwards. " +
-  "Without continue_later, your final answer must say clearly that the task is done, or that it stopped and why (and what is left).";
+  "Without continue_later, your final answer must say clearly that the task is done, or that it stopped and why (and what is left). " +
+  "A question or aside the user sends while you work is answered briefly and the task goes on: it never completes or replaces the original request. While work remains, never end with a stand-by line such as 'sono a disposizione per le prossime istruzioni' or 'let me know how to proceed'.";
 
 export const CONTINUE_LATER_UNAVAILABLE_GUIDANCE =
   "Never promise in a final answer that you will continue, proceed, or keep working later (e.g. 'continuo…', 'proseguo…', 'I'll continue…'): a final answer ends the task and nothing runs afterwards. " +

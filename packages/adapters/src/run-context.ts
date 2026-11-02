@@ -120,6 +120,11 @@ export interface ReplyState {
   lastDurableProgressAt: number | undefined;
   /** Patch 0028: a mid-run user message arrived since the last durable progress. */
   steeringSinceDurableProgress: boolean;
+  /**
+   * Recent steps (tool name plus the note the user saw), newest last, so a quick reply can
+   * say what the run is doing right now. Capped at QUICK_REPLY_ACTIVITY_LIMIT.
+   */
+  toolActivity?: Array<{ text: string; at: number }>;
 }
 
 export interface ApprovalState {
@@ -212,7 +217,7 @@ export interface ContinueLaterRequest {
   repeats: number;
   percent: number | null;
   /** Scheduled by the completion gate, not by the model (plan-completion-gate.ts). */
-  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created";
+  auto?: "plan_open" | "verification_pending" | "tool_budget" | "plan_created" | "close_attempt";
 }
 
 export interface RunComputerContext {

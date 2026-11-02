@@ -44,6 +44,7 @@ import {
   createAutoPlan,
   decideAutoContinuation,
   hitToolCallBudget,
+  isCloseAttempt,
   loadPlanGate,
   planProgressLine,
 } from "./plan-completion-gate.js";
@@ -52,7 +53,7 @@ import {
   clearRoutineBackoff,
   modelAccountRefusal,
 } from "./routine-backoff.js";
-import type { RunContext } from "./run-context.js";
+import type { ReplyState, RunContext } from "./run-context.js";
 import { isRunTainted, persistTurnCheckpoint } from "./run-context.js";
 import { renewRunLease, requeueComputerRun } from "./run-lifecycle.js";
 import { publishMessage, redactBlocks } from "./run-messages.js";
@@ -83,7 +84,11 @@ import {
 } from "./run-replies.js";
 import { scheduleRoutineRetry } from "./run-routines.js";
 import { applyTool } from "./run-tools.js";
-import { currentRequestUserTexts, chainStartedAt as requestStartedAt } from "./run-tools-plan.js";
+import {
+  currentRequestMessages,
+  chainStartedAt as requestStartedAt,
+  userAskedToStopOrChange,
+} from "./run-tools-plan.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
 import {
   peerReplyWithoutSentinel,
@@ -97,7 +102,7 @@ import {
   replyMentionsComputerFallback,
   userComputerFallbackNotice,
 } from "./user-computer-fallback.js";
-import { needsAutoPlan } from "./user-intent.js";
+import { looksLikeLongTask, needsAutoPlan, stripStandbyClose } from "./user-intent.js";
 import {
   assistantTurnSeparator,
   botMessageOutcomeFromMidTurn,
@@ -475,6 +480,23 @@ async function pauseForTakeover(ctx: RunContext, event: RuntimeEvent<"takeover">
   });
 }
 
+const QUICK_REPLY_ACTIVITY_LIMIT = 8;
+
+/** Remembers the step for quick replies: tool name and the note the user already saw. */
+export function recordToolActivity(
+  reply: Pick<ReplyState, "toolActivity">,
+  name: string,
+  note: string | undefined,
+  at = Date.now(),
+): void {
+  const text = note?.trim() ? `${name}: ${note.trim().replace(/\s+/g, " ").slice(0, 200)}` : name;
+  reply.toolActivity ??= [];
+  const list = reply.toolActivity;
+  list.push({ text, at });
+  if (list.length > QUICK_REPLY_ACTIVITY_LIMIT)
+    list.splice(0, list.length - QUICK_REPLY_ACTIVITY_LIMIT);
+}
+
 /** Calls that only report, plan or continue are not progress for the continuation loop guard. */
 function countsAsContinuationWork(name: string): boolean {
   return name !== CONTINUE_LATER_TOOL && name !== "message_user" && !name.startsWith("plan_");
@@ -491,6 +513,7 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
   // Queued first so the text written before this call becomes its note.
   reply.pendingToolNames.push(event.name);
   const heldNote = event.name === "message_user" ? undefined : await publishMidTurnNarration(ctx);
+  recordToolActivity(reply, event.name, heldNote);
   // A step without a note of its own replaces the earlier one in the live view, so its status
   // lines show again.
   if (!heldNote) reply.narrationStatusShowing = false;
@@ -909,6 +932,24 @@ export async function completeRun(ctx: RunContext) {
   }
 }
 
+/** The task goes on, so the reply loses its trailing "sono a disposizione…" lines. */
+function dropStandbyClose(reply: ReplyState): void {
+  const assembled = stripStandbyClose(reply.assembled);
+  if (assembled === reply.assembled || !assembled.trim()) return;
+  const removed = reply.assembled.slice(assembled.length);
+  reply.assembled = assembled;
+  if (reply.currentTextSegment.endsWith(removed)) {
+    reply.currentTextSegment = reply.currentTextSegment.slice(0, -removed.length).trimEnd();
+  } else {
+    reply.currentTextSegment = stripStandbyClose(reply.currentTextSegment);
+  }
+  const last = reply.messageSegments.at(-1);
+  if (last && last.kind === "text") {
+    const text = stripStandbyClose(last.text);
+    if (text.trim()) last.text = text;
+  }
+}
+
 /**
  * The completion gate (plan-completion-gate.ts): a run that ends with the plan still open, its
  * verification unticked, or at the tool-call limit, continues as if it had called
@@ -945,15 +986,18 @@ async function applyCompletionGate(ctx: RunContext) {
       chainStartedAt,
       planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
     });
+    const messages = await currentRequestMessages(ctx);
+    const goalTexts = messages.filter((m) => !m.aside).map((m) => m.text);
+    const asides = messages.filter((m) => m.aside).map((m) => m.text);
     // Multi-step work without a plan of this request gets one, so the gate applies to it too.
     if (!reason && !verdict.open && (verdict.why === "no_plan" || verdict.why === "stale")) {
-      const requestTexts = await currentRequestUserTexts(ctx);
-      if (needsAutoPlan({ requestTexts, workToolCalls: continuation.workToolCalls })) {
+      if (needsAutoPlan({ requestTexts: goalTexts, workToolCalls: continuation.workToolCalls })) {
         ({ plan, verdict } = await createAutoPlan(deps, {
           spaceId: run.spaceId,
           botId: bot.id,
           userId: run.userId,
-          requestTexts,
+          requestTexts: goalTexts,
+          asides,
           replaceActive: verdict.why === "stale",
           chainStartedAt,
         }));
@@ -961,6 +1005,22 @@ async function applyCompletionGate(ctx: RunContext) {
       }
     }
     if (!reason && verdict.open) reason = verdict.reason;
+    // A side question never ends a long task: a part that only answered it, or that closes
+    // with a stand-by line, continues the original request.
+    if (
+      !reason &&
+      isCloseAttempt({
+        continuationIndex: run.continuationIndex,
+        longTaskPlanned:
+          ctx.state.planReminder.planToolUsedThisRun && goalTexts.some((t) => looksLikeLongTask(t)),
+        replyText,
+        workToolCalls: continuation.workToolCalls,
+        lastUserMessageIsAside: messages.length > 1 && messages.at(-1)!.aside,
+        userAskedToStopOrChange: await userAskedToStopOrChange(ctx),
+      })
+    ) {
+      reason = "close_attempt";
+    }
     const decision = decideAutoContinuation({
       runId,
       chain: run,
@@ -971,8 +1031,10 @@ async function applyCompletionGate(ctx: RunContext) {
       progressLine: plan && verdict.open ? planProgressLine(plan) : undefined,
       maxSummaryChars: CONTINUE_LATER_SUMMARY_MAX_CHARS,
     });
-    if (decision.kind === "continue") continuation.requested = decision.request;
-    else if (decision.kind === "refused") continuation.refused = decision.refused;
+    if (decision.kind === "continue") {
+      continuation.requested = decision.request;
+      if (reason === "close_attempt") dropStandbyClose(ctx.state.reply);
+    } else if (decision.kind === "refused") continuation.refused = decision.refused;
     if (decision.kind !== "none") {
       getLogger().info("run.completion_gate", {
         runId,

@@ -9,16 +9,20 @@ import {
 } from "./plan-tools.js";
 import type { RunContext } from "./run-context.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
-import { asksToStopOrChange } from "./user-intent.js";
+import { asksToStopOrChange, isAsideMessage } from "./user-intent.js";
 
-function blocksText(blocks: unknown): string {
+/**
+ * The text of stored message blocks. Blocks are `{ kind: "text", text }`; reading `type` here
+ * once made every request look empty, so the verification step never saw the original request.
+ */
+export function blocksText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return typeof blocks === "string" ? blocks : "";
   return blocks
-    .map((block) =>
-      block && typeof block === "object" && (block as { type?: unknown }).type === "text"
-        ? String((block as { text?: unknown }).text ?? "")
-        : "",
-    )
+    .map((block) => {
+      if (!block || typeof block !== "object") return "";
+      const { kind, type, text } = block as { kind?: unknown; type?: unknown; text?: unknown };
+      return kind === "text" || type === "text" ? String(text ?? "") : "";
+    })
     .filter((text) => text.trim())
     .join("\n")
     .trim();
@@ -53,7 +57,18 @@ export async function loadOriginalRequest(ctx: RunContext): Promise<OriginalRequ
                 .filter(Boolean)
                 .reverse()
             : [];
-        return { text, earlier };
+        const later = await currentRequestMessages(ctx);
+        const asides = later.filter((m) => !m.source && m.aside).map((m) => m.text);
+        const instructions = later.filter((m) => !m.source && !m.aside).map((m) => m.text);
+        return {
+          text,
+          earlier,
+          ...(instructions.length ? { instructions } : {}),
+          ...(asides.length ? { asides } : {}),
+          ...(run.continuationIndex > 0
+            ? { continuation: { index: run.continuationIndex, percent: run.continuationPercent } }
+            : {}),
+        };
       }
     }
     if (run.routineId) {
@@ -84,8 +99,24 @@ export async function chainStartedAt(ctx: RunContext): Promise<Date> {
  * message written since (steering included), plus a routine's prompt.
  */
 export async function currentRequestUserTexts(ctx: RunContext): Promise<string[]> {
+  return (await currentRequestMessages(ctx)).map((message) => message.text);
+}
+
+export type RequestMessage = {
+  text: string;
+  /** The message that started the request (or the routine's prompt). */
+  source: boolean;
+  /** A side question or aside written during the work: answered, never the goal. */
+  aside: boolean;
+};
+
+/**
+ * The current request split into the goal (the starting message, plus instructions given while
+ * it runs) and asides (questions written meanwhile, which do not replace or complete it).
+ */
+export async function currentRequestMessages(ctx: RunContext): Promise<RequestMessage[]> {
   const { deps, run } = ctx;
-  const texts: string[] = [];
+  const out: RequestMessage[] = [];
   try {
     const since = await chainStartedAt(ctx);
     const source = run.sourceMessageId
@@ -94,7 +125,8 @@ export async function currentRequestUserTexts(ctx: RunContext): Promise<string[]
           select: { blocks: true, role: true },
         })
       : null;
-    if (source?.role === "user") texts.push(blocksText(source.blocks));
+    if (source?.role === "user")
+      out.push({ text: blocksText(source.blocks), source: true, aside: false });
     const later = await deps.prisma.message.findMany({
       where: {
         threadId: run.threadId,
@@ -106,18 +138,21 @@ export async function currentRequestUserTexts(ctx: RunContext): Promise<string[]
       take: 20,
       select: { blocks: true },
     });
-    texts.push(...later.map((row) => blocksText(row.blocks)));
+    for (const row of later) {
+      const text = blocksText(row.blocks);
+      out.push({ text, source: false, aside: isAsideMessage(text) });
+    }
     if (run.routineId) {
       const routine = await deps.prisma.routine.findUnique({
         where: { id: run.routineId },
         select: { prompt: true },
       });
-      if (routine?.prompt) texts.push(routine.prompt);
+      if (routine?.prompt) out.push({ text: routine.prompt, source: true, aside: false });
     }
   } catch {
     // Unknown wording counts as "not asked".
   }
-  return texts.filter((text) => text.trim());
+  return out.filter((message) => message.text.trim());
 }
 
 /**

@@ -70,6 +70,11 @@ export interface QuickReplyConfig {
   maxChars: number;
   /** Shown before the quick reply so it reads as a fast status, not the real answer. */
   prefix: string;
+  /**
+   * Let the main run send one clarifying message after the quick reply, only when the quick
+   * reply was wrong, incomplete or missed important information (QUICK_REPLY_FOLLOWUP).
+   */
+  followUp: boolean;
 }
 
 /** Parse "provider/modelId"; the model id may contain slashes (openrouter ids). */
@@ -88,7 +93,8 @@ export function parseQuickReplyModel(
  * backup model, else the run's model), QUICK_REPLY_REASONING (default low),
  * QUICK_REPLY_TIMEOUT_MS (default 8000), QUICK_REPLY_DEBOUNCE_MS (default 1500),
  * QUICK_REPLY_POLL_MS (default 1500), QUICK_REPLY_MAX_CHARS (default 300),
- * QUICK_REPLY_PREFIX (default "⚡ ", "none" for no prefix).
+ * QUICK_REPLY_PREFIX (default "⚡ ", "none" for no prefix), QUICK_REPLY_FOLLOWUP (default on:
+ * the main run may send one clarification after the quick reply, only when needed).
  */
 export function quickReplyConfig(env: NodeJS.ProcessEnv = process.env): QuickReplyConfig {
   const reasoningRaw = env.QUICK_REPLY_REASONING?.trim().toLowerCase() as ThinkingLevel | undefined;
@@ -103,6 +109,7 @@ export function quickReplyConfig(env: NodeJS.ProcessEnv = process.env): QuickRep
     maxChars: envInt(env, "QUICK_REPLY_MAX_CHARS", 300, 40, 500),
     prefix:
       prefixRaw === undefined ? "⚡ " : prefixRaw.trim().toLowerCase() === "none" ? "" : prefixRaw,
+    followUp: envFlag(env, "QUICK_REPLY_FOLLOWUP", true),
   };
 }
 
@@ -304,8 +311,32 @@ export const QUICK_ACKED_STEERING_NOTE =
   "Send a message only if it changes what you do or if it asks for something the reply above did not cover. " +
   "Stop or change course only if the user explicitly asks you to.]";
 
-export function frameQuickAckedSteering(text: string, ack: string): string {
-  return `${QUICK_ACKED_STEERING_NOTE.replace("{ack}", ack.replaceAll("«", '"').replaceAll("»", '"'))}\n\n${text}`;
+/**
+ * Steering note used when the quick reply went out and follow-ups are on (QUICK_REPLY_FOLLOWUP):
+ * the main run checks the quick reply against what it actually knows and sends at most one
+ * short clarification, in its next step, only when the quick reply was wrong, incomplete or
+ * missed something important. Otherwise it stays silent about it.
+ */
+export const QUICK_ACKED_FOLLOWUP_NOTE =
+  "[The user sent the message below while you are still working on the current task. " +
+  "An immediate short reply was already posted to the user on your behalf, written without your tools, files or results: «{ack}». " +
+  "Do not acknowledge the message again and do not repeat that reply. " +
+  "Check that reply against what you actually know now. " +
+  "Only if it was wrong, left out something the user asked, or lacks important information you have, send exactly one short follow-up with the message_user tool in your very next step (together with your next tool call), " +
+  'in the user\'s language, that corrects or completes it without repeating it (you may open with a word such as "Precisazione:" in Italian or "To clarify:" in English; never start it with ⚡). ' +
+  "If the reply was accurate and enough, send nothing about it. Never send more than one follow-up for this reply. " +
+  "Take the message into account and continue the original task with tool calls. " +
+  "Stop or change course only if the user explicitly asks you to.]";
+
+export function frameQuickAckedSteering(
+  text: string,
+  ack: string,
+  options: { followUp?: boolean } = {},
+): string {
+  const note = options.followUp ? QUICK_ACKED_FOLLOWUP_NOTE : QUICK_ACKED_STEERING_NOTE;
+  // Function replacer: "$" sequences in the ack must stay literal.
+  const safeAck = ack.replaceAll("«", '"').replaceAll("»", '"');
+  return `${note.replace("{ack}", () => safeAck)}\n\n${text}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -633,8 +664,16 @@ export interface RunQuickReply {
 export function withQuickReplyTexts<T extends { messageId: string }>(
   claimed: T[],
   replies: Map<string, string>,
-): Array<T & { quickReplyText: string | undefined }> {
-  return claimed.map((item) => ({ ...item, quickReplyText: replies.get(item.messageId) }));
+  options: { followUp?: boolean } = {},
+): Array<T & { quickReplyText: string | undefined; quickReplyFollowUp?: boolean }> {
+  return claimed.map((item) => {
+    const quickReplyText = replies.get(item.messageId);
+    return {
+      ...item,
+      quickReplyText,
+      ...(quickReplyText && options.followUp ? { quickReplyFollowUp: true } : {}),
+    };
+  });
 }
 
 function withTimeout<T>(

@@ -1904,7 +1904,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   })),
                 );
                 // settle() keys replies by messageId, not by the steering row id.
-                return withQuickReplyTexts(claimed, replies);
+                return withQuickReplyTexts(claimed, replies, {
+                  followUp: quickReplySettings.followUp,
+                });
               },
             },
             context,

@@ -463,6 +463,8 @@ export interface AgentSteeringMessage {
   images?: AgentInputImage[];
   /** Patch 0030: text of the quick reply already posted for this message, if any. */
   quickReplyText?: string;
+  /** RAKAZO: the run may send one clarification after that quick reply, only if needed. */
+  quickReplyFollowUp?: boolean;
   /** Server verified legacy attachment bytes remain available to file tools. */
   imageFileFallback?: boolean;
 }

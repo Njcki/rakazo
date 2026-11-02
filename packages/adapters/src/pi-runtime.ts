@@ -524,7 +524,9 @@ export class PiAgentRuntime implements AgentRuntime {
                 item.origin !== "user"
                   ? midTaskMessageFromPrompt(item.text, item.origin)
                   : item.quickReplyText
-                    ? frameQuickAckedSteering(item.text, item.quickReplyText)
+                    ? frameQuickAckedSteering(item.text, item.quickReplyText, {
+                        followUp: item.quickReplyFollowUp,
+                      })
                     : steeringNote
                       ? frameMidRunSteering(item.text)
                       : midTaskMessagePrompt(

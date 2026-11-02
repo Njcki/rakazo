@@ -410,6 +410,7 @@ import { MISSING_TOOL_FINAL_RESPONSE_ERROR, PiAgentRuntime } from "./pi-runtime.
 import { providerFailureText } from "./pi-runtime-errors.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 import { maxToolCallsPerTurn } from "./pi-runtime-tools.js";
+import { frameQuickAckedSteering } from "./quick-reply.js";
 import { toolCompletionAuditPayload } from "./tool-completion-audit.js";
 import { midTaskMessageFromPrompt, midTaskMessagePrompt } from "./user-progress.js";
 
@@ -604,6 +605,59 @@ describe("Pi connector tool dispatch", () => {
       expect.objectContaining({ content: midTaskMessagePrompt("Still working?", true) }),
     ]);
   });
+
+  it.each([
+    [true, "Precisazione:"],
+    [false, "Do not acknowledge the message again"],
+  ])(
+    "frames a quick-acked message with the follow-up note only when enabled (%s)",
+    async (followUp, marker) => {
+      fakeAgentState.mode = "empty";
+      let claimCount = 0;
+      const claimSteering = vi.fn(async () => {
+        claimCount += 1;
+        return claimCount === 1
+          ? []
+          : [
+              {
+                id: "steering-1",
+                messageId: "message-1",
+                text: "a che punto sei?",
+                origin: "user" as const,
+                quickReplyText: "Sono al passo 2 di 3.",
+                ...(followUp ? { quickReplyFollowUp: true } : {}),
+              },
+            ];
+      });
+      const runtime = new PiAgentRuntime();
+      for await (const _event of runtime.run(
+        {
+          botId: "b",
+          threadId: "t",
+          runId: "r",
+          prompt: "prepare the report",
+          instructions: "Follow the user's instructions.",
+          history: [],
+          tools: [builtinAgentTools.find((tool) => tool.name === "message_user")!],
+          model: { provider: "test", id: "dispatch-test-model" },
+          claimSteering,
+        },
+        { signal: new AbortController().signal },
+      )) {
+        // Exhaust the runtime event stream.
+      }
+      expect(fakeAgentState.preparedMessages).toEqual([
+        expect.objectContaining({
+          content: frameQuickAckedSteering("a che punto sei?", "Sono al passo 2 di 3.", {
+            followUp,
+          }),
+        }),
+      ]);
+      expect(fakeAgentState.preparedMessages[0]).toMatchObject({
+        content: expect.stringContaining(marker),
+      });
+    },
+  );
 
   it("ends the run when the model answers the person in text and stops", async () => {
     fakeAgentState.mode = "answer-then-stop";

@@ -6,6 +6,8 @@ import {
   createQuickReplyCoordinator,
   frameQuickAckedSteering,
   parseQuickReplyModel,
+  QUICK_ACKED_FOLLOWUP_NOTE,
+  QUICK_ACKED_STEERING_NOTE,
   type QuickReplyContext,
   type QuickReplyFailureLog,
   type QuickReplyItem,
@@ -45,6 +47,18 @@ function context(overrides: Partial<QuickReplyContext> = {}): QuickReplyContext 
   };
 }
 
+describe("quickReplyConfig followUp", () => {
+  it.each([
+    ["0", false],
+    ["false", false],
+    ["off", false],
+    ["1", true],
+    ["on", true],
+  ])("QUICK_REPLY_FOLLOWUP=%s -> %s", (raw, expected) => {
+    expect(quickReplyConfig({ QUICK_REPLY_FOLLOWUP: raw }).followUp).toBe(expected);
+  });
+});
+
 describe("quickReplyConfig", () => {
   it("defaults on with low reasoning and the backup model", () => {
     const config = quickReplyConfig({});
@@ -57,6 +71,7 @@ describe("quickReplyConfig", () => {
       pollMs: 1500,
       maxChars: 300,
       prefix: "⚡ ",
+      followUp: true,
     });
   });
 
@@ -201,6 +216,30 @@ describe("frameQuickAckedSteering", () => {
     expect(framed).toContain("Ok, lo passo al lavoro in corso.");
     expect(framed).toContain("Do not acknowledge the message again");
     expect(framed.endsWith("fermati dopo il PDF")).toBe(true);
+    expect(framed.startsWith(QUICK_ACKED_STEERING_NOTE.slice(0, 40))).toBe(true);
+    expect(framed).not.toContain("follow-up");
+  });
+
+  it("asks for at most one clarification, only when needed, when follow-ups are on", () => {
+    const framed = frameQuickAckedSteering("a che punto sei?", "Sono al passo 2 di 3.", {
+      followUp: true,
+    });
+    expect(framed.startsWith(QUICK_ACKED_FOLLOWUP_NOTE.slice(0, 40))).toBe(true);
+    expect(framed).toContain("«Sono al passo 2 di 3.»");
+    expect(framed).toContain("Only if it was wrong");
+    expect(framed).toContain("exactly one short follow-up with the message_user tool");
+    expect(framed).toContain("in your very next step");
+    expect(framed).toContain("in the user's language");
+    expect(framed).toContain("never start it with ⚡");
+    expect(framed).toContain("If the reply was accurate and enough, send nothing about it");
+    expect(framed).toContain("Never send more than one follow-up");
+    expect(framed).toContain("continue the original task with tool calls");
+    expect(framed.endsWith("\n\na che punto sei?")).toBe(true);
+  });
+
+  it("keeps the ack literal ($ patterns, guillemets)", () => {
+    const framed = frameQuickAckedSteering("ok", "costa $& e $1 «circa»", { followUp: true });
+    expect(framed).toContain('«costa $& e $1 "circa"»');
   });
 });
 
@@ -424,6 +463,20 @@ describe("withQuickReplyTexts", () => {
     expect(out[0]!.quickReplyText).toBe("Ricevuto, lo passo al lavoro in corso.");
     expect(out[1]!.quickReplyText).toBeUndefined();
     expect(out[0]!.id).toBe("s-1");
+  });
+
+  it("marks follow-up only on items that got a quick reply, and only when enabled", () => {
+    const replies = new Map([["m-1", "Ricevuto."]]);
+    const items = [
+      { id: "s-1", messageId: "m-1", text: "a" },
+      { id: "s-2", messageId: "m-2", text: "b" },
+    ];
+    const on = withQuickReplyTexts(items, replies, { followUp: true });
+    expect(on[0]!.quickReplyFollowUp).toBe(true);
+    expect(on[1]!.quickReplyFollowUp).toBeUndefined();
+    const off = withQuickReplyTexts(items, replies, { followUp: false });
+    expect(off[0]!.quickReplyFollowUp).toBeUndefined();
+    expect(withQuickReplyTexts(items, replies)[0]!.quickReplyFollowUp).toBeUndefined();
   });
 
   it("feeds settle() results straight into the claim (end to end)", async () => {

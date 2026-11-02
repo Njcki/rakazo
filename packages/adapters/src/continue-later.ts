@@ -228,6 +228,7 @@ export function continuationPrompt(input: {
       "Use the conversation, your plan (if any) and the progress summary you left to pick up the next unfinished step. " +
       "Do not redo finished steps and do not re-announce the task. " +
       "If more work still remains after this part, call continue_later again with a fresh summary; " +
+      "End every part with a short, real update for the user (2-4 sentences, in their language): what you did in this part, where the WHOLE job stands (the measured total, e.g. 120 of 900 items), and what comes next. Never end a part silently or with a bare status line. " +
       "when everything is done, reply with the final result and say clearly that the whole task is complete (e.g. 'Lavoro completato al 100%').",
   ].join("\n");
 }
@@ -262,7 +263,8 @@ export function continuationProgressContext(summary: string): string {
 }
 
 export const CONTINUE_LATER_GUIDANCE =
-  "Long tasks: if real work remains that you will not finish in this turn (for example a long batch, many files, or a multi-step plan), call continue_later with a short progress summary (and percent if known) instead of writing a final answer: the platform ends this turn and starts the next part automatically. " +
+  "Long tasks: if real work remains that you will not finish in this turn (for example a long batch, many files, or a multi-step plan), call continue_later with a short progress summary (and percent of the WHOLE job if known) instead of writing a final answer: the platform ends this turn and starts the next part automatically. " +
+  "End every part with a short, real update for the user (2-4 sentences, in their language): what you did in this part, where the WHOLE job stands (the measured total, e.g. 120 of 900 items), and what comes next. Never end a part silently or with a bare status line. " +
   "Never promise in a final answer that you will continue, proceed, or keep working later (e.g. 'continuo…', 'proseguo…', 'I'll continue…'): a final answer ends the task and nothing runs afterwards. " +
   "Without continue_later, your final answer must say clearly that the task is done, or that it stopped and why (and what is left). " +
   "A question or aside the user sends while you work is answered briefly and the task goes on: it never completes or replaces the original request. While work remains, never end with a stand-by line such as 'sono a disposizione per le prossime istruzioni' or 'let me know how to proceed'." +

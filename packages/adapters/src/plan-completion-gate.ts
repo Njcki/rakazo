@@ -43,7 +43,13 @@ export type AutoContinuationReason =
    * The user asked for the whole job ("fino al 100%"), the bot closed its plan for one batch
    * and the reply does not say the whole job is done.
    */
-  | "goal_unfinished";
+  | "goal_unfinished"
+  /** The request's completion check (set_goal_check) is below its target and still moving. */
+  | "goal_probe"
+  /** A long request has no completion check: one part to register it. */
+  | "goal_check_missing"
+  /** No usable check: the completion review found the request unfinished. */
+  | "judge_unfinished";
 
 export type PlanGateVerdict =
   | { open: true; reason: "plan_open" | "verification_pending"; openSteps: PlanStepDto[] }

@@ -37,6 +37,7 @@ export const BUILTIN_TOOL_NAMES = [
   "connect_app",
   "message_user",
   "continue_later",
+  "set_goal_check",
   "request_secret",
   "generate_secret",
   "list_secrets",

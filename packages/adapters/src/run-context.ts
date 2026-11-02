@@ -218,6 +218,8 @@ export interface ContinueLaterRequest {
   percent: number | null;
   /** Plan steps already finished in this request: the next part must not redo them. */
   doneSteps?: string[];
+  /** The goal, its completion check and value (or the request to register one) for the next part. */
+  goalNote?: string;
   /** Scheduled by the completion gate, not by the model (plan-completion-gate.ts). */
   auto?:
     | "plan_open"
@@ -225,7 +227,10 @@ export interface ContinueLaterRequest {
     | "tool_budget"
     | "plan_created"
     | "close_attempt"
-    | "goal_unfinished";
+    | "goal_unfinished"
+    | "goal_probe"
+    | "goal_check_missing"
+    | "judge_unfinished";
 }
 
 export interface RunComputerContext {
@@ -317,6 +322,14 @@ export interface RunContext {
   state: RunState;
   settleRunningHelpers: () => Promise<void>;
   stopHeartbeatAfterCompletion: () => void;
+  /**
+   * Short completion review on a fast model (goal-gate.ts): returns its raw text, or undefined
+   * when no model is available. Set by the executor after the context is built.
+   */
+  completionJudge?: (
+    prompt: { instructions: string; prompt: string },
+    signal: AbortSignal,
+  ) => Promise<string | undefined>;
 }
 
 export async function settleRunningHelpers(

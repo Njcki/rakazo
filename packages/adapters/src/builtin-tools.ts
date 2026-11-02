@@ -622,6 +622,41 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "set_goal_check",
+    description:
+      "Register the completion check of a long request (many items, batches, 'fino al 100%', work over several parts). The probe is a read-only shell command on your computer that prints the current progress of the WHOLE request as one number (for example: ls out/ | wc -l). The platform runs it now and after every part: the request continues while the value is below the target and growing, and ends when it reaches the target or stops growing. A finished batch or closed plan does not end the request; this check does. Use kind=exit for a command that exits 0 only when everything is done. Not for simple questions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        description: {
+          type: "string",
+          minLength: 1,
+          maxLength: 300,
+          description:
+            "The whole goal in one line, in the user's language (e.g. 'all 40 files converted').",
+        },
+        probe: {
+          type: "string",
+          minLength: 1,
+          maxLength: 1000,
+          description:
+            "Read-only shell command that prints one number: the progress of the whole request. Must not change anything.",
+        },
+        target: {
+          type: "number",
+          description: "The value that means the whole request is done (for kind=number).",
+        },
+        kind: {
+          type: "string",
+          enum: ["number", "exit"],
+          description: "number (default): the probe prints a number; exit: exit code 0 means done.",
+        },
+        unit: { type: "string", maxLength: 40, description: "Unit of the value (optional)." },
+      },
+      required: ["description", "probe"],
+    },
+  },
+  {
     name: "request_secret",
     get description() {
       return secretAskToolSurface().description;

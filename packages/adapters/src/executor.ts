@@ -1596,6 +1596,43 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         let quickReplyCount = 0;
         let quickReplyArmed = false;
         const runStartedAtMs = (run.startedAt ?? new Date()).getTime();
+        const resolveQuickModel = async () => {
+          const choice = quickReplySettings.model ??
+            fallbackModels[0] ?? { provider: runModelProvider, modelId: runModelId };
+          const base =
+            choice.provider === runModelProvider && choice.modelId === runModelId
+              ? {
+                  provider: runModelProvider!,
+                  id: runModelId!,
+                  ...(credential ? { connectionId: credential.id } : {}),
+                  apiKey: resolved.oauth ? undefined : resolved.apiKey,
+                  callObserver: resolved.callObserver,
+                  baseUrl: resolved.baseUrl,
+                  headers: resolved.headers,
+                  allowPrivateEndpoint: resolved.allowPrivateEndpoint,
+                  cacheCapabilities: resolved.cacheCapabilities,
+                  contextWindow: resolved.contextWindow,
+                  reasoning: resolved.reasoning,
+                  maxTokens: resolved.maxTokens,
+                  acceptsImages: resolved.acceptsImages,
+                  thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
+                  oauth: resolved.oauth
+                    ? {
+                        credential: resolved.oauth,
+                        persist: resolved.persistOAuth,
+                        retire: resolved.retireOAuth,
+                      }
+                    : undefined,
+                }
+              : await resolveConnectedModel(run, choice.provider, choice.modelId, (values) =>
+                  runSecrets.push(...values),
+                );
+          return {
+            ...base,
+            thinkingLevel: quickReplySettings.reasoning ?? base.thinkingLevel,
+            maxTokens: Math.min(base.maxTokens ?? QUICK_REPLY_MAX_TOKENS, QUICK_REPLY_MAX_TOKENS),
+          };
+        };
         const quickReply = quickReplyEligible({
           trigger: run.trigger,
           scripted,
@@ -1627,46 +1664,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   text: blocksToAgentHistoryText(row.message.blocks as MessageBlock[]),
                 }));
               },
-              resolveModel: async () => {
-                const choice = quickReplySettings.model ??
-                  fallbackModels[0] ?? { provider: runModelProvider, modelId: runModelId };
-                const base =
-                  choice.provider === runModelProvider && choice.modelId === runModelId
-                    ? {
-                        provider: runModelProvider!,
-                        id: runModelId!,
-                        ...(credential ? { connectionId: credential.id } : {}),
-                        apiKey: resolved.oauth ? undefined : resolved.apiKey,
-                        callObserver: resolved.callObserver,
-                        baseUrl: resolved.baseUrl,
-                        headers: resolved.headers,
-                        allowPrivateEndpoint: resolved.allowPrivateEndpoint,
-                        cacheCapabilities: resolved.cacheCapabilities,
-                        contextWindow: resolved.contextWindow,
-                        reasoning: resolved.reasoning,
-                        maxTokens: resolved.maxTokens,
-                        acceptsImages: resolved.acceptsImages,
-                        thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
-                        oauth: resolved.oauth
-                          ? {
-                              credential: resolved.oauth,
-                              persist: resolved.persistOAuth,
-                              retire: resolved.retireOAuth,
-                            }
-                          : undefined,
-                      }
-                    : await resolveConnectedModel(run, choice.provider, choice.modelId, (values) =>
-                        runSecrets.push(...values),
-                      );
-                return {
-                  ...base,
-                  thinkingLevel: quickReplySettings.reasoning ?? base.thinkingLevel,
-                  maxTokens: Math.min(
-                    base.maxTokens ?? QUICK_REPLY_MAX_TOKENS,
-                    QUICK_REPLY_MAX_TOKENS,
-                  ),
-                };
-              },
+              resolveModel: resolveQuickModel,
               loadContext: async () => {
                 const [plan, recentRows] = await Promise.all([
                   getDisplayPlan(deps, { spaceId: run.spaceId, botId: bot.id }).catch(() => null),
@@ -1779,6 +1777,33 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               },
             })
           : undefined;
+        // Completion review of long requests without a usable check (goal-gate.ts).
+        ctx.completionJudge = async (prompt, signal) => {
+          const model = await resolveQuickModel().catch(() => undefined);
+          if (!model) return undefined;
+          return callQuickReplyModel({
+            runtime: deps.runtime,
+            model,
+            instructions: prompt.instructions,
+            prompt: prompt.prompt,
+            runId: `${runId}:completion-judge`,
+            botId: bot.id,
+            threadId: thread.id,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            timeoutMs: 10_000,
+            signal,
+            onUsage: (event) =>
+              recordUsage(deps.prisma, event, {
+                spaceId: run.spaceId,
+                botId: bot.id,
+                userId: run.userId,
+                runId,
+                parentRunId: runId,
+                operationId: `${runId}:completion-judge`,
+              }),
+          });
+        };
 
         try {
           if (checkpointLoadError) throw checkpointLoadError;

@@ -962,6 +962,8 @@ model Run {
   continuationPercent  Int?
   // The run that asked for this one had read outside content, so this one starts tainted too.
   continuationTainted  Boolean           @default(false)
+  // Root run only: the request's completion check (set_goal_check) and its readings, as JSON.
+  continuationGoal     Json?
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   attempts             Attempt[]

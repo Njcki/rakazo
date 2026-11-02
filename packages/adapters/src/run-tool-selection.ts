@@ -124,7 +124,7 @@ export function selectBuiltinToolsForRun(options: {
           "generate_video",
         ].includes(tool.name)) &&
       (options.voiceCall || tool.name !== "end_call") &&
-      (tool.name !== "continue_later" ||
+      ((tool.name !== "continue_later" && tool.name !== "set_goal_check") ||
         (Boolean(options.continueLater) && !isBackgroundRunTrigger(options.trigger))) &&
       (options.userComputer || tool.name !== "user_computer_shell") &&
       ((options.userComputer && options.userComputerScreen) ||

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { MessageBlock } from "@rakazo/contracts";
 import type { ExecutorDeps } from "./executor-deps.js";
+import { GOAL_CHECK_GUIDANCE } from "./goal-check.js";
 
 /**
  * Explicit continuation (`continue_later`): the model ends this run with a short progress
@@ -199,9 +200,14 @@ export function continuationPrompt(input: {
     | "tool_budget"
     | "plan_created"
     | "close_attempt"
-    | "goal_unfinished";
+    | "goal_unfinished"
+    | "goal_probe"
+    | "goal_check_missing"
+    | "judge_unfinished";
   /** Plan steps already finished in this request (model-written titles). */
   doneSteps?: readonly string[];
+  /** The request's goal and completion check (goal-check.ts), or the ask to register one. */
+  goalNote?: string;
 }): string {
   const done = (input.doneSteps ?? [])
     .map((title) => title.replace(/\s+/g, " ").trim().slice(0, 100))
@@ -210,6 +216,7 @@ export function continuationPrompt(input: {
   return [
     `[Continuation ${input.index} of max ${input.max}: resume the task from where you left off.]`,
     ...(input.auto ? [AUTO_CONTINUATION_NOTES[input.auto]] : []),
+    ...(input.goalNote?.trim() ? [input.goalNote.trim()] : []),
     ...(done.length
       ? [
           `These plan steps are already DONE in this task. Do not redo, re-verify or re-report them; move to the next unfinished part of the work: ${done
@@ -238,6 +245,12 @@ const AUTO_CONTINUATION_NOTES = {
     "The previous part ended the long task without finishing it: it only answered a side question, or closed with a stand-by line (e.g. 'sono a disposizione per le prossime istruzioni'). A question the user asks during the work is answered on the way; it never completes or replaces the original request. Call plan_status, then resume the original request from its next unfinished part (make a plan of the remaining work if there is none). If the whole original request is really finished, tick the verification step with evidence against it and say clearly that the whole task is complete.",
   goal_unfinished:
     "The previous part finished one batch and closed its plan, but the user asked for the whole job (e.g. 'fino al 100%'), and the reply did not say the whole job is done, so the platform continued it automatically. A finished batch, chunk or plan is not the end of the job. Call plan_status: the platform's plan quotes the user's request. Replace it with the real next part of the remaining work (plan_create replaceActive=true) and keep the final verification step. Only when the whole job is done (every item, 100%), tick the verification step with evidence against the original request and say clearly 'Lavoro completato al 100%' (or 'The whole task is complete'). If something needs the user, use ask_user.",
+  goal_probe:
+    "The previous part ended but the request's completion check is still below its target, so the platform continued it automatically. The check, not the plan or the wording of a reply, decides when the request is done.",
+  goal_check_missing:
+    "The previous part ended a long request that has no completion check, so the platform continued it once to add one.",
+  judge_unfinished:
+    "The previous part ended, but a completion review of the user's original request found it unfinished, so the platform continued it automatically. Resume from the next unfinished part; when the WHOLE request is done, say so clearly.",
 } as const;
 
 /**
@@ -252,7 +265,9 @@ export const CONTINUE_LATER_GUIDANCE =
   "Long tasks: if real work remains that you will not finish in this turn (for example a long batch, many files, or a multi-step plan), call continue_later with a short progress summary (and percent if known) instead of writing a final answer: the platform ends this turn and starts the next part automatically. " +
   "Never promise in a final answer that you will continue, proceed, or keep working later (e.g. 'continuo…', 'proseguo…', 'I'll continue…'): a final answer ends the task and nothing runs afterwards. " +
   "Without continue_later, your final answer must say clearly that the task is done, or that it stopped and why (and what is left). " +
-  "A question or aside the user sends while you work is answered briefly and the task goes on: it never completes or replaces the original request. While work remains, never end with a stand-by line such as 'sono a disposizione per le prossime istruzioni' or 'let me know how to proceed'.";
+  "A question or aside the user sends while you work is answered briefly and the task goes on: it never completes or replaces the original request. While work remains, never end with a stand-by line such as 'sono a disposizione per le prossime istruzioni' or 'let me know how to proceed'." +
+  " " +
+  GOAL_CHECK_GUIDANCE;
 
 export const CONTINUE_LATER_UNAVAILABLE_GUIDANCE =
   "Never promise in a final answer that you will continue, proceed, or keep working later (e.g. 'continuo…', 'proseguo…', 'I'll continue…'): a final answer ends the task and nothing runs afterwards. " +

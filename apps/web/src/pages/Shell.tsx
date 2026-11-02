@@ -8,7 +8,6 @@ import type {
 } from "@rakazo/contracts";
 import {
   answerableAskMessageIds,
-  latestAnswerableAskMessageId,
   channelMessageSender,
   chatUserBubbleColors,
   dismissableAskMessageIds,
@@ -16,6 +15,7 @@ import {
   groupBotsForSidebar,
   isActive,
   isRunWorking,
+  latestAnswerableAskMessageId,
   memberName,
   newClientId,
 } from "@rakazo/core";
@@ -73,13 +73,13 @@ import { useSettingsNavItems } from "./settings-nav";
 import { ArchivedChats } from "./shell/archived-chats";
 import { ChatContextMenu } from "./shell/chat-context-menu";
 import { ChatHeader } from "./shell/chat-header";
-import { ShareThreadDialog } from "./shell/share-thread-dialog";
 import { FALLBACK_BOT_COLOR } from "./shell/chat-shared";
 import type { CommandPaletteAction } from "./shell/command-palette";
 import { Composer } from "./shell/composer";
 import { ComputerOverlay } from "./shell/computer-overlay";
 import { ComputerPanel } from "./shell/computer-panel";
 import type { CreateBotDialogInput } from "./shell/create-bot-dialog";
+import { ShareThreadDialog } from "./shell/share-thread-dialog";
 import { ShellDialogs, useShellDialogs } from "./shell/shell-dialogs";
 import { AppOverlays, SettingsOverlays } from "./shell/shell-overlays";
 import { ShellSidebar } from "./shell/shell-sidebar";
@@ -1004,6 +1004,7 @@ function SpaceShell() {
               speakingMessageId={speakingMessageId}
               onSpeak={speakMessage}
               onOpenComputer={computerControls.onOpenComputer}
+              onStopContinuation={stopRun}
               onOpenImportSetup={(target) => {
                 importSetupOpen.current = true;
                 if (target.kind === "models") openSettings("models");

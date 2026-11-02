@@ -979,6 +979,22 @@ msgstr "自動化傳送者"
 msgid "Automated senders will appear after they post here."
 msgstr "自動化傳送者在這裡傳送訊息後就會顯示。"
 
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation skipped: other work is in progress"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: limit reached ({max})"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: no progress"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "儲存例行任務後可用"
@@ -1741,6 +1757,14 @@ msgstr "繼續結帳"
 #: src/pages/Auth.tsx
 msgid "Continue with {0}"
 msgstr "透過 {0} 繼續"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max})"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max}) · {percent}%"
+msgstr ""
 
 #. placeholder {0}: data.botName
 #. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
@@ -5821,6 +5845,7 @@ msgstr "步驟"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
+#: src/pages/shell/continuation-line.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "停止"

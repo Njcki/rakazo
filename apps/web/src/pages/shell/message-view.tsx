@@ -30,6 +30,7 @@ import {
 } from "../../lib/tool-activity-view";
 import { ReplyLine } from "./chat-context";
 import { FALLBACK_BOT_COLOR, previewMessageText } from "./chat-shared";
+import { ContinuationLine } from "./continuation-line";
 import type { ImportSetupTarget } from "./import-setup-card";
 import { ImportSetupCard } from "./import-setup-card";
 import {
@@ -64,6 +65,7 @@ export const MessageView = memo(function MessageView({
   onSpeak,
   onOpenComputer,
   onOpenImportSetup,
+  onStopContinuation,
   showToolActivity,
   onReply,
   onMarkUnread,
@@ -103,6 +105,8 @@ export const MessageView = memo(function MessageView({
   onOpenComputer: (botId?: string) => void;
   /** Opens where an imported item's setup is finished. */
   onOpenImportSetup?: (target: ImportSetupTarget) => void;
+  /** Stops a pending automatic continuation; only set on the latest message. */
+  onStopContinuation?: () => void | Promise<void>;
   showToolActivity: boolean;
   onReply: (message: ThreadMessage) => void;
   onMarkUnread: (message: ThreadMessage) => void;
@@ -345,6 +349,15 @@ export const MessageView = memo(function MessageView({
                   {block.fromLabel}: {block.text}
                 </span>
               </div>
+            );
+          }
+          if (block.kind === "meta" && block.continuation) {
+            return (
+              <ContinuationLine
+                key={i}
+                continuation={block.continuation}
+                onStop={onStopContinuation}
+              />
             );
           }
           if (block.kind === "meta") {

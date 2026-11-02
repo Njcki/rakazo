@@ -27,6 +27,7 @@ import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { holdComputerExecutionLeaseForTakeover } from "./computer-lifecycle.js";
 import { resolveBotWorkspacePath } from "./computer-support.js";
+import { CONTINUE_LATER_TOOL, continuationMetaText, continuationPrompt } from "./continue-later.js";
 import {
   COMPACTION_BATCH_SIZE,
   HISTORY_WINDOW_SIZE,
@@ -38,7 +39,7 @@ import {
   modelAccountRefusal,
 } from "./routine-backoff.js";
 import type { RunContext } from "./run-context.js";
-import { persistTurnCheckpoint } from "./run-context.js";
+import { isRunTainted, persistTurnCheckpoint } from "./run-context.js";
 import { renewRunLease, requeueComputerRun } from "./run-lifecycle.js";
 import { publishMessage, redactBlocks } from "./run-messages.js";
 import {
@@ -454,6 +455,11 @@ async function pauseForTakeover(ctx: RunContext, event: RuntimeEvent<"takeover">
   });
 }
 
+/** Calls that only report, plan or continue are not progress for the continuation loop guard. */
+function countsAsContinuationWork(name: string): boolean {
+  return name !== CONTINUE_LATER_TOOL && name !== "message_user" && !name.startsWith("plan_");
+}
+
 /** Show the tool step, stop a repeating loop, and run the tool for scripted runtimes. */
 async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promise<boolean> {
   const { deps, run, runId, bot, thread } = ctx;
@@ -461,6 +467,7 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
   // Preserve event ordering when the throttle still holds recent narration: the
   // client must see that text before the tool call it describes.
   await flushProgress(ctx);
+  if (countsAsContinuationWork(event.name)) ctx.state.continuation.workToolCalls += 1;
   // Queued first so the text written before this call becomes its note.
   reply.pendingToolNames.push(event.name);
   const heldNote = event.name === "message_user" ? undefined : await publishMidTurnNarration(ctx);
@@ -712,6 +719,14 @@ export async function completeRun(ctx: RunContext) {
     reply.currentTextSegment = reply.assembled;
   }
   flushPendingTools(reply);
+  const continuation = await continuationForCompletion(ctx);
+  // The progress summary is the reply of a turn that continues; runtimes that do not end the
+  // turn on continue_later (or a reply that dropped it) still show it.
+  if (continuation && !reply.assembled.includes(continuation.request.summary)) {
+    const separator = assistantTurnSeparator(reply.assembled, continuation.request.summary);
+    reply.assembled += separator + continuation.request.summary;
+    reply.currentTextSegment += separator + continuation.request.summary;
+  }
   // Silent-allowed runs can choose an explicit NO_RESPONSE or finish empty.
   // Other runs still drop a stray sentinel at the edges of a real reply.
   const silentReply = ctx.allowSilentEmptyRun
@@ -732,12 +747,25 @@ export async function completeRun(ctx: RunContext) {
       skipEmptyFallback: reply.publishedTerminalSubagent || reply.publishedMidTurnUserMessage,
     });
   }
-  const blocks = ctx.state.handedOff
+  const finalBlocks = ctx.state.handedOff
     ? []
     : finalBlocksAfterMidTurnProgress(
         redactBlocks(completionBlocks, ctx.secrets),
         reply.publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
       );
+  // A refused continuation says why the work stopped, under the final answer.
+  const refused = ctx.state.continuation.refused;
+  const blocks =
+    refused && !continuation && !ctx.state.handedOff
+      ? [
+          ...finalBlocks,
+          {
+            kind: "meta" as const,
+            text: continuationMetaText(refused),
+            continuation: refused,
+          },
+        ]
+      : finalBlocks;
   const text = ctx.state.handedOff
     ? ""
     : redactSecrets(completionNotificationBody(silentReply.assembled, blocks), ctx.secrets);
@@ -776,6 +804,7 @@ export async function completeRun(ctx: RunContext) {
       text,
       ctx.source.peerMessage?.repliesToRequest === true,
     ),
+    ...(continuation ? { continuation: continuation.finalize } : {}),
   });
   if (!completed) return;
   ctx.stopHeartbeatAfterCompletion();
@@ -788,6 +817,16 @@ export async function completeRun(ctx: RunContext) {
     await deps.jobs
       .enqueue(runContinueJob(completed.continuationRunId))
       .catch((error) => getLogger().error("steering continuation enqueue", error));
+  }
+  const explicit = completed.explicitContinuation;
+  if (explicit && explicit.runId !== completed.continuationRunId) {
+    // Durable either way: the queued run carries its wakeAt and the worker scan starts it.
+    await deps.jobs
+      .enqueue({
+        ...runContinueJob(explicit.runId),
+        ...(explicit.wakeAt ? { availableAt: explicit.wakeAt } : {}),
+      })
+      .catch((error) => getLogger().error("explicit continuation enqueue", error));
   }
   if (botMessageOutcome) {
     // Prefer the final reply. If the turn only posted mid-turn progress, return that
@@ -803,7 +842,12 @@ export async function completeRun(ctx: RunContext) {
     ).catch((error) => getLogger().error("bot message result return", error));
   }
   const notifyBody = completionNotificationPreview(text);
-  if (runSendsFinishNotification(run.trigger) && notifyBody && !completed.continuationRunId) {
+  if (
+    runSendsFinishNotification(run.trigger) &&
+    notifyBody &&
+    !completed.continuationRunId &&
+    !explicit
+  ) {
     await notifyRun(deps, run, {
       kind: "completion",
       title: `${displayName(bot.name, "Bot")} finished`,
@@ -837,6 +881,38 @@ export async function completeRun(ctx: RunContext) {
   } catch (error) {
     getLogger().error("history.compact enqueue failed", error);
   }
+}
+
+/** The accepted continue_later request of this run, ready for finalizeRun. */
+async function continuationForCompletion(ctx: RunContext) {
+  const request = ctx.state.continuation.requested;
+  const settings = ctx.state.continuation.settings;
+  if (!request || !settings || ctx.state.handedOff) return undefined;
+  const percent = request.percent ?? undefined;
+  const meta = {
+    index: request.index,
+    max: request.max,
+    ...(percent === undefined ? {} : { percent }),
+  };
+  return {
+    request,
+    finalize: {
+      index: request.index,
+      max: request.max,
+      rootRunId: request.rootRunId,
+      digest: request.digest,
+      repeats: request.repeats,
+      percent: request.percent,
+      // Whatever this run read from outside follows the task into the next run.
+      tainted: await isRunTainted(ctx),
+      delayMs: settings.delayMs,
+      prompt: continuationPrompt({ index: request.index, max: request.max }),
+      metaText: {
+        scheduled: continuationMetaText({ state: "scheduled", ...meta }),
+        superseded: continuationMetaText({ state: "superseded", ...meta }),
+      },
+    },
+  };
 }
 
 /** The turn failed: keep the reply streamed so far, record the error, and retry or notify. */

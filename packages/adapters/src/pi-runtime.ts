@@ -74,6 +74,7 @@ import { observedPiStream } from "./pi-usage.js";
 import type { RuntimeContextDecision } from "./runtime-context.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
+import { CONTINUE_LATER_TOOL } from "./continue-later.js";
 import {
   danglingNarrationNudges,
   danglingNarrationPrompt,
@@ -462,6 +463,7 @@ export class PiAgentRuntime implements AgentRuntime {
           !request.allowSilentEmpty && tools.some((tool) => tool.name === "message_user");
         let danglingNudges = 0;
         const maxDanglingNudges = danglingNarrationNudges();
+        const continueLaterOffered = tools.some((tool) => tool.name === CONTINUE_LATER_TOOL);
         let budgetWrapUp = false;
 
         agent = new Agent({
@@ -718,6 +720,12 @@ export class PiAgentRuntime implements AgentRuntime {
               agent.abort();
               return;
             }
+            // continue_later ended the turn. Pi stops on its own when every call in the batch
+            // terminates; a batch with other calls must not reach another model request.
+            if (host.endRequested && hasToolCalls) {
+              agent.abort();
+              return;
+            }
 
             // Text in a turn that also contains a tool call is narration, not a final
             // response. Keep the run alive until a later text-only turn answers the user.
@@ -751,7 +759,7 @@ export class PiAgentRuntime implements AgentRuntime {
                     ? steeringContinuePrompt(request.allowSilentEmpty)
                     : answeredCadenceNudge
                       ? progressNudgeContinuePrompt(request.allowSilentEmpty)
-                      : danglingNarrationPrompt(request.allowSilentEmpty),
+                      : danglingNarrationPrompt(request.allowSilentEmpty, continueLaterOffered),
                   timestamp: Date.now(),
                 });
               } else if (candidateFinal) {
@@ -981,6 +989,7 @@ export class PiAgentRuntime implements AgentRuntime {
           host.toolCallBudget.exceeded &&
           !signal.aborted &&
           !host.pausePending &&
+          !host.endRequested &&
           toolBudgetFinalSummaryEnabled()
         ) {
           budgetWrapUp = true;
@@ -988,9 +997,16 @@ export class PiAgentRuntime implements AgentRuntime {
           streamedBeforePendingFinal = streamed.length;
           signal.addEventListener("abort", onAbort);
           try {
-            agent.state.tools = [];
+            // Only continue_later stays: the rest of the task can go on in a new run.
+            agent.state.tools = continueLaterOffered
+              ? agent.state.tools.filter((tool) => tool.name === CONTINUE_LATER_TOOL)
+              : [];
             await agent.prompt(
-              toolBudgetWrapUpPrompt(host.toolCallBudget.limit, request.allowSilentEmpty),
+              toolBudgetWrapUpPrompt(
+                host.toolCallBudget.limit,
+                request.allowSilentEmpty,
+                continueLaterOffered,
+              ),
             );
             await agent.waitForIdle();
           } catch (wrapUpError) {
@@ -1013,7 +1029,12 @@ export class PiAgentRuntime implements AgentRuntime {
         const error = outputCutFailed
           ? MODEL_OUTPUT_CUT_ERROR
           : agent.state.errorMessage || providerFailure;
-        if (error && !budgetExceeded && (!host.pausePending || signal.aborted)) {
+        if (
+          error &&
+          !budgetExceeded &&
+          (!host.pausePending || signal.aborted) &&
+          (!host.endRequested || signal.aborted)
+        ) {
           let message = sanitizeProviderError(activeStreamTarget.model.provider, error);
           if (
             !signal.aborted &&
@@ -1034,7 +1055,12 @@ export class PiAgentRuntime implements AgentRuntime {
           }
           throw modelFailure(error, message);
         }
-        if (!budgetExceeded && terminalMessage && !messageHasToolCall(terminalMessage)) {
+        if (
+          !budgetExceeded &&
+          !host.endRequested &&
+          terminalMessage &&
+          !messageHasToolCall(terminalMessage)
+        ) {
           const completedText = assistantText(terminalMessage);
           const terminalText =
             joinDropped && completedText.startsWith(joinDropped)
@@ -1053,7 +1079,15 @@ export class PiAgentRuntime implements AgentRuntime {
             }
           }
         }
-        if (budgetExceeded) {
+        if (host.endRequested && !signal.aborted) {
+          // The progress summary is this turn's reply; the next run continues the task.
+          const summary = host.endRequested.summary;
+          if (summary) {
+            if (streamed.trim()) queue.push({ type: "turn" });
+            queue.push({ type: "text", text: summary });
+            streamed = streamed.trim() ? `${streamed}\n\n${summary}` : summary;
+          }
+        } else if (budgetExceeded) {
           const budgetMessage = toolCallBudgetExceededMessage(host.toolCallBudget.limit);
           if (streamed.trim()) {
             const suffix = `\n\n${budgetMessage}`;

@@ -949,6 +949,19 @@ model Run {
   botOutcomeReturnedAt DateTime?
   messagingMirroredAt  DateTime?
   teamChatMirroredAt   DateTime?
+  // Explicit continuation chain (continue_later). The run this one continues; unique, so a run
+  // is continued at most once. The root is the run of the original request.
+  continuationOfRunId  String?           @unique
+  continuationRootRunId String?
+  // 1 for the first continuation of a request, 0 for every other run.
+  continuationIndex    Int               @default(0)
+  // Hash of the progress summary that asked for this run (never the text), for the loop guard.
+  continuationDigest   String?
+  // Consecutive continuations without visible progress, up to and including this one.
+  continuationRepeats  Int               @default(0)
+  continuationPercent  Int?
+  // The run that asked for this one had read outside content, so this one starts tainted too.
+  continuationTainted  Boolean           @default(false)
   createdAt            DateTime          @default(now())
   updatedAt            DateTime          @updatedAt
   attempts             Attempt[]
@@ -962,6 +975,7 @@ model Run {
   @@index([status, updatedAt, id])
   @@index([trigger, status, messagingMirroredAt, updatedAt])
   @@index([trigger, status, teamChatMirroredAt, updatedAt])
+  @@index([continuationRootRunId])
   @@index([spaceId, botId])
   @@index([botId])
   @@index([taskId])

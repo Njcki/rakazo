@@ -22,6 +22,7 @@ import { partitionTools } from "./builtin-tool-bridge.js";
 import type { ComputerExecutionLease } from "./computer-lifecycle.js";
 import type { UnchangedVisualStreak } from "./computer-tools.js";
 import type { selectRunConnections } from "./connection-context.js";
+import type { ContinuationMeta, ContinueLaterSettings } from "./continue-later.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetRun } from "./fleet-tools.js";
 import { namedAgentTools } from "./pi-runtime-tools.js";
@@ -176,6 +177,30 @@ export interface RunState {
   handedOff: boolean;
   terminalCheckpointComplete: boolean;
   planReminder: PlanReminderState;
+  continuation: ContinuationState;
+}
+
+/** The explicit continuation chain (continue_later) as this attempt sees it. */
+export interface ContinuationState {
+  /** Settings for this bot, or undefined when the run may not continue itself. */
+  settings: ContinueLaterSettings | undefined;
+  /** Tool calls that did real work (not reporting, planning or continuing). */
+  workToolCalls: number;
+  /** Accepted: completing this run queues the next one. */
+  requested: ContinueLaterRequest | undefined;
+  /** Refused (limit or no progress): the final reply says the chain stopped. */
+  refused: ContinuationMeta | undefined;
+}
+
+export interface ContinueLaterRequest {
+  summary: string;
+  reason: string | undefined;
+  index: number;
+  max: number;
+  rootRunId: string;
+  digest: string;
+  repeats: number;
+  percent: number | null;
 }
 
 export interface RunComputerContext {

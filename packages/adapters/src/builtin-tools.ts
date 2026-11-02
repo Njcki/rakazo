@@ -593,6 +593,35 @@ export const builtinAgentTools: ConnectorTool[] = [
     },
   },
   {
+    name: "continue_later",
+    description:
+      "End this turn now and continue the same task automatically in a new run a few seconds later. Use it when real work remains that you will not finish in this turn (a long batch, many files, a multi-step plan): your summary is posted to the user as this turn's reply and the next run resumes from it. Do not use it to wait for the user, for a scheduled time (use schedule_create), or when the task is done or blocked; then give a clear final answer instead. Call it alone, as your last action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        summary: {
+          type: "string",
+          minLength: 1,
+          maxLength: 2000,
+          description:
+            "Short progress report for the user and for your next run: what is done, what is next. Written in the user's language.",
+        },
+        percent: {
+          type: "integer",
+          minimum: 0,
+          maximum: 100,
+          description: "Estimated overall progress of the whole task, if you can tell.",
+        },
+        reason: {
+          type: "string",
+          maxLength: 300,
+          description: "Why the work does not fit in this turn (optional).",
+        },
+      },
+      required: ["summary"],
+    },
+  },
+  {
     name: "request_secret",
     get description() {
       return secretAskToolSurface().description;

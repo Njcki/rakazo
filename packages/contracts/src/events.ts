@@ -210,7 +210,19 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     /** Connected time the user's client measured after answering. */
     durationSeconds: z.number().int().nonnegative().optional(),
   }),
-  z.object({ kind: z.literal("meta"), text: z.string() }),
+  z.object({
+    kind: z.literal("meta"),
+    text: z.string(),
+    /** Status of an explicit continuation chain (continue_later); clients translate it. */
+    continuation: z
+      .object({
+        state: z.enum(["scheduled", "limit", "no_progress", "superseded"]),
+        index: z.number().int().nonnegative(),
+        max: z.number().int().nonnegative(),
+        percent: z.number().int().min(0).max(100).optional(),
+      })
+      .optional(),
+  }),
   z.object({
     kind: z.literal("progress"),
     text: z.string(),

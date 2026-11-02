@@ -14,7 +14,7 @@ type ToolStep = StepsBlock["steps"][number];
  * Hiding them from the tool card avoids a redundant "Message user" row next to
  * the bubble that posted the same update.
  */
-const HIDDEN_TOOL_STEP_LABELS = new Set(["Message user"]);
+const HIDDEN_TOOL_STEP_LABELS = new Set(["Message user", "Continue later"]);
 
 function isShownToolStep(step: ToolStep): boolean {
   return !HIDDEN_TOOL_STEP_LABELS.has(step.label);

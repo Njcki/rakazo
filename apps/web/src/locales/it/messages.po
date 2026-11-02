@@ -979,6 +979,22 @@ msgstr "Mittenti automatici"
 msgid "Automated senders will appear after they post here."
 msgstr "I mittenti automatici compariranno dopo aver pubblicato qui."
 
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation skipped: other work is in progress"
+msgstr "Continuazione automatica saltata: c'è altro lavoro in corso"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped"
+msgstr "Continuazione automatica interrotta"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: limit reached ({max})"
+msgstr "Continuazione automatica interrotta: limite raggiunto ({max})"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: no progress"
+msgstr "Continuazione automatica interrotta: nessun progresso"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "Disponibile dopo il salvataggio della routine"
@@ -1741,6 +1757,14 @@ msgstr "Continua al pagamento"
 #: src/pages/Auth.tsx
 msgid "Continue with {0}"
 msgstr "Continua con {0}"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max})"
+msgstr "Continua automaticamente ({index}/{max})"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max}) · {percent}%"
+msgstr "Continua automaticamente ({index}/{max}) · {percent}%"
 
 #. placeholder {0}: data.botName
 #. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
@@ -5821,6 +5845,7 @@ msgstr "Passaggi"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
+#: src/pages/shell/continuation-line.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Interrompi"

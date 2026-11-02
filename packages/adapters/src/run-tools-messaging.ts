@@ -6,6 +6,12 @@ import {
 } from "./agent-connections.js";
 import { messageBot } from "./bot-messages.js";
 import { endCallFromTool, requestUserCall } from "./call-request.js";
+import {
+  CONTINUE_LATER_REASON_MAX_CHARS,
+  CONTINUE_LATER_SUMMARY_MAX_CHARS,
+  decideContinuation,
+  normalizePercent,
+} from "./continue-later.js";
 import { handoffToGroupBot } from "./group-handoff.js";
 import { publishMessage } from "./run-messages.js";
 import {
@@ -104,6 +110,63 @@ export const messagingTools: ToolHandlers = {
           }
         : { ok: true },
     );
+  },
+  async continue_later(ctx, call) {
+    const { run, runId } = ctx;
+    const { args } = call;
+    const continuation = ctx.state.continuation;
+    if (!continuation.settings) {
+      return call.finish({ error: "continue_later is not available in this run." });
+    }
+    if (continuation.requested) {
+      return call.finish({ ok: true, continueLater: "accepted", note: "Already scheduled." });
+    }
+    const summary = redactSecrets(String(args.summary ?? ""), ctx.secrets)
+      .trim()
+      .slice(0, CONTINUE_LATER_SUMMARY_MAX_CHARS);
+    if (!summary) return call.finish({ error: "summary is required" });
+    const reasonText = redactSecrets(String(args.reason ?? ""), ctx.secrets)
+      .trim()
+      .slice(0, CONTINUE_LATER_REASON_MAX_CHARS);
+    const decision = decideContinuation({
+      runId,
+      chain: run,
+      summary,
+      percent: normalizePercent(args.percent),
+      workToolCalls: continuation.workToolCalls,
+      settings: continuation.settings,
+    });
+    if (!decision.ok) {
+      continuation.refused = {
+        state: decision.reason,
+        index: decision.index,
+        max: decision.max,
+      };
+      return call.finish({
+        error:
+          decision.reason === "limit"
+            ? `Automatic continuation limit reached (${decision.max} continuations for this request). Do not call continue_later again. Write your final answer now: what is done, what is left, and that the user can reply to continue.`
+            : "Automatic continuation stopped: the last parts made no visible progress. Do not call continue_later again. Write your final answer now: what is done, what is blocking progress, and what the user can do.",
+      });
+    }
+    continuation.requested = {
+      summary,
+      reason: reasonText || undefined,
+      index: decision.index,
+      max: decision.max,
+      rootRunId: decision.rootRunId,
+      digest: decision.digest,
+      repeats: decision.repeats,
+      percent: decision.percent,
+    };
+    return call.finish({
+      ok: true,
+      continueLater: "accepted",
+      summary,
+      continuation: decision.index,
+      max: decision.max,
+      note: "This turn ends now; your summary is the reply. The next part starts automatically.",
+    });
   },
   async message_bot(ctx, call) {
     const { deps, run, bot } = ctx;

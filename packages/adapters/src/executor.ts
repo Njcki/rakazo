@@ -29,6 +29,7 @@ import {
   promptInvokesSkill,
   redactSecrets,
   renderBotDirectory,
+  runReadsThreadHistory,
   userRunError,
   userTurnMessageForRun,
 } from "@rakazo/core";
@@ -81,6 +82,15 @@ import {
   persistLivePluginConnections,
   selectRunConnections,
 } from "./connection-context.js";
+import {
+  CONTINUE_LATER_GUIDANCE,
+  CONTINUE_LATER_TOOL,
+  CONTINUE_LATER_UNAVAILABLE_GUIDANCE,
+  continuationProgressContext,
+  continueLaterEligible,
+  continueLaterSettings,
+  loadContinuationProgress,
+} from "./continue-later.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
@@ -112,7 +122,17 @@ import { modelAcceptsImageInput } from "./model-vision.js";
 import { usesNativeShell } from "./native-shell.js";
 import { paymentWalletConnected } from "./payment-wallets.js";
 import { isRetiredModelCredentialError } from "./pi-oauth.js";
+import { loadAgentPlanContext } from "./plan-context.js";
+import { getDisplayPlan } from "./plan-tools.js";
 import { loadPurchaseRedactions } from "./purchase-service.js";
+import {
+  callQuickReplyModel,
+  QUICK_REPLY_MAX_TOKENS,
+  quickReplyConfig,
+  quickReplyEligible,
+  startRunQuickReply,
+  withQuickReplyTexts,
+} from "./quick-reply.js";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { backOffRoutineAfterAccountError } from "./routine-backoff.js";
 import { lateRoutineRunInstruction } from "./routine-lateness.js";
@@ -149,7 +169,7 @@ import {
   startNextWaitingRun,
   writeComputerRunRequeue,
 } from "./run-lifecycle.js";
-import { withRunLease } from "./run-messages.js";
+import { publishMessage, withRunLease } from "./run-messages.js";
 import {
   cloudflareRunFields,
   isTerminalModelSetupError,
@@ -160,7 +180,7 @@ import {
   resolveRunModel,
   runtimeFallbackModel,
 } from "./run-model.js";
-import { createReplyState } from "./run-progress.js";
+import { createReplyState, markDurableProgress } from "./run-progress.js";
 import { DELEGATED_EMPTY_NOTICE, runAllowsSilentEmpty, runReplyGuidance } from "./run-replies.js";
 import {
   notifyRoutineRetryAttemptsExhausted,
@@ -185,19 +205,6 @@ import {
   RECENT_TURN_IMAGE_TURNS,
   withRecentTurnImages,
 } from "./run-turn-images.js";
-import { loadAgentPlanContext } from "./plan-context.js";
-import { getDisplayPlan } from "./plan-tools.js";
-import {
-  callQuickReplyModel,
-  QUICK_REPLY_MAX_TOKENS,
-  quickReplyConfig,
-  quickReplyEligible,
-  startRunQuickReply,
-  withQuickReplyTexts,
-} from "./quick-reply.js";
-import { publishMessage } from "./run-messages.js";
-import { markDurableProgress } from "./run-progress.js";
-import { userProgressClientNonce } from "./user-progress.js";
 import { loadAgentScratchpadContext } from "./scratchpad-context.js";
 import { inferScript } from "./scripted-runtime.js";
 import { listAgentSkillRecords } from "./skill-tools.js";
@@ -219,6 +226,7 @@ import {
 } from "./thread-artifacts.js";
 import { loadAgentTicketContext } from "./ticket-context.js";
 import { appendToolCompletionAudit } from "./tool-completion-audit.js";
+import { userProgressClientNonce } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
 
 export function createRunExecutor(executorDeps: ExecutorDeps) {
@@ -1089,6 +1097,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
         const disabledBuiltinTools = disabledBuiltinToolSet(bot.disabledBuiltinTools);
+        const continueLater = continueLaterSettings(process.env, bot.id);
+        const continueLaterAllowed = continueLaterEligible({
+          settings: continueLater,
+          trigger: run.trigger,
+          voiceCall,
+          peerMessage: Boolean(peerMessage),
+        });
         const userComputerOwnerId = userComputerOwner({
           trigger: run.trigger,
           sourceRole: sourceMessage?.role,
@@ -1135,6 +1150,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             followUpFromUser: sourceMessage?.role === "user",
             userComputer: userComputer === "connected",
             userComputerScreen,
+            continueLater: continueLaterAllowed,
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity &&
@@ -1172,8 +1188,12 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             error instanceof Error ? error : new Error("Unsupported turn checkpoint");
         }
         const storedTurnCheckpoint = Boolean(turnCheckpoint);
+        // A continuation inherits what the run it continues had read from outside.
         const initiallyTainted =
-          !ownerStartedRun || Boolean(turnCheckpoint) || Boolean(checkpointLoadError);
+          !ownerStartedRun ||
+          Boolean(turnCheckpoint) ||
+          Boolean(checkpointLoadError) ||
+          run.continuationTainted;
         // The creation intro only asks what the bot is for (see selectBuiltinToolsForRun),
         // so it gets no connector tools either.
         const tools =
@@ -1261,6 +1281,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             nonPlanToolsSincePlanUpdate: 0,
             planToolUsedThisRun: false,
             planCreateNudged: false,
+          },
+          continuation: {
+            settings: builtins.some((tool) => tool.name === CONTINUE_LATER_TOOL)
+              ? continueLater
+              : undefined,
+            workToolCalls: 0,
+            requested: undefined,
+            refused: undefined,
           },
         };
         const { effects } = state;
@@ -1415,9 +1443,22 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             // Lateness is optional context; a lookup failure must not prevent a run.
           }
         }
+        // Runs that do not see the earlier part in their history (routines, channel turns) get
+        // its progress summary here.
+        const continuationProgress =
+          run.continuationOfRunId && (messagingChannelRun || !runReadsThreadHistory(run.trigger))
+            ? await loadContinuationProgress(deps, thread.id, run.continuationOfRunId)
+                .then((summary) =>
+                  summary
+                    ? continuationProgressContext(redactSecrets(summary, runSecrets))
+                    : undefined,
+                )
+                .catch(() => undefined)
+            : undefined;
         const prompt = [
           replyContext,
           run.trigger === "reaction" && replyContext ? undefined : basePrompt,
+          continuationProgress,
           takeoverResume?.promptNote,
           approvalContinuation,
           // A hang-up turn is read, not heard: no spoken-reply constraint.
@@ -1742,6 +1783,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 agentSkillsLine,
                 taughtSkillsLine,
                 replyGuidance: runReplyGuidance(run.trigger),
+                continuationGuidance: ctx.state.continuation.settings
+                  ? CONTINUE_LATER_GUIDANCE
+                  : run.trigger === "created" || isBackgroundRunTrigger(run.trigger) || voiceCall
+                    ? undefined
+                    : CONTINUE_LATER_UNAVAILABLE_GUIDANCE,
                 disabledBuiltinTools,
                 offeredFleetTools: offeredFleetTools(builtins),
                 userComputer,

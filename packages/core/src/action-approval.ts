@@ -59,6 +59,8 @@ const UNATTENDED_SAFE_BUILTIN_TOOLS = new Set([
   "browser_snapshot",
   "cloud_agent_status",
   "computer_observe",
+  // Only queues the rest of the same run, with the same permissions.
+  "continue_later",
   "list_files",
   "list_fleet",
   "list_secrets",
@@ -215,6 +217,7 @@ const OWN_STATE_RESULT_TOOLS = new Set([
   "generate_secret",
   "list_fleet",
   "list_secrets",
+  "continue_later",
   "message_user",
   "read_history",
   "recall_memory",

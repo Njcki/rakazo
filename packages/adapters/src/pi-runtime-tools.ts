@@ -20,6 +20,7 @@ import {
 } from "./bot-secrets.js";
 import { FIND_TOOL, findTools, partitionTools, USE_TOOL } from "./builtin-tool-bridge.js";
 import { shortenToolResultText } from "./context-selection.js";
+import { CONTINUE_LATER_TOOL } from "./continue-later.js";
 import type { PiAgentRuntimeOptions } from "./pi-runtime.js";
 import { sanitizeSensitiveText } from "./pi-runtime-errors.js";
 import { clipToolResultContent, clipToolResultText } from "./pi-runtime-limits.js";
@@ -422,7 +423,10 @@ function toAgentTool(
           if (host.depth === 0) await host.captureCheckpoint?.(rawCallId, executionId);
           if (host.pausePending)
             return { content: [], details: { skipped: true }, terminate: true };
-          if (!beginToolCall(host)) {
+          // Ending the turn must stay possible after the tool-call limit: it is how the rest of
+          // a long task gets a fresh budget.
+          const budgetExempt = tool.name === CONTINUE_LATER_TOOL;
+          if (!budgetExempt && !beginToolCall(host)) {
             return {
               content: [{ type: "text", text: "Skipped: tool-call limit reached." }],
               details: { skipped: true },
@@ -510,6 +514,43 @@ function toAgentTool(
                   terminate: true,
                 };
               }
+              if (tool.name === CONTINUE_LATER_TOOL) {
+                if (host.depth > 0 || !host.request.executeTool) {
+                  return {
+                    content: [
+                      {
+                        type: "text",
+                        text: "continue_later is only available to the main agent. Report your result instead.",
+                      },
+                    ],
+                    details: { error: "continue_later unavailable" },
+                  };
+                }
+                const result = await host.request.executeTool(tool.name, args, executionId);
+                const accepted =
+                  !!result &&
+                  typeof result === "object" &&
+                  (result as { continueLater?: unknown }).continueLater === "accepted";
+                if (accepted) {
+                  const summary = String((result as { summary?: unknown }).summary ?? "").trim();
+                  host.endRequested ??= { summary };
+                }
+                return {
+                  content: [
+                    {
+                      type: "text",
+                      text: serializeToolResult(
+                        result,
+                        host.request.contextStrategy,
+                        tool.name,
+                        args,
+                      ),
+                    },
+                  ],
+                  details: result,
+                  ...(accepted ? { terminate: true } : {}),
+                };
+              }
               if (tool.name === FIND_TOOL) {
                 const found = findTools(deferred, args);
                 return {
@@ -582,7 +623,7 @@ function toAgentTool(
             span?.setAttributes({ "pi.agent.tool.success": !failed });
             recordPiTelemetryContent(span, "pi.agent.tool.result", result);
             if (failed) span?.setStatus({ status: "error" });
-            endToolCall(host);
+            if (!budgetExempt) endToolCall(host);
             const completion: AgentToolCompletion = {
               name: tool.name,
               executionId,
@@ -698,6 +739,11 @@ export interface ToolHost {
   depth: number;
   agentNamespace?: string;
   pausePending: boolean;
+  /**
+   * continue_later was accepted: the turn ends after this tool batch and the summary is the
+   * reply. Unlike a pause, the run completes normally.
+   */
+  endRequested?: { summary: string };
   captureCheckpoint?: (toolCallId: string, executionId: string) => Promise<void>;
   /** Shell commands that returned output and are still running. */
   pendingShells: Array<Promise<FinishedShellCommand>>;

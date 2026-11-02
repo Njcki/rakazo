@@ -978,6 +978,22 @@ msgstr ""
 msgid "Automated senders will appear after they post here."
 msgstr ""
 
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation skipped: other work is in progress"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: limit reached ({max})"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Automatic continuation stopped: no progress"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr ""
@@ -1740,6 +1756,14 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {0}"
 msgstr "{0} ile devam et"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max})"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "Continuing automatically ({index}/{max}) · {percent}%"
+msgstr ""
 
 #. placeholder {0}: data.botName
 #. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
@@ -5820,6 +5844,7 @@ msgstr "Adımlar"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
+#: src/pages/shell/continuation-line.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Durdur"

@@ -30,6 +30,7 @@ import {
   QUEUE_HOLDING_RUN_STATUSES,
   releasedTakeoverComputerBlocks,
   resolveAskChoice,
+  runReadsThreadHistory,
   STEERING_CONTINUATION_PROMPT,
   sanitizeJsonValue,
 } from "@rakazo/core";
@@ -161,6 +162,27 @@ export interface ClaimedSteeringMessage {
 
 export interface FinalizeRunResult {
   continuationRunId: string | null;
+  /** The queued run an explicit continue_later asked for, and when it may start. */
+  explicitContinuation?: { runId: string; wakeAt: Date | null } | null;
+}
+
+/**
+ * The run asked to continue (continue_later). Finalizing as completed queues the next link of
+ * the chain in the same transaction, so a crash can never leave a finished run without it.
+ */
+export interface ExplicitContinuationRequest {
+  index: number;
+  max: number;
+  rootRunId: string;
+  digest: string;
+  repeats: number;
+  percent: number | null;
+  tainted: boolean;
+  delayMs: number;
+  /** Task prompt of the continuation run (a fixed note, never user content). */
+  prompt: string;
+  /** Status lines appended to the final reply, by outcome. */
+  metaText: { scheduled: string; superseded: string };
 }
 
 interface FinalizeRunBase {
@@ -180,6 +202,7 @@ export type FinalizeRunInput = FinalizeRunBase &
         outcome: "completed";
         blocks: MessageBlock[];
         markUnread?: boolean;
+        continuation?: ExplicitContinuationRequest;
       }
     | {
         outcome: "failed";
@@ -528,7 +551,14 @@ export async function sendUserMessage(
                   in: [...QUEUE_HOLDING_RUN_STATUSES],
                 },
               },
-              select: { id: true, taskId: true, trigger: true, status: true },
+              select: {
+                id: true,
+                taskId: true,
+                trigger: true,
+                status: true,
+                wakeAt: true,
+                continuationOfRunId: true,
+              },
             })
           : [];
       const holdingRuns = activeRuns.filter(
@@ -596,6 +626,20 @@ export async function sendUserMessage(
           },
         });
         await tx.message.update({ where: { id: message.id }, data: { runId: busy.id } });
+        // A continuation still waiting out its delay takes the message now: one run answers the
+        // message and goes on with the task, instead of a second run beside it.
+        if (
+          !held &&
+          busy.status === "queued" &&
+          busy.continuationOfRunId &&
+          busy.wakeAt &&
+          busy.wakeAt.getTime() > Date.now()
+        ) {
+          await tx.run.updateMany({
+            where: { id: busy.id, status: "queued" },
+            data: { wakeAt: new Date() },
+          });
+        }
       }
       const event = await appendEventInTransaction(tx, {
         spaceId: input.spaceId,
@@ -1712,7 +1756,12 @@ export async function finalizeRun(
     "bot.id": input.botId,
   });
   void captureRunAnalytics(prisma, analytics, input.runId, `run.${input.outcome}`);
-  return { continuationRunId: committed.continuationRunId };
+  return {
+    continuationRunId: committed.continuationRunId,
+    ...(committed.explicitContinuation
+      ? { explicitContinuation: committed.explicitContinuation }
+      : {}),
+  };
 }
 
 /** Stamps one turn-level wall-clock duration on the final tool block. */
@@ -1744,6 +1793,7 @@ async function finalizeRunOnce(
   threadId: string;
   seq: number;
   continuationRunId: string | null;
+  explicitContinuation: { runId: string; wakeAt: Date | null } | null;
   firstResponse: boolean;
 } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -1829,9 +1879,20 @@ async function finalizeRunOnce(
       });
     }
     let firstResponse = false;
+    // An explicit continuation is decided before the reply is written: its status line is part
+    // of the reply. Pending steering takes precedence as the next run and carries the chain on.
+    const continuationState =
+      input.outcome === "completed" && input.continuation
+        ? await explicitContinuationState(tx, input)
+        : null;
     const replyBlocks =
       input.outcome === "completed"
-        ? completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now)
+        ? [
+            ...completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now),
+            ...(continuationState && input.continuation
+              ? [explicitContinuationMetaBlock(input.continuation, continuationState)]
+              : []),
+          ]
         : (input.partialReply ?? []);
     if (replyBlocks.length > 0) {
       const message = await createThreadMessageInTransaction(tx, {
@@ -1880,9 +1941,195 @@ async function finalizeRunOnce(
       });
     }
     const continuationRunId = await createPendingSteeringRun(tx, input);
+    let explicitContinuation: { runId: string; wakeAt: Date | null } | null = null;
+    if (continuationState === "scheduled" && input.outcome === "completed" && input.continuation) {
+      explicitContinuation = continuationRunId
+        ? await mergeExplicitContinuation(tx, input, input.continuation, continuationRunId)
+        : await createExplicitContinuationRun(tx, input, input.continuation, now);
+    }
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
-    return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId, firstResponse };
+    return {
+      threadId: lastEvent.threadId,
+      seq: lastEvent.seq,
+      continuationRunId,
+      explicitContinuation,
+      firstResponse,
+    };
   }, FINALIZE_TRANSACTION_OPTIONS);
+}
+
+/**
+ * Another live run of this bot in this thread (work started meanwhile) supersedes the chain: no
+ * second run is queued beside it.
+ */
+async function explicitContinuationState(
+  tx: Prisma.TransactionClient,
+  input: { threadId: string; botId: string; runId: string },
+): Promise<"scheduled" | "superseded"> {
+  const active = await tx.run.findFirst({
+    where: {
+      threadId: input.threadId,
+      botId: input.botId,
+      id: { not: input.runId },
+      status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
+    },
+    select: { id: true },
+  });
+  if (active) return "superseded";
+  // Messages that arrived meanwhile queue their own run when this one finishes. The chain rides
+  // on it only when it is the same conversation (the owner's private chat, or the same channel
+  // with the same trigger); otherwise those messages win and the chain stops, so a private task
+  // never continues inside a group channel or the other way round.
+  const pending = await pendingSteeringBatch(tx, input);
+  if (!pending) return "scheduled";
+  const current = await tx.run.findUniqueOrThrow({
+    where: { id: input.runId },
+    select: { trigger: true, sourceMessage: { select: { blocks: true } } },
+  });
+  return sameContinuationConversation(
+    {
+      trigger: current.trigger,
+      channelId: messagingChannelId(current.sourceMessage?.blocks as MessageBlock[] | undefined),
+    },
+    {
+      trigger: pending.trigger,
+      channelId: messagingChannelId(pending.source.message.blocks as MessageBlock[] | undefined),
+    },
+  )
+    ? "scheduled"
+    : "superseded";
+}
+
+const PRIVATE_OWNER_TRIGGERS = new Set(["user", "follow_up"]);
+
+export function sameContinuationConversation(
+  current: { trigger: string; channelId: string | null | undefined },
+  next: { trigger: string; channelId: string | null | undefined },
+): boolean {
+  if (PRIVATE_OWNER_TRIGGERS.has(current.trigger) && PRIVATE_OWNER_TRIGGERS.has(next.trigger)) {
+    return true;
+  }
+  return (
+    current.trigger === next.trigger && (current.channelId ?? null) === (next.channelId ?? null)
+  );
+}
+
+function explicitContinuationMetaBlock(
+  request: ExplicitContinuationRequest,
+  state: "scheduled" | "superseded",
+): MessageBlock {
+  return {
+    kind: "meta",
+    text: state === "scheduled" ? request.metaText.scheduled : request.metaText.superseded,
+    continuation: {
+      state,
+      index: request.index,
+      max: request.max,
+      ...(request.percent === null ? {} : { percent: request.percent }),
+    },
+  };
+}
+
+function explicitContinuationColumns(runId: string, request: ExplicitContinuationRequest) {
+  return {
+    continuationOfRunId: runId,
+    continuationRootRunId: request.rootRunId,
+    continuationIndex: request.index,
+    continuationDigest: request.digest,
+    continuationRepeats: request.repeats,
+    continuationPercent: request.percent,
+    continuationTainted: request.tainted,
+  };
+}
+
+/** Unclaimed steering already queued a run: it becomes the next link and starts now. */
+async function mergeExplicitContinuation(
+  tx: Prisma.TransactionClient,
+  input: { runId: string },
+  request: ExplicitContinuationRequest,
+  steeringRunId: string,
+): Promise<{ runId: string; wakeAt: Date | null }> {
+  const steeringRun = await tx.run.update({
+    where: { id: steeringRunId },
+    data: explicitContinuationColumns(input.runId, request),
+    select: { taskId: true, task: { select: { prompt: true } } },
+  });
+  await tx.task.update({
+    where: { id: steeringRun.taskId },
+    data: { prompt: `${steeringRun.task.prompt}\n\n${request.prompt}` },
+  });
+  return { runId: steeringRunId, wakeAt: null };
+}
+
+/**
+ * The next link keeps the original run's trigger, person, source message, routine and model pin,
+ * so it has exactly the permissions and delivery (app, channel, routine thread) of the request it
+ * continues, never more.
+ */
+async function createExplicitContinuationRun(
+  tx: Prisma.TransactionClient,
+  input: { spaceId: string; threadId: string; botId: string; runId: string },
+  request: ExplicitContinuationRequest,
+  now: Date,
+): Promise<{ runId: string; wakeAt: Date | null }> {
+  const current = await tx.run.findUniqueOrThrow({
+    where: { id: input.runId },
+    select: {
+      userId: true,
+      trigger: true,
+      sourceMessageId: true,
+      routineId: true,
+      modelProvider: true,
+      modelId: true,
+      thinkingLevel: true,
+      modelPinned: true,
+    },
+  });
+  // A run that does not read the thread (a routine) has only its task: carry the original
+  // request's task over so the continuation still knows what it is continuing.
+  const rootPrompt = runReadsThreadHistory(current.trigger)
+    ? null
+    : (
+        await tx.run.findUnique({
+          where: { id: request.rootRunId },
+          select: { task: { select: { prompt: true } } },
+        })
+      )?.task.prompt;
+  const task = await tx.task.create({
+    data: {
+      spaceId: input.spaceId,
+      botId: input.botId,
+      threadId: input.threadId,
+      userId: current.userId,
+      prompt: rootPrompt ? `${request.prompt}\n\nOriginal task:\n${rootPrompt}` : request.prompt,
+      status: "queued",
+    },
+  });
+  const wakeAt = new Date(now.getTime() + Math.max(0, request.delayMs));
+  const run = await tx.run.create({
+    data: {
+      spaceId: input.spaceId,
+      botId: input.botId,
+      threadId: input.threadId,
+      taskId: task.id,
+      userId: current.userId,
+      status: "queued",
+      trigger: current.trigger,
+      sourceMessageId: current.sourceMessageId,
+      routineId: current.routineId,
+      ...(current.modelPinned
+        ? {
+            modelProvider: current.modelProvider,
+            modelId: current.modelId,
+            thinkingLevel: current.thinkingLevel,
+            modelPinned: true,
+          }
+        : {}),
+      wakeAt,
+      ...explicitContinuationColumns(input.runId, request),
+    },
+  });
+  return { runId: run.id, wakeAt };
 }
 
 export async function discardAnsweredSteering(
@@ -1926,19 +2173,14 @@ export async function discardAnsweredSteering(
 }
 
 /** Queue one follow-up when this bot still has unclaimed steering and no live run. */
-export async function createPendingSteeringRun(
+/**
+ * The batch of unclaimed steering the next continuation run would answer, with that run's
+ * trigger, or null when there is none.
+ */
+async function pendingSteeringBatch(
   tx: Prisma.TransactionClient,
-  input: { spaceId: string; threadId: string; botId: string },
-): Promise<string | null> {
-  const active = await tx.run.findFirst({
-    where: {
-      threadId: input.threadId,
-      botId: input.botId,
-      status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
-    },
-    select: { id: true },
-  });
-  if (active) return null;
+  input: { threadId: string; botId: string },
+) {
   const pending = await tx.steeringMessage.findMany({
     where: {
       botId: input.botId,
@@ -1954,6 +2196,37 @@ export async function createPendingSteeringRun(
   const origin = steeringOrigin(pending[0]!);
   const batch = pending.filter((item) => steeringOrigin(item) === origin);
   const source = batch.at(-1)!;
+  // A private continuation is a follow-up the owner wrote only when every message in it came
+  // from the app; one direct-line delivery keeps it messaging, so it is never owner-started.
+  // Rows queued before origins were recorded are recognized by their channel message.
+  const trigger =
+    origin === "webhook"
+      ? "webhook"
+      : origin === "private" &&
+          batch.every(
+            (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
+          )
+        ? "follow_up"
+        : "messaging";
+  return { origin, batch, source, trigger };
+}
+
+export async function createPendingSteeringRun(
+  tx: Prisma.TransactionClient,
+  input: { spaceId: string; threadId: string; botId: string },
+): Promise<string | null> {
+  const active = await tx.run.findFirst({
+    where: {
+      threadId: input.threadId,
+      botId: input.botId,
+      status: { in: [...QUEUE_HOLDING_RUN_STATUSES] },
+    },
+    select: { id: true },
+  });
+  if (active) return null;
+  const pendingBatch = await pendingSteeringBatch(tx, input);
+  if (!pendingBatch) return null;
+  const { origin, batch, source, trigger } = pendingBatch;
   const modelPin = continuationModelPin(batch);
   const task = await tx.task.create({
     data: {
@@ -1976,18 +2249,7 @@ export async function createPendingSteeringRun(
       taskId: task.id,
       userId: batch[0]!.userId,
       status: "queued",
-      // A private continuation is a follow-up the owner wrote only when every message in it came
-      // from the app; one direct-line delivery keeps it messaging, so it is never owner-started.
-      // Rows queued before origins were recorded are recognized by their channel message.
-      trigger:
-        origin === "webhook"
-          ? "webhook"
-          : origin === "private" &&
-              batch.every(
-                (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
-              )
-            ? "follow_up"
-            : "messaging",
+      trigger,
       sourceMessageId: source.message.id,
       ...(modelPin ?? {}),
     },

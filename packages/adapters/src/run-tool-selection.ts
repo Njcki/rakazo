@@ -81,6 +81,8 @@ export function selectBuiltinToolsForRun(options: {
   userComputer?: boolean;
   /** That desktop can look at and drive its apps. */
   userComputerScreen?: boolean;
+  /** This run may end itself and queue the rest of its task (see continueLaterEligible). */
+  continueLater?: boolean;
 }) {
   const disabled = disabledBuiltinToolSet(options.disabledBuiltinTools);
   const ownerStartedRun = isOwnerStartedRun(options.trigger, Boolean(options.followUpFromUser));
@@ -122,6 +124,8 @@ export function selectBuiltinToolsForRun(options: {
           "generate_video",
         ].includes(tool.name)) &&
       (options.voiceCall || tool.name !== "end_call") &&
+      (tool.name !== "continue_later" ||
+        (Boolean(options.continueLater) && !isBackgroundRunTrigger(options.trigger))) &&
       (options.userComputer || tool.name !== "user_computer_shell") &&
       ((options.userComputer && options.userComputerScreen) ||
         !USER_COMPUTER_SCREEN_TOOLS.has(tool.name)) &&

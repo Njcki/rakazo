@@ -89,6 +89,7 @@ export const Transcript = memo(function Transcript({
   onSpeak,
   onOpenComputer,
   onOpenImportSetup,
+  onStopContinuation,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   scrollRequest: { messageId: string; nonce: number } | null;
@@ -136,6 +137,8 @@ export const Transcript = memo(function Transcript({
   onSpeak: (message: ThreadMessage) => void;
   onOpenComputer: (botId?: string) => void;
   onOpenImportSetup?: (target: ImportSetupTarget) => void;
+  /** Stops a pending automatic continuation (cancels the thread's queued run). */
+  onStopContinuation?: () => void | Promise<void>;
 }) {
   const { t } = useLingui();
   const [atEnd, setAtEnd] = useState(true);
@@ -445,6 +448,7 @@ export const Transcript = memo(function Transcript({
           </Button>
         ) : null}
         {groupVoiceChats(reactionView.visibleMessages).map((item) => {
+          const lastVisibleMessageId = reactionView.visibleMessages.at(-1)?.id;
           if (item.kind === "voiceChat") {
             return (
               <div key={item.key}>
@@ -538,6 +542,9 @@ export const Transcript = memo(function Transcript({
                       onSpeak={() => onSpeak(message)}
                       onOpenComputer={onOpenComputer}
                       onOpenImportSetup={onOpenImportSetup}
+                      onStopContinuation={
+                        message.id === lastVisibleMessageId ? onStopContinuation : undefined
+                      }
                       showToolActivity={showToolActivity}
                       onReply={onReply}
                       onMarkUnread={onMarkUnread}

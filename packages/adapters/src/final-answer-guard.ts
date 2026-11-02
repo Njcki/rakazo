@@ -10,7 +10,7 @@
  */
 
 /** Default cap on dangling-narration nudges per run. */
-export const DEFAULT_DANGLING_NARRATION_NUDGES = 2;
+export const DEFAULT_DANGLING_NARRATION_NUDGES = 4;
 
 /** Short replies are where announcements hide; long ones are real answers. */
 const SHORT_REPLY_CHARS = 700;
@@ -89,6 +89,89 @@ const ANNOUNCE_OPENERS = new RegExp(
   "iu",
 );
 
+// A final reply that ends by promising more work ("continuo con…", "I'll continue with…") even
+// though nothing runs after it. Matched only in the last paragraph, so long and structured
+// replies are covered too.
+// \b is ASCII-only even with the u flag, so accented endings ("continuerò") need these.
+const WORD_START = "(?<![\\p{L}\\p{N}_])";
+const WORD_END = "(?![\\p{L}\\p{N}_])";
+
+const CONTINUATION_PROMISE = new RegExp(
+  `${WORD_START}(?:${[
+    // Italian
+    "(?:ora |adesso |subito |quindi |poi )?(?:continuo|continuerò|continueremo|proseguo|proseguirò|procedo|procederò|riprendo|riprenderò)",
+    "(?:ora|adesso|subito|quindi) passo (?:a|al|allo|alla|ai|agli|alle)",
+    "passo (?:ora|adesso|subito) (?:a|al|allo|alla|ai|agli|alle)",
+    "nel prossimo (?:messaggio|turno|passaggio|step|aggiornamento)",
+    "(?:a breve|tra poco|fra poco) (?:ti )?(?:invio|mando|aggiorno|completo|continuo|preparo)",
+    "ti (?:aggiorno|aggiornerò|faccio sapere|farò sapere) (?:a breve|appena|quando|non appena)",
+    "sto (?:continuando|procedendo|lavorando)",
+    // English
+    "(?:i'll|i will|i'm going to|i am going to|let me|now i'll|next,? i'll|next,? i will) (?:now |then |next )?(?:continue|proceed|keep going|move on|go on|resume|carry on|get (?:back )?to|work on|start on|finish)",
+    "(?:continuing with|moving on to|proceeding (?:with|to)|stay tuned|i'll follow up|will follow up shortly|in the next (?:message|turn|step|update))",
+  ].join("|")})${WORD_END}`,
+  "iu",
+);
+
+// An offer, a condition or a question hands the turn back to the user: a correct ending.
+const HANDS_BACK = new RegExp(
+  `\\?|${WORD_START}(?:${[
+    "se vuoi",
+    "se preferisci",
+    "se ti va",
+    "se (?:mi )?confermi",
+    "appena (?:mi )?(?:dici|confermi)",
+    "vuoi che",
+    "fammi sapere",
+    "dimmi (?:se|tu)",
+    "quando vuoi",
+    "con il tuo ok",
+    "if you(?:'d)? (?:want|like|prefer)",
+    "let me know",
+    "would you like",
+    "shall i",
+    "should i",
+    "want me to",
+    "once you confirm",
+    "if you confirm",
+  ].join("|")})${WORD_END}`,
+  "iu",
+);
+
+/** The last paragraph of a reply, without list markers or emphasis. */
+function lastParagraph(text: string): string {
+  const paragraphs = text
+    .split(/\n\s*\n/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const last = paragraphs.at(-1) ?? "";
+  const lines = last
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return (lines.at(-1) ?? "").replace(/^(?:[-*•>#]+|\d+[.)])\s*/u, "").replace(/[*_`]/gu, "");
+}
+
+/** The last sentence of a paragraph (or the paragraph when it has one sentence). */
+function lastSentence(paragraph: string): string {
+  const sentences = paragraph
+    .split(/(?<=[.!…])\s+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return sentences.at(-1) ?? paragraph;
+}
+
+/**
+ * Whether a reply ends by promising to keep working. Applies to replies of any length: the
+ * promise sits in the last paragraph of a long, structured report as often as in a one-liner.
+ */
+export function endsWithContinuationPromise(text: string): boolean {
+  const paragraph = lastParagraph(text.trim()).replace(/[’ʼ]/gu, "'");
+  if (!paragraph || HANDS_BACK.test(paragraph)) return false;
+  const tail = paragraph.length > 400 ? lastSentence(paragraph) : paragraph;
+  return CONTINUATION_PROMISE.test(tail);
+}
+
 function stripTrailingDecoration(text: string): string {
   return text.replace(/[\s*_`"'»”)\]]+$/u, "");
 }
@@ -113,6 +196,7 @@ export function looksLikeDanglingNarration(text: string): boolean {
   if (hasLeakedToolCall(trimmed)) return true;
   const tail = stripTrailingDecoration(trimmed);
   if (/(?::|…|\.\.\.)$/u.test(tail) && trimmed.length <= SHORT_REPLY_CHARS * 2) return true;
+  if (endsWithContinuationPromise(trimmed)) return true;
   if (trimmed.length > SHORT_REPLY_CHARS) return false;
   // Structured replies (paragraphs, lists, headings, tables) are answers.
   if (/\n\s*\n|\n\s*(?:[-*•]|\d+[.)]|#{1,6}\s|\|)/u.test(trimmed)) return false;
@@ -120,7 +204,7 @@ export function looksLikeDanglingNarration(text: string): boolean {
   return ANNOUNCE_OPENERS.test(opener);
 }
 
-/** Optional override: DANGLING_NARRATION_NUDGES=0 disables, default 2, max 5. */
+/** Optional override: DANGLING_NARRATION_NUDGES=0 disables, default 4, max 5. */
 export function danglingNarrationNudges(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.DANGLING_NARRATION_NUDGES?.trim();
   if (!raw) return DEFAULT_DANGLING_NARRATION_NUDGES;
@@ -141,16 +225,38 @@ const FINAL_SUMMARY_SHAPE =
 const SILENT_CLAUSE =
   " If you were instructed to stay silent when there is nothing to report, follow that instruction for the entire final assistant reply.";
 
-export function danglingNarrationPrompt(allowSilentEmpty?: boolean): string {
+const CONTINUE_LATER_CLAUSE =
+  " If real work remains that will not fit in this turn, call continue_later with a short progress summary instead: the next part then starts automatically. Never end with a promise to continue; nothing runs after a final answer.";
+
+const NO_PROMISE_CLAUSE =
+  " Do not promise to continue later: nothing runs after a final answer, so say clearly whether the task is done or stopped, and what is left.";
+
+export function danglingNarrationPrompt(
+  allowSilentEmpty?: boolean,
+  continueLaterOffered?: boolean,
+): string {
   return (
-    "Your last message announced a next step but did not call any tool, so nothing was executed. " +
+    "Your last message announced a next step (or promised to continue) but did not call any tool, so nothing was executed and nothing will run after this turn. " +
     "If the task still needs work, continue now by actually calling the tools (native tool calls only, never written as text). " +
     `If the task is complete or you cannot continue, write the final answer to the user instead. ${FINAL_SUMMARY_SHAPE}` +
+    (continueLaterOffered ? CONTINUE_LATER_CLAUSE : NO_PROMISE_CLAUSE) +
     (allowSilentEmpty ? SILENT_CLAUSE : "")
   );
 }
 
-export function toolBudgetWrapUpPrompt(limit: number, allowSilentEmpty?: boolean): string {
+export function toolBudgetWrapUpPrompt(
+  limit: number,
+  allowSilentEmpty?: boolean,
+  continueLaterOffered?: boolean,
+): string {
+  if (continueLaterOffered) {
+    return (
+      `The limit of ${limit} tool calls for this turn has been reached. The only tool left is continue_later. ` +
+      "If the task still has work left, call continue_later now with a short progress summary in the user's language (what is done, what is next, percent if known): the next part starts automatically with a fresh budget. " +
+      "If the task is complete, write the final answer instead, without calling any tool. Never promise to continue in a final answer." +
+      (allowSilentEmpty ? SILENT_CLAUSE : "")
+    );
+  }
   return (
     `The limit of ${limit} tool calls for this turn has been reached, so no tools are available any more. ` +
     "Do not call or write any tool call. Write the final answer to the user now, based only on what you already have. " +

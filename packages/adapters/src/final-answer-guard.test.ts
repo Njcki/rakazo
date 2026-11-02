@@ -130,3 +130,38 @@ describe("mid-run steering note (patch 0027)", () => {
     expect(steeringContinuePrompt(true)).toContain("stay silent");
   });
 });
+
+describe("continuation promises at the end of long replies", () => {
+  const long = "Ho analizzato i primi 40 file e aggiornato la tabella con i risultati. ".repeat(12);
+  it("flags an IT promise in the last sentence of a long reply", () => {
+    expect(looksLikeDanglingNarration(`${long}\n\nOra continuo con i restanti 60 file.`)).toBe(
+      true,
+    );
+    expect(looksLikeDanglingNarration(`${long}\n\nProseguo con la parte successiva…`)).toBe(true);
+    expect(
+      looksLikeDanglingNarration(`${long}\n\nContinuerò con il doppiaggio dei capitoli 4-6.`),
+    ).toBe(true);
+  });
+  it("flags an EN promise in the last sentence of a long reply", () => {
+    const en = "I processed the first batch and updated the table with the results. ".repeat(12);
+    expect(looksLikeDanglingNarration(`${en}\n\nI'll continue with the remaining files.`)).toBe(
+      true,
+    );
+  });
+  it("does not flag finished or handed-back replies", () => {
+    expect(looksLikeDanglingNarration(`${long}\n\nIl lavoro è completo.`)).toBe(false);
+    expect(looksLikeDanglingNarration(`${long}\n\nVuoi che continui con gli altri file?`)).toBe(
+      false,
+    );
+    expect(looksLikeDanglingNarration(`${long}\n\nSe vuoi, proseguo con il resto.`)).toBe(false);
+    expect(looksLikeDanglingNarration(`${long}\n\nSpiegazione passo a passo completata.`)).toBe(
+      false,
+    );
+  });
+  it("default nudges is 4 and prompts mention continue_later when offered", () => {
+    expect(DEFAULT_DANGLING_NARRATION_NUDGES).toBe(4);
+    expect(danglingNarrationPrompt(false, true)).toContain("continue_later");
+    expect(toolBudgetWrapUpPrompt(10, false, true)).toContain("continue_later");
+    expect(danglingNarrationPrompt(false, false)).not.toContain("continue_later");
+  });
+});

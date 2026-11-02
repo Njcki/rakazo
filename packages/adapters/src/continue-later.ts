@@ -277,10 +277,9 @@ export const CONTINUE_LATER_UNAVAILABLE_GUIDANCE =
 
 /** Fallback text of the status line under the summary; the web app shows a translated one. */
 export function continuationMetaText(meta: ContinuationMeta): string {
-  const percent = meta.percent === undefined ? "" : ` · ${meta.percent}%`;
   switch (meta.state) {
     case "scheduled":
-      return `Continuing automatically (${meta.index}/${meta.max})${percent}`;
+      return `Continuing on its own · round ${meta.index} of max ${meta.max}${continuationProgressText(meta)}`;
     case "limit":
       return `Automatic continuation stopped: limit reached (${meta.max})`;
     case "no_progress":
@@ -290,11 +289,39 @@ export function continuationMetaText(meta: ContinuationMeta): string {
   }
 }
 
+/**
+ * What the percent refers to: the whole request's measured progress (value, unit, target and its
+ * percent, plus the bot's own lower estimate when it differs), or the bot's own estimate.
+ */
+function continuationProgressText(meta: ContinuationMeta): string {
+  const measure = meta.measure;
+  if (measure && measure.target > 0) {
+    const measured = measuredPercent(measure);
+    const unit = measure.unit ? ` ${measure.unit}` : "";
+    const estimate =
+      meta.percent !== undefined && meta.percent < measured
+        ? ` · bot estimate ${meta.percent}%`
+        : "";
+    return ` · ${formatMeasureValue(measure.value)}${unit} of ${formatMeasureValue(measure.target)} (${measured}%)${estimate}`;
+  }
+  return meta.percent === undefined ? "" : ` · ${meta.percent}% (bot estimate)`;
+}
+
+export function measuredPercent(measure: { value: number; target: number }): number {
+  return Math.max(0, Math.min(100, Math.floor((measure.value / measure.target) * 100)));
+}
+
+function formatMeasureValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+}
+
 export interface ContinuationMeta {
   state: "scheduled" | "limit" | "no_progress" | "superseded";
   index: number;
   max: number;
   percent?: number;
+  /** Measured progress of the whole request (completion check) when the percent comes from it. */
+  measure?: { value: number; target: number; unit?: string };
 }
 
 /** The text of the last reply of the run being continued (its progress summary). */

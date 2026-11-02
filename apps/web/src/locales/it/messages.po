@@ -278,6 +278,10 @@ msgstr "Opzioni di {name}"
 msgid "{name} stopped"
 msgstr "{name} interrotto"
 
+#: src/pages/shell/continuation-line.tsx
+msgid "{percent}% (bot estimate)"
+msgstr "{percent}% (stima del bot)"
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "{provider} can't run this model."
@@ -422,6 +426,14 @@ msgstr "{title}, salvato come {savedAs}"
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# strumento} other {# strumenti}}"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "{value} {unit} of {target} ({measured}%)"
+msgstr "{value} {unit} su {target} ({measured}%)"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "{value} of {target} ({measured}%)"
+msgstr "{value} su {target} ({measured}%)"
 
 #. placeholder {0}: mention.name
 #: src/pages/shell/composer.tsx
@@ -1096,6 +1108,10 @@ msgstr "Bot"
 msgid "Bot"
 msgstr "Bot"
 
+#: src/pages/shell/continuation-line.tsx
+msgid "bot estimate {percent}%"
+msgstr "stima del bot {percent}%"
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Bot is watching, not acting"
 msgstr "Il bot osserva, non agisce"
@@ -1763,12 +1779,8 @@ msgid "Continue with {0}"
 msgstr "Continua con {0}"
 
 #: src/pages/shell/continuation-line.tsx
-msgid "Continuing automatically ({index}/{max})"
-msgstr "Continua automaticamente ({index}/{max})"
-
-#: src/pages/shell/continuation-line.tsx
-msgid "Continuing automatically ({index}/{max}) · {percent}%"
-msgstr "Continua automaticamente ({index}/{max}) · {percent}%"
+msgid "Continuing on its own · round {index} of max {max}"
+msgstr "Prosegue da solo · giro {index} di max {max}"
 
 #. placeholder {0}: data.botName
 #. placeholder {1}: new Date(data.sharedAt).toLocaleDateString()
@@ -6009,6 +6021,18 @@ msgstr "Test in corso…"
 #: src/pages/shell/composer-error.tsx
 msgid "The bot can use the file but won't see the picture."
 msgstr "Il bot può usare il file ma non vedrà l'immagine."
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached"
+msgstr "Il bot continua il lavoro in automatico finché il traguardo non è raggiunto"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached; the percentage is estimated by the bot"
+msgstr "Il bot continua il lavoro in automatico finché il traguardo non è raggiunto; la percentuale è stimata dal bot"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached; the percentage is measured by the system"
+msgstr "Il bot continua il lavoro in automatico finché il traguardo non è raggiunto; la percentuale è misurata dal sistema"
 
 #: src/lib/dictation.ts
 msgid "The browser keeps dropping the microphone. Start dictation again to retry."

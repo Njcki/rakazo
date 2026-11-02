@@ -25,6 +25,7 @@ import type { selectRunConnections } from "./connection-context.js";
 import type { ContinuationMeta, ContinueLaterSettings } from "./continue-later.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetRun } from "./fleet-tools.js";
+import type { GoalMeasure } from "./goal-check.js";
 import { namedAgentTools } from "./pi-runtime-tools.js";
 import type { lazyRunComputer } from "./run-computer.js";
 import type { createRunWorkspaceCheckpoint } from "./run-lifecycle.js";
@@ -216,6 +217,8 @@ export interface ContinueLaterRequest {
   digest: string;
   repeats: number;
   percent: number | null;
+  /** Measured progress of the whole request (completion check) behind `percent`, if any. */
+  measure?: GoalMeasure;
   /** Plan steps already finished in this request: the next part must not redo them. */
   doneSteps?: string[];
   /** The goal, its completion check and value (or the request to register one) for the next part. */

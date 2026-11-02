@@ -195,8 +195,30 @@ describe("helpers", () => {
   });
   it("meta fallback text", () => {
     expect(continuationMetaText({ state: "scheduled", index: 3, max: 50, percent: 40 })).toBe(
-      "Continuing automatically (3/50) · 40%",
+      "Continuing on its own · round 3 of max 50 · 40% (bot estimate)",
     );
+    expect(continuationMetaText({ state: "scheduled", index: 3, max: 50 })).toBe(
+      "Continuing on its own · round 3 of max 50",
+    );
+    expect(
+      continuationMetaText({
+        state: "scheduled",
+        index: 3,
+        max: 50,
+        percent: 13,
+        measure: { value: 120, target: 900, unit: "items" },
+      }),
+    ).toBe("Continuing on its own · round 3 of max 50 · 120 items of 900 (13%)");
+    // The bot's own lower estimate is shown next to the measure (the lower-of rule).
+    expect(
+      continuationMetaText({
+        state: "scheduled",
+        index: 2,
+        max: 50,
+        percent: 10,
+        measure: { value: 62, target: 100 },
+      }),
+    ).toBe("Continuing on its own · round 2 of max 50 · 62 of 100 (62%) · bot estimate 10%");
     expect(continuationMetaText({ state: "limit", index: 51, max: 50 })).toContain("limit");
   });
 });

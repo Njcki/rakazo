@@ -1182,6 +1182,7 @@ async function applyCompletionGate(ctx: RunContext) {
         doneSteps: [...steps.fresh, ...steps.doneBefore].slice(0, 30),
         ...(goalGate.note ? { goalNote: goalGate.note } : {}),
         ...(goalGate.percent != null ? { percent: goalGate.percent } : {}),
+        ...(goalGate.percent != null && goalGate.measure ? { measure: goalGate.measure } : {}),
       };
       if (reason === "close_attempt") dropStandbyClose(ctx.state.reply);
       // Every part that goes on tells the user where the whole job stands, measured.
@@ -1305,6 +1306,9 @@ async function checkRequestedContinuation(ctx: RunContext) {
       const percent =
         goalGate.percent == null ? undefined : displayPercent(goalGate.percent, requested.percent);
       continuation.requested.percent = percent ?? null;
+      if (percent !== undefined && goalGate.measure)
+        continuation.requested.measure = goalGate.measure;
+      else delete continuation.requested.measure;
       if (goalGate.statusLine && !requested.summary.includes(goalGate.statusLine))
         continuation.requested.summary = `${requested.summary.trim()}\n\n${goalGate.statusLine}`;
     } else {
@@ -1375,6 +1379,7 @@ async function continuationForCompletion(ctx: RunContext) {
     index: request.index,
     max: request.max,
     ...(percent === undefined ? {} : { percent }),
+    ...(request.measure ? { measure: request.measure } : {}),
   };
   return {
     request,
@@ -1385,6 +1390,7 @@ async function continuationForCompletion(ctx: RunContext) {
       digest: request.digest,
       repeats: request.repeats,
       percent: request.percent,
+      measure: request.measure ?? null,
       // Whatever this run read from outside follows the task into the next run.
       tainted: await isRunTainted(ctx),
       delayMs: settings.delayMs,

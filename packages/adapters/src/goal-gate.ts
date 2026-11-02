@@ -16,8 +16,10 @@ import {
   GOAL_PROBE_TIMEOUT_MS,
   type GoalCheck,
   type GoalLedger,
+  type GoalMeasure,
   goalContinuationNote,
   goalDisputedNote,
+  goalMeasure,
   goalPercent,
   goalProgressLine,
   goalStalledNotice,
@@ -176,6 +178,10 @@ export function isLongRequest(input: {
   );
 }
 
+function withMeasure(measure: GoalMeasure | undefined): { measure?: GoalMeasure } {
+  return measure ? { measure } : {};
+}
+
 export type GoalGateResult = {
   mode: "legacy" | "probe" | "nudge" | "judge";
   /** Continue the request with this automatic reason; undefined ends it. */
@@ -184,6 +190,8 @@ export type GoalGateResult = {
   stop?: "reached" | "stalled" | "stop_asked" | "judge_complete" | "judge_no_work";
   /** A measured status line for the user under a part that continues. */
   statusLine?: string;
+  /** The measured progress of the whole request, for the continuation indicator. */
+  measure?: GoalMeasure;
   /** Line added to the progress summary (changes with the value, so the digest guard sees progress). */
   progressLine?: string;
   /** Note for the next part's prompt. */
@@ -310,6 +318,7 @@ export async function evaluateGoalGate(
         note: goalContinuationNote(goal, value),
         percent: goalPercent(goal, value),
         statusLine: goalStatusLine(goal, value, input.language),
+        ...withMeasure(goalMeasure(goal, value)),
         log,
       };
     }

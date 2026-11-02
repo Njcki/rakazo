@@ -220,6 +220,14 @@ export const MessageBlock = z.discriminatedUnion("kind", [
         index: z.number().int().nonnegative(),
         max: z.number().int().nonnegative(),
         percent: z.number().int().min(0).max(100).optional(),
+        /** The whole request's measured progress (its completion check), when one is registered. */
+        measure: z
+          .object({
+            value: z.number().finite(),
+            target: z.number().finite().positive(),
+            unit: z.string().max(40).optional(),
+          })
+          .optional(),
       })
       .optional(),
   }),

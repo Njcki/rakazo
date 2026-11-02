@@ -380,6 +380,19 @@ export function goalPartialCheckError(reason: string): string {
 }
 
 /** Bilingual line under a part's reply: where the whole job stands, measured by the check. */
+/** The whole request's measured progress, shown under a part that continues. */
+export interface GoalMeasure {
+  value: number;
+  target: number;
+  unit?: string;
+}
+
+export function goalMeasure(goal: GoalCheck, value: number): GoalMeasure | undefined {
+  if (goal.kind !== "number" || !(goal.target > 0) || !Number.isFinite(value)) return undefined;
+  const unit = goal.unit?.trim().slice(0, 40);
+  return { value, target: goal.target, ...(unit ? { unit } : {}) };
+}
+
 export function goalStatusLine(goal: GoalCheck, value: number, language: "it" | "en"): string {
   const unit = goal.unit ? ` ${goal.unit}` : "";
   const percent = goalPercent(goal, value);

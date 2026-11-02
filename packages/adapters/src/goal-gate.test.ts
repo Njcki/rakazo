@@ -6,6 +6,7 @@ import {
   displayPercent,
   type GoalCheck,
   type GoalLedger,
+  goalMeasure,
   goalStalledNotice,
   parseGoalCheckArgs,
   parseGoalLedger,
@@ -237,6 +238,7 @@ describe("measurable batch job", () => {
       "Stato del lavoro: 12/40 (30%). Proseguo con la parte successiva.",
     );
     expect(first.progressLine).toContain("12 of 40");
+    expect(first.measure).toEqual({ value: 12, target: 40 });
     const prompt = continuationPrompt({
       index: 2,
       max: 20,
@@ -651,6 +653,22 @@ describe("a check whose target the bot sets to what is already done", () => {
 });
 
 describe("the percent shown to the user", () => {
+  it("carries the measured value, target and the check's own unit", () => {
+    const check = {
+      description: "all items",
+      probe: "ls out | wc -l",
+      kind: "number" as const,
+      target: 300,
+      unit: " file ",
+      readings: [],
+      registeredRunId: "run-1",
+      registeredAt: "2026-01-01T00:00:00.000Z",
+    };
+    const { unit: _unit, ...noUnit } = check;
+    expect(goalMeasure(check, 45)).toEqual({ value: 45, target: 300, unit: "file" });
+    expect(goalMeasure(noUnit, 5)).toEqual({ value: 5, target: 300 });
+    expect(goalMeasure({ ...check, kind: "exit", target: 1 }, 1)).toBeUndefined();
+  });
   it("is the lowest of the measured and the reported one, none without either", () => {
     expect(displayPercent(53, 10)).toBe(10);
     expect(displayPercent(12, undefined)).toBe(12);

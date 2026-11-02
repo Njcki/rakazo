@@ -177,6 +177,8 @@ export interface ExplicitContinuationRequest {
   digest: string;
   repeats: number;
   percent: number | null;
+  /** Measured progress of the whole request behind `percent` (its completion check), if any. */
+  measure?: { value: number; target: number; unit?: string } | null;
   tainted: boolean;
   delayMs: number;
   /** Task prompt of the continuation run (a fixed note, never user content). */
@@ -2026,6 +2028,7 @@ function explicitContinuationMetaBlock(
       index: request.index,
       max: request.max,
       ...(request.percent === null ? {} : { percent: request.percent }),
+      ...(request.percent !== null && request.measure ? { measure: request.measure } : {}),
     },
   };
 }

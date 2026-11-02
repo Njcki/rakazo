@@ -277,6 +277,10 @@ msgstr "{name} विकल्प"
 msgid "{name} stopped"
 msgstr "{name} रोक दिया गया"
 
+#: src/pages/shell/continuation-line.tsx
+msgid "{percent}% (bot estimate)"
+msgstr ""
+
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
 msgid "{provider} can't run this model."
@@ -421,6 +425,14 @@ msgstr "{title}, {savedAs} नाम से सेव होगा"
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr "{toolCount, plural, one {# टूल} other {# टूल}}"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "{value} {unit} of {target} ({measured}%)"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "{value} of {target} ({measured}%)"
+msgstr ""
 
 #. placeholder {0}: mention.name
 #: src/pages/shell/composer.tsx
@@ -1095,6 +1107,10 @@ msgstr "बॉट"
 msgid "Bot"
 msgstr "बॉट"
 
+#: src/pages/shell/continuation-line.tsx
+msgid "bot estimate {percent}%"
+msgstr ""
+
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "Bot is watching, not acting"
 msgstr "बॉट देख रहा है, कार्रवाई नहीं कर रहा"
@@ -1762,11 +1778,7 @@ msgid "Continue with {0}"
 msgstr "{0} के साथ जारी रखें"
 
 #: src/pages/shell/continuation-line.tsx
-msgid "Continuing automatically ({index}/{max})"
-msgstr ""
-
-#: src/pages/shell/continuation-line.tsx
-msgid "Continuing automatically ({index}/{max}) · {percent}%"
+msgid "Continuing on its own · round {index} of max {max}"
 msgstr ""
 
 #. placeholder {0}: data.botName
@@ -6008,6 +6020,18 @@ msgstr "परीक्षण हो रहा है…"
 #: src/pages/shell/composer-error.tsx
 msgid "The bot can use the file but won't see the picture."
 msgstr "बॉट फ़ाइल का उपयोग कर सकता है, लेकिन तस्वीर नहीं देख पाएगा।"
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached; the percentage is estimated by the bot"
+msgstr ""
+
+#: src/pages/shell/continuation-line.tsx
+msgid "The bot keeps working on its own until the goal is reached; the percentage is measured by the system"
+msgstr ""
 
 #: src/lib/dictation.ts
 msgid "The browser keeps dropping the microphone. Start dictation again to retry."

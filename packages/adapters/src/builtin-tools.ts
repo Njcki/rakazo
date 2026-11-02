@@ -652,7 +652,12 @@ export const builtinAgentTools: ConnectorTool[] = [
           enum: ["number", "exit"],
           description: "number (default): the probe prints a number; exit: exit code 0 means done.",
         },
-        unit: { type: "string", maxLength: 40, description: "Unit of the value (optional)." },
+        unit: {
+          type: "string",
+          maxLength: 40,
+          description:
+            "Short unit of what the probe counts, in the user's language (e.g. lines, files, pages): shown to the user next to the value and the target. Optional.",
+        },
       },
       required: ["description", "probe"],
     },

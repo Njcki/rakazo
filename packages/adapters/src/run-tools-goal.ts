@@ -4,6 +4,7 @@ import {
 } from "./desktop-command-guard.js";
 import {
   type GoalCheck,
+  goalAlreadyReachedError,
   goalReached,
   MAX_GOAL_CHECK_CHANGES,
   parseGoalCheckArgs,
@@ -35,6 +36,9 @@ export const goalTools: ToolHandlers = {
             : ""
         }. Nothing was registered.`,
       });
+    }
+    if (goalReached(parsed, probe.value)) {
+      return call.finish({ error: goalAlreadyReachedError(probe.value, parsed.target) });
     }
     const ledger = await loadGoalLedger(ctx);
     const same = ledger.goal?.probe === parsed.probe && ledger.goal.kind === parsed.kind;

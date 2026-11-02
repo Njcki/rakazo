@@ -1258,7 +1258,13 @@ async function checkRequestedContinuation(ctx: RunContext) {
   try {
     const stopAsked = await userAskedToStopOrChange(ctx);
     const language = guessQuickReplyLanguage([requested.summary, ctx.state.reply.assembled]);
-    const goalGate = await evaluateRequestedContinuation(ctx, { stopAsked, language });
+    const messages = await currentRequestMessages(ctx).catch(() => []);
+    const goalGate = await evaluateRequestedContinuation(ctx, {
+      stopAsked,
+      language,
+      goalTexts: messages.filter((m) => !m.aside).map((m) => m.text),
+      replyText: [ctx.state.reply.assembled, requested.summary].filter(Boolean).join("\n\n"),
+    });
     if (goalGate.mode === "legacy") return;
     if (goalGate.continueReason) {
       continuation.requested = {

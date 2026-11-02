@@ -17,6 +17,7 @@ import {
   type GoalCheck,
   type GoalLedger,
   goalContinuationNote,
+  goalDisputedNote,
   goalPercent,
   goalProgressLine,
   goalStalledNotice,
@@ -145,7 +146,7 @@ async function startComputerForProbe(ctx: RunContext): Promise<ComputerRef | und
 
 async function runJudge(
   ctx: RunContext,
-  input: { goalTexts: string[]; replyText: string; planLines: string[] },
+  input: { goalTexts: string[]; replyText: string; planLines: string[]; checkLine?: string },
 ): Promise<JudgeVerdict | undefined> {
   const judge = ctx.completionJudge;
   if (!judge) return undefined;
@@ -259,6 +260,28 @@ export async function evaluateGoalGate(
       return { ...judged, log: { ...log, ...judged.log } };
     }
     const value = probe.value!;
+    if (action === "reached" && ledger.disputed !== goal.registeredAt) {
+      // The bot picks its own target: a "done" reading is confirmed once by the completion
+      // review against the user's request before it may end the chain.
+      const verdict = await runJudge(ctx, {
+        ...input,
+        checkLine: goalProgressLine(goal, value),
+      });
+      const reviewLog = { ...log, judgeComplete: verdict?.complete, judgeReason: verdict?.reason };
+      if (verdict && !verdict.complete) {
+        ledger.disputed = goal.registeredAt;
+        await saveGoalLedger(ctx, ledger).catch(() => undefined);
+        return {
+          mode: "probe",
+          continueReason: "goal_probe",
+          progressLine: goalProgressLine(goal, value),
+          note: goalDisputedNote(goal, value, verdict.reason),
+          percent: null,
+          log: { ...reviewLog, goalAction: "reached_disputed" },
+        };
+      }
+      return { mode: "probe", stop: "reached", percent: goalPercent(goal, value), log: reviewLog };
+    }
     if (action === "continue") {
       return {
         mode: "probe",
@@ -337,7 +360,12 @@ async function judgeOrLegacy(
  */
 export async function evaluateRequestedContinuation(
   ctx: RunContext,
-  input: { stopAsked: boolean; language: "it" | "en" },
+  input: {
+    stopAsked: boolean;
+    language: "it" | "en";
+    goalTexts?: string[];
+    replyText?: string;
+  },
 ): Promise<GoalGateResult> {
   let ledger: GoalLedger;
   try {
@@ -347,8 +375,8 @@ export async function evaluateRequestedContinuation(
   }
   if (!ledger.goal) return { mode: "legacy", log: { goalGate: "no_check" } };
   const result = await evaluateGoalGate(ctx, {
-    goalTexts: [],
-    replyText: "",
+    goalTexts: input.goalTexts ?? [],
+    replyText: input.replyText ?? "",
     replyClaimsDone: false,
     replyUnfinished: true,
     stopAsked: input.stopAsked,

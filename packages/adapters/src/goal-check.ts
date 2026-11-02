@@ -46,6 +46,8 @@ export interface GoalLedger {
   goal?: GoalCheck;
   /** The run whose gate asked the bot to register a probe (asked once per request). */
   nudgedRunId?: string;
+  /** registeredAt of the check whose "reached" the completion review disputed (once per check). */
+  disputed?: string;
 }
 
 export function parseGoalLedger(raw: unknown): GoalLedger {
@@ -64,6 +66,7 @@ export function parseGoalLedger(raw: unknown): GoalLedger {
       ? { goal: { ...goal, readings: Array.isArray(goal.readings) ? goal.readings : [] } }
       : {}),
     ...(typeof value.nudgedRunId === "string" ? { nudgedRunId: value.nudgedRunId } : {}),
+    ...(typeof value.disputed === "string" ? { disputed: value.disputed } : {}),
   };
 }
 
@@ -249,6 +252,8 @@ export function buildJudgePrompt(input: {
   goalTexts: readonly string[];
   replyText: string;
   planLines: readonly string[];
+  /** The bot's own completion check and its reading, when it claims the target is reached. */
+  checkLine?: string;
 }): { instructions: string; prompt: string } {
   const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text);
   return {
@@ -258,6 +263,11 @@ export function buildJudgePrompt(input: {
       "User request (oldest first):",
       ...input.goalTexts.slice(-6).map((text) => `<<<\n${clip(text.trim(), 1500)}\n>>>`),
       input.planLines.length ? `Plan:\n${input.planLines.slice(0, 20).join("\n")}` : "Plan: none",
+      ...(input.checkLine
+        ? [
+            `The assistant's own completion check says its target is reached: ${input.checkLine} The assistant chose this check and target itself; judge against the user's request, not against the check.`,
+          ]
+        : []),
       `Final reply of this part:\n<<<\n${clip(input.replyText.trim(), 3000)}\n>>>`,
     ].join("\n\n"),
   };
@@ -286,4 +296,17 @@ export function decideJudgeGate(input: {
   if (!input.verdict) return "unavailable";
   if (input.verdict.complete) return "end";
   return input.workToolCalls > 0 ? "continue" : "end";
+}
+
+/** set_goal_check refuses a check that already reads "done": it would end the request at once. */
+export function goalAlreadyReachedError(value: number, target: number): string {
+  return `The check already reads ${formatValue(value)} with target ${formatValue(target)}, so it would end the request right now. A completion check must measure what is still left of the WHOLE request the user asked for (for example the total number of items in the request, not the batch just finished). Nothing was registered. If the whole request really is complete, do not register a check: give the final answer.`;
+}
+
+/** Next part's note when the review disputed a reached check. */
+export function goalDisputedNote(goal: GoalCheck, value: number, reason: string): string {
+  return [
+    `Your completion check (\`${goal.probe}\` → ${formatValue(value)}, target ${formatValue(goal.target)}) says the request is done, but the completion review says it is not${reason ? `: ${reason}` : "."}`,
+    "Call set_goal_check again with a probe and target that measure the WHOLE request the user asked for, then continue the work. If the request truly is complete, say so plainly with the evidence.",
+  ].join("\n");
 }

@@ -14,6 +14,7 @@ import {
 } from "./goal-check.js";
 import { evaluateGoalGate, evaluateRequestedContinuation, isLongRequest } from "./goal-gate.js";
 import type { RunContext } from "./run-context.js";
+import { goalTools } from "./run-tools-goal.js";
 
 // Neutral fixtures: a batch job over 40 items, a simple question, a research task.
 const BATCH_REQUEST = "Converti tutti i file della cartella input e continua fino al 100%";
@@ -414,5 +415,90 @@ describe("long request without a probe", () => {
       language: "it",
     });
     expect(result.mode).toBe("legacy");
+  });
+});
+
+describe("a check whose target the bot sets to what is already done", () => {
+  it("is refused at registration", async () => {
+    const fake = fakeContext({
+      runId: "r1",
+      index: 1,
+      workToolCalls: 3,
+      probeOutputs: [{ stdout: "88\n", code: 0 }],
+    });
+    let result: Record<string, unknown> = {};
+    await goalTools.set_goal_check!(fake.ctx, {
+      name: "set_goal_check",
+      args: { description: "All items of the batch", probe: "ls out | wc -l", target: 88 },
+      finish: (value: Record<string, unknown>) => {
+        result = value;
+      },
+    } as never);
+    expect(String(result.error)).toContain("would end the request right now");
+    expect(fake.ledger.value).toBeNull();
+  });
+
+  it("registers a check below its target", async () => {
+    const fake = fakeContext({
+      runId: "r1",
+      index: 1,
+      workToolCalls: 3,
+      probeOutputs: [{ stdout: "88\n", code: 0 }],
+    });
+    let result: Record<string, unknown> = {};
+    await goalTools.set_goal_check!(fake.ctx, {
+      name: "set_goal_check",
+      args: { description: "All 400 items", probe: "ls out | wc -l", target: 400 },
+      finish: (value: Record<string, unknown>) => {
+        result = value;
+      },
+    } as never);
+    expect(result).toMatchObject({ ok: true, value: 88, target: 400, reached: false });
+    expect((fake.ledger.value as GoalLedger).goal?.readings).toHaveLength(1);
+  });
+
+  it("a reached reading is disputed once by the review when the request is not complete", async () => {
+    const reachedGoal = { ...goal([reading("r1", 1, 30)]), target: 40 };
+    const first = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 6,
+      ledger: { v: 1, goal: reachedGoal },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": false, "reason": "coverage is 10% of the whole request"}',
+    });
+    const disputed = await evaluateGoalGate(
+      first.ctx,
+      gateInput({ replyText: "Batch done. Total coverage 10%.", replyClaimsDone: true }),
+    );
+    expect(disputed).toMatchObject({ mode: "probe", continueReason: "goal_probe" });
+    expect(disputed.note).toContain("set_goal_check again");
+    expect(disputed.log).toMatchObject({ goalAction: "reached_disputed", judgeComplete: false });
+
+    const second = fakeContext({
+      runId: "r3",
+      index: 3,
+      workToolCalls: 6,
+      ledger: first.ledger.value as GoalLedger,
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": false, "reason": "still 10%"}',
+    });
+    const ended = await evaluateGoalGate(second.ctx, gateInput());
+    expect(ended).toMatchObject({ mode: "probe", stop: "reached" });
+    expect(second.judgeCalls).toBe(0);
+  });
+
+  it("a reached reading confirmed by the review ends the request", async () => {
+    const fake = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 6,
+      ledger: { v: 1, goal: goal([reading("r1", 1, 30)]) },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": true, "reason": "all 40 converted"}',
+    });
+    const result = await evaluateGoalGate(fake.ctx, gateInput({ replyClaimsDone: true }));
+    expect(result).toMatchObject({ mode: "probe", stop: "reached" });
+    expect(result.log).toMatchObject({ judgeComplete: true });
   });
 });

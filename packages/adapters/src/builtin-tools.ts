@@ -624,7 +624,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "set_goal_check",
     description:
-      "Register the completion check of a long request (many items, batches, 'fino al 100%', work over several parts). The probe is a read-only shell command on your computer that prints the current progress of the WHOLE request as one number (for example: ls out/ | wc -l). The platform runs it now and after every part: the request continues while the value is below the target and growing, and ends when it reaches the target or stops growing. A finished batch or closed plan does not end the request; this check does. Use kind=exit for a command that exits 0 only when everything is done. Not for simple questions.",
+      "Register the completion check of a long request (many items, batches, 'fino al 100%', work over several parts). The probe is a read-only shell command on your computer that prints the current progress of the WHOLE request as one number (for example: ls out/ | wc -l). The platform runs it now and after every part: the request continues while the value is below the target and growing, and ends when it reaches the target or stops growing. A finished batch or closed plan does not end the request; this check does. Use kind=exit for a command that exits 0 only when everything is done. The target is the TOTAL of the entire request the user asked for (all items of the whole job, e.g. every line or file to finish), never the current batch, step or what is already done: a check whose value already equals its target is refused. Reaching the target alone does not end the request: the completion review and the plan must agree. Not for simple questions.",
     inputSchema: {
       type: "object",
       properties: {
@@ -644,7 +644,8 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
         target: {
           type: "number",
-          description: "The value that means the whole request is done (for kind=number).",
+          description:
+            "The value that means the WHOLE request is done (for kind=number): the total of everything the user asked for, not the current batch. Must be above the current value.",
         },
         kind: {
           type: "string",

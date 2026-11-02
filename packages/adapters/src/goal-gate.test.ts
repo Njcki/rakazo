@@ -483,9 +483,97 @@ describe("a check whose target the bot sets to what is already done", () => {
       probeOutputs: [{ stdout: "40", code: 0 }],
       judge: '{"complete": false, "reason": "still 10%"}',
     });
-    const ended = await evaluateGoalGate(second.ctx, gateInput());
-    expect(ended).toMatchObject({ mode: "probe", stop: "reached" });
-    expect(second.judgeCalls).toBe(0);
+    // Still unfinished and the part worked: it keeps going (the review, not the check, decides).
+    const again = await evaluateGoalGate(second.ctx, gateInput());
+    expect(again).toMatchObject({ mode: "probe", continueReason: "goal_probe" });
+    expect(second.judgeCalls).toBe(1);
+
+    // Unfinished but a part without real work: the no-progress rule ends it honestly.
+    const third = fakeContext({
+      runId: "r4",
+      index: 4,
+      workToolCalls: 0,
+      ledger: second.ledger.value as GoalLedger,
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": false, "reason": "still 10%"}',
+    });
+    const ended = await evaluateGoalGate(third.ctx, gateInput());
+    expect(ended).toMatchObject({ mode: "probe", stop: "stalled" });
+    expect(ended.notice).toBeTruthy();
+  });
+
+  it("once the check can no longer be replaced, the note says to keep working", async () => {
+    const fake = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 5,
+      ledger: { v: 1, goal: { ...goal([reading("r1", 1, 30)]), changes: 3 } },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": false, "reason": "half of the items are missing"}',
+    });
+    const result = await evaluateGoalGate(fake.ctx, gateInput());
+    expect(result).toMatchObject({ continueReason: "goal_probe" });
+    expect(result.note).toContain("can no longer be replaced");
+    expect(result.note).not.toContain("set_goal_check again");
+  });
+
+  it("without a review, a reached check whose reply says more remains continues once", async () => {
+    const first = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 5,
+      ledger: { v: 1, goal: goal([reading("r1", 1, 30)]) },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+    });
+    const nudged = await evaluateGoalGate(
+      first.ctx,
+      gateInput({ replyText: "Primo gruppo fatto, ne restano altri.", moreRemains: true }),
+    );
+    expect(nudged).toMatchObject({ continueReason: "goal_probe" });
+    expect(nudged.log).toMatchObject({ goalAction: "reached_unreviewed" });
+    expect(nudged.note).toContain("set_goal_check again");
+
+    const second = fakeContext({
+      runId: "r3",
+      index: 3,
+      workToolCalls: 5,
+      ledger: first.ledger.value as GoalLedger,
+      probeOutputs: [{ stdout: "40", code: 0 }],
+    });
+    const ended = await evaluateGoalGate(second.ctx, gateInput({ moreRemains: true }));
+    expect(ended).toMatchObject({ stop: "reached" });
+  });
+
+  it("without a review and nothing left in the reply or plan, a reached check ends", async () => {
+    const fake = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 5,
+      ledger: { v: 1, goal: goal([reading("r1", 1, 30)]) },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+    });
+    const result = await evaluateGoalGate(fake.ctx, gateInput({ moreRemains: false }));
+    expect(result).toMatchObject({ stop: "reached" });
+  });
+
+  it("the model's continue_later with a reached check is reviewed too", async () => {
+    const fake = fakeContext({
+      runId: "r2",
+      index: 2,
+      workToolCalls: 5,
+      ledger: { v: 1, goal: goal([reading("r1", 1, 30)]) },
+      probeOutputs: [{ stdout: "40", code: 0 }],
+      judge: '{"complete": false, "reason": "only the first part is done"}',
+    });
+    const result = await evaluateRequestedContinuation(fake.ctx, {
+      stopAsked: false,
+      language: "it",
+      goalTexts: [BATCH_REQUEST],
+      replyText: "Continuo con il prossimo gruppo.",
+      moreRemains: true,
+    });
+    expect(result).toMatchObject({ continueReason: "goal_probe" });
+    expect(fake.judgeCalls).toBe(1);
   });
 
   it("a reached reading confirmed by the review ends the request", async () => {

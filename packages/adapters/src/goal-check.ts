@@ -218,11 +218,11 @@ export function goalContinuationNote(goal: GoalCheck, value: number | undefined)
 
 /** The one-time request to register a probe on a long task that has none. */
 export const GOAL_CHECK_NUDGE =
-  "This is a long request and it has no completion check yet. First call set_goal_check: a short description of the whole goal, a read-only shell command (probe) that prints the current progress of the WHOLE request as one number (for example how many items are finished, by counting files or lines), and the target number that means everything is done. If no number fits, use kind=exit with a command that exits 0 only when everything is done. Then continue the work.";
+  "This is a long request and it has no completion check yet. First call set_goal_check: a short description of the whole goal, a read-only shell command (probe) that prints the current progress of the WHOLE request as one number (for example how many items are finished, by counting files or lines), and the target number that means everything is done — the total of the ENTIRE request, never the current batch. If no number fits, use kind=exit with a command that exits 0 only when everything is done. Then continue the work.";
 
 /** Guidance in the system prompt next to continue_later. */
 export const GOAL_CHECK_GUIDANCE =
-  "For a long request (many items, batches, 'fino al 100%', work over several parts) call set_goal_check early with a read-only probe that measures progress of the WHOLE request and its target: after every part the platform runs it, continues while it is below the target and moving, and stops when it reaches the target or stops moving. A finished batch, sub-plan or closed plan does not end the request; the check does. Simple questions need no check.";
+  "For a long request (many items, batches, 'fino al 100%', work over several parts) call set_goal_check early with a read-only probe that measures progress of the WHOLE request and its target: after every part the platform runs it, continues while it is below the target and moving, and stops when it reaches the target or stops moving. A finished batch, sub-plan or closed plan does not end the request. The target is the TOTAL of the entire request the user asked for (all items of the whole job, e.g. every line or file to finish), never the current batch, step or what is already done: a check whose value already equals its target is refused. Reaching the target alone does not end the request: the completion review and the plan must agree. Simple questions need no check.";
 
 /** Bilingual notice appended when the probe did not move: honest status, no promise. */
 export function goalStalledNotice(goal: GoalCheck, value: number, language: "it" | "en"): string {
@@ -304,9 +304,17 @@ export function goalAlreadyReachedError(value: number, target: number): string {
 }
 
 /** Next part's note when the review disputed a reached check. */
-export function goalDisputedNote(goal: GoalCheck, value: number, reason: string): string {
+export function goalDisputedNote(
+  goal: GoalCheck,
+  value: number,
+  reason: string,
+  changesLeft = true,
+): string {
   return [
-    `Your completion check (\`${goal.probe}\` → ${formatValue(value)}, target ${formatValue(goal.target)}) says the request is done, but the completion review says it is not${reason ? `: ${reason}` : "."}`,
-    "Call set_goal_check again with a probe and target that measure the WHOLE request the user asked for, then continue the work. If the request truly is complete, say so plainly with the evidence.",
+    `Your completion check (\`${goal.probe}\` → ${formatValue(value)}, target ${formatValue(goal.target)}) covers only part of the request: it says done, but the completion review of the WHOLE original request says it is not${reason ? `: ${reason}` : "."}`,
+    changesLeft
+      ? "Call set_goal_check again with a probe and a target that is the total of the ENTIRE request the user asked for (not the current batch or step), then continue the work."
+      : "The check can no longer be replaced: continue the work on the rest of the request; the review decides when it is complete.",
+    "If the request truly is complete, say so plainly with the evidence.",
   ].join("\n");
 }

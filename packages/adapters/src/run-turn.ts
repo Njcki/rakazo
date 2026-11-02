@@ -101,7 +101,7 @@ import { applyTool } from "./run-tools.js";
 import {
   currentRequestMessages,
   chainStartedAt as requestStartedAt,
-  userAskedToStopOrChange,
+  userAskedToStopChain,
 } from "./run-tools-plan.js";
 import { withRuntimeCleanup } from "./runtime-stream.js";
 import {
@@ -1026,7 +1026,7 @@ async function applyCompletionGate(ctx: RunContext) {
     const replyClaimsDone = closesWholeJob(replyText);
     // A side question never ends a long task: a part that only answered it, or that closes
     // with a stand-by line, continues the original request.
-    const stopAsked = await userAskedToStopOrChange(ctx);
+    const stopAsked = await userAskedToStopChain(ctx);
     const standby = Boolean(replyText.trim()) && isStandbyClose(replyText);
     // The objective ledger decides first (goal-gate.ts): a registered completion check, or for
     // a long request without one a single ask for it, then the completion review. The plan
@@ -1042,6 +1042,7 @@ async function applyCompletionGate(ctx: RunContext) {
         ? plan.steps.map((step) => `${step.index}. [${step.status}] ${step.title}`)
         : [],
       language,
+      moreRemains: replyUnfinished || reportsPartialProgress(replyText) || verdict.open,
     }).catch((error: unknown) => {
       getLogger().warn("run.goal_gate failed", { runId, error: sanitizedError(error) });
       return { mode: "legacy", log: { goalGate: "error" } } as GoalGateResult;
@@ -1087,6 +1088,11 @@ async function applyCompletionGate(ctx: RunContext) {
       }
     }
     if (!ledgerDecides && !reason && verdict.open) reason = verdict.reason;
+    // A long chain ends only with the check reached, the review satisfied AND no open plan step
+    // (the plan the user sees). Only a real stop or the no-progress rule end it with steps open.
+    const planKeepsGoing =
+      ledgerDecides && !reason && verdict.open && planMayKeepChainGoing(goalGate.stop);
+    if (planKeepsGoing && verdict.open) reason = verdict.reason;
     if (
       !ledgerDecides &&
       !reason &&
@@ -1148,7 +1154,7 @@ async function applyCompletionGate(ctx: RunContext) {
     }).catch(() => ({ fresh: [], redone: [], doneBefore: [] }));
     // A part that did no real work, or only redid finished steps, ends the chain at once.
     const noProgress =
-      !ledgerDecides &&
+      (!ledgerDecides || planKeepsGoing) &&
       isNoProgressPart({
         reason,
         continuationIndex: run.continuationIndex,
@@ -1230,11 +1236,17 @@ async function applyCompletionGate(ctx: RunContext) {
       partialProgress: reportsPartialProgress(replyText),
       verifyNotesWholeDone: verifyNotes ? closesWholeJob(verifyNotes) : undefined,
       goalStop: goalGate.stop,
+      planKeepsGoing,
       ...goalGate.log,
     });
   } catch (error) {
     getLogger().warn("run.completion_gate failed", { runId, error: sanitizedError(error) });
   }
+}
+
+/** Ends that open plan steps override: only a real stop or no progress end with steps open. */
+export function planMayKeepChainGoing(stop: GoalGateResult["stop"]): boolean {
+  return stop !== "stop_asked" && stop !== "stalled" && stop !== "judge_no_work";
 }
 
 function appendReplyNotice(reply: ReplyState, notice: string | undefined): void {
@@ -1256,17 +1268,32 @@ async function checkRequestedContinuation(ctx: RunContext) {
   const settings = continuation.settings;
   if (!requested || !settings) return;
   try {
-    const stopAsked = await userAskedToStopOrChange(ctx);
+    const stopAsked = await userAskedToStopChain(ctx);
     const language = guessQuickReplyLanguage([requested.summary, ctx.state.reply.assembled]);
     const messages = await currentRequestMessages(ctx).catch(() => []);
+    const { plan, verdict } = await loadPlanGate(ctx.deps, {
+      spaceId: run.spaceId,
+      botId: ctx.bot.id,
+      chainStartedAt: await requestStartedAt(ctx),
+      planToolUsedThisRun: ctx.state.planReminder.planToolUsedThisRun,
+    });
     const goalGate = await evaluateRequestedContinuation(ctx, {
       stopAsked,
       language,
+      moreRemains: true,
+      planLines: plan
+        ? plan.steps.map((step) => `${step.index}. [${step.status}] ${step.title}`)
+        : [],
       goalTexts: messages.filter((m) => !m.aside).map((m) => m.text),
       replyText: [ctx.state.reply.assembled, requested.summary].filter(Boolean).join("\n\n"),
     });
     if (goalGate.mode === "legacy") return;
-    if (goalGate.continueReason) {
+    // Open plan steps keep the model's own request unless the user stopped or nothing moved.
+    const planKeepsGoing =
+      !goalGate.continueReason && verdict.open && planMayKeepChainGoing(goalGate.stop);
+    if (planKeepsGoing) {
+      // The model's request stands as it was.
+    } else if (goalGate.continueReason) {
       continuation.requested = {
         ...requested,
         ...(goalGate.note ? { goalNote: goalGate.note } : {}),
@@ -1292,11 +1319,14 @@ async function checkRequestedContinuation(ctx: RunContext) {
       fence: ctx.fence,
       trigger: run.trigger,
       reason: "continue_later",
-      outcome: goalGate.continueReason
-        ? "scheduled"
-        : goalGate.stop === "stalled"
-          ? "no_progress"
-          : "ended",
+      plan: verdict.open ? verdict.reason : verdict.why,
+      planKeepsGoing,
+      outcome:
+        goalGate.continueReason || planKeepsGoing
+          ? "scheduled"
+          : goalGate.stop === "stalled"
+            ? "no_progress"
+            : "ended",
       goalStop: goalGate.stop,
       workToolCalls: continuation.workToolCalls,
       ...goalGate.log,

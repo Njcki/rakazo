@@ -23,6 +23,7 @@ import {
   goalStalledNotice,
   JUDGE_TIMEOUT_MS,
   type JudgeVerdict,
+  MAX_GOAL_CHECK_CHANGES,
   parseGoalLedger,
   parseJudgeVerdict,
   parseProbeOutput,
@@ -207,6 +208,8 @@ export async function evaluateGoalGate(
     language: "it" | "en";
     /** Decide only from a registered check; anything else is left to the caller. */
     probeOnly?: boolean;
+    /** The reply is unfinished or partial, or the plan has open steps. */
+    moreRemains?: boolean;
   },
 ): Promise<GoalGateResult> {
   const { run, runId } = ctx;
@@ -260,25 +263,39 @@ export async function evaluateGoalGate(
       return { ...judged, log: { ...log, ...judged.log } };
     }
     const value = probe.value!;
-    if (action === "reached" && ledger.disputed !== goal.registeredAt) {
-      // The bot picks its own target: a "done" reading is confirmed once by the completion
-      // review against the user's request before it may end the chain.
-      const verdict = await runJudge(ctx, {
-        ...input,
-        checkLine: goalProgressLine(goal, value),
-      });
+    if (action === "reached") {
+      // The bot picks its own target, so "reached" never ends a long chain alone: the review
+      // checks the WHOLE original request first (see run-turn.ts for the plan rule).
+      const verdict = await runJudge(ctx, { ...input, checkLine: goalProgressLine(goal, value) });
       const reviewLog = { ...log, judgeComplete: verdict?.complete, judgeReason: verdict?.reason };
-      if (verdict && !verdict.complete) {
+      const changesLeft = (goal.changes ?? 0) < MAX_GOAL_CHECK_CHANGES;
+      const firstDispute = ledger.disputed !== goal.registeredAt;
+      const dispute = async (reason: string, action: string): Promise<GoalGateResult> => {
         ledger.disputed = goal.registeredAt;
         await saveGoalLedger(ctx, ledger).catch(() => undefined);
         return {
           mode: "probe",
           continueReason: "goal_probe",
-          progressLine: goalProgressLine(goal, value),
-          note: goalDisputedNote(goal, value, verdict.reason),
+          progressLine: `${goalProgressLine(goal, value)} Review: ${reason || "not complete"}.`,
+          note: goalDisputedNote(goal, value, reason, changesLeft),
           percent: null,
-          log: { ...reviewLog, goalAction: "reached_disputed" },
+          log: { ...reviewLog, goalAction: action },
         };
+      };
+      if (verdict && !verdict.complete) {
+        // Unfinished per review: continue while parts do real work (no-progress rule).
+        if (workToolCalls > 0 || firstDispute) return dispute(verdict.reason, "reached_disputed");
+        return {
+          mode: "probe",
+          stop: "stalled",
+          percent: null,
+          notice: goalStalledNotice(goal, value, input.language),
+          log: { ...reviewLog, goalAction: "reached_disputed_no_work" },
+        };
+      }
+      if (!verdict && input.moreRemains && firstDispute) {
+        // No review available but the reply or the plan says more remains: one more part.
+        return dispute("the reply or the plan says work remains", "reached_unreviewed");
       }
       return { mode: "probe", stop: "reached", percent: goalPercent(goal, value), log: reviewLog };
     }
@@ -365,6 +382,8 @@ export async function evaluateRequestedContinuation(
     language: "it" | "en";
     goalTexts?: string[];
     replyText?: string;
+    moreRemains?: boolean;
+    planLines?: string[];
   },
 ): Promise<GoalGateResult> {
   let ledger: GoalLedger;
@@ -380,9 +399,10 @@ export async function evaluateRequestedContinuation(
     replyClaimsDone: false,
     replyUnfinished: true,
     stopAsked: input.stopAsked,
-    planLines: [],
+    planLines: input.planLines ?? [],
     language: input.language,
     probeOnly: true,
+    moreRemains: input.moreRemains,
   });
   return result;
 }

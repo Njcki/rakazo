@@ -3,6 +3,7 @@ import { continuationPrompt } from "./continue-later.js";
 import {
   decideGoalGate,
   decideJudgeGate,
+  displayPercent,
   type GoalCheck,
   type GoalLedger,
   goalStalledNotice,
@@ -82,6 +83,7 @@ function fakeContext(input: {
     state: {
       continuation: { workToolCalls: input.workToolCalls, settings: { maxContinuations: 20 } },
       planReminder: { planToolUsedThisRun: false },
+      reply: { narrationSoFar: "Stato: 52 di 4000 elementi elaborati. ", assembled: "" },
     },
     abortController: new AbortController(),
     completionJudge:
@@ -231,6 +233,9 @@ describe("measurable batch job", () => {
     expect(first).toMatchObject({ mode: "probe", continueReason: "goal_probe", percent: 30 });
     expect(first.log).toMatchObject({ probeBefore: 4, probeAfter: 12, probeTarget: 40 });
     expect(first.note).toContain("ls output | wc -l");
+    expect(first.statusLine).toBe(
+      "Stato del lavoro: 12/40 (30%). Proseguo con la parte successiva.",
+    );
     expect(first.progressLine).toContain("12 of 40");
     const prompt = continuationPrompt({
       index: 2,
@@ -438,6 +443,60 @@ describe("a check whose target the bot sets to what is already done", () => {
     expect(fake.ledger.value).toBeNull();
   });
 
+  it("is refused when the review says it measures only part of the job, at most twice", async () => {
+    const register = async (fake: Fake) => {
+      let result: Record<string, unknown> = {};
+      await goalTools.set_goal_check!(fake.ctx, {
+        name: "set_goal_check",
+        args: { description: "All files", probe: "ls out | wc -l", target: 40 },
+        finish: (value: Record<string, unknown>) => {
+          result = value;
+        },
+      } as never);
+      return result;
+    };
+    const partial = '{"whole": false, "reason": "counts files, the job is 4000 lines"}';
+    const first = fakeContext({
+      runId: "r1",
+      index: 1,
+      workToolCalls: 3,
+      probeOutputs: [{ stdout: "20\n", code: 0 }],
+      judge: partial,
+    });
+    const refused = await register(first);
+    expect(String(refused.error)).toContain("only part of the request");
+    expect((first.ledger.value as GoalLedger).goal).toBeUndefined();
+    expect((first.ledger.value as GoalLedger).partialRefusals).toBe(1);
+
+    const second = fakeContext({
+      runId: "r1",
+      index: 1,
+      workToolCalls: 3,
+      ledger: { v: 1, partialRefusals: 2 },
+      probeOutputs: [{ stdout: "20\n", code: 0 }],
+      judge: partial,
+    });
+    expect(await register(second)).toMatchObject({ ok: true, value: 20, target: 40 });
+    expect(second.judgeCalls).toBe(0);
+
+    const whole = fakeContext({
+      runId: "r1",
+      index: 1,
+      workToolCalls: 3,
+      probeOutputs: [{ stdout: "52\n", code: 0 }],
+      judge: '{"whole": true}',
+    });
+    let result: Record<string, unknown> = {};
+    await goalTools.set_goal_check!(whole.ctx, {
+      name: "set_goal_check",
+      args: { description: "All 4000 lines", probe: "cat out/* | wc -l", target: 4000 },
+      finish: (value: Record<string, unknown>) => {
+        result = value;
+      },
+    } as never);
+    expect(result).toMatchObject({ ok: true, value: 52, target: 4000 });
+  });
+
   it("registers a check below its target", async () => {
     const fake = fakeContext({
       runId: "r1",
@@ -588,5 +647,14 @@ describe("a check whose target the bot sets to what is already done", () => {
     const result = await evaluateGoalGate(fake.ctx, gateInput({ replyClaimsDone: true }));
     expect(result).toMatchObject({ mode: "probe", stop: "reached" });
     expect(result.log).toMatchObject({ judgeComplete: true });
+  });
+});
+
+describe("the percent shown to the user", () => {
+  it("is the lowest of the measured and the reported one, none without either", () => {
+    expect(displayPercent(53, 10)).toBe(10);
+    expect(displayPercent(12, undefined)).toBe(12);
+    expect(displayPercent(null, 40)).toBe(40);
+    expect(displayPercent(null, null)).toBeUndefined();
   });
 });

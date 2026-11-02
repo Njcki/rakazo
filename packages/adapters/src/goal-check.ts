@@ -48,6 +48,8 @@ export interface GoalLedger {
   nudgedRunId?: string;
   /** registeredAt of the check whose "reached" the completion review disputed (once per check). */
   disputed?: string;
+  /** Registrations the review refused as measuring only part of the request. */
+  partialRefusals?: number;
 }
 
 export function parseGoalLedger(raw: unknown): GoalLedger {
@@ -67,6 +69,9 @@ export function parseGoalLedger(raw: unknown): GoalLedger {
       : {}),
     ...(typeof value.nudgedRunId === "string" ? { nudgedRunId: value.nudgedRunId } : {}),
     ...(typeof value.disputed === "string" ? { disputed: value.disputed } : {}),
+    ...(typeof value.partialRefusals === "number"
+      ? { partialRefusals: value.partialRefusals }
+      : {}),
   };
 }
 
@@ -317,4 +322,83 @@ export function goalDisputedNote(
       : "The check can no longer be replaced: continue the work on the rest of the request; the review decides when it is complete.",
     "If the request truly is complete, say so plainly with the evidence.",
   ].join("\n");
+}
+
+/** At most this many registrations are refused as partial; then the bot's check stands. */
+export const MAX_PARTIAL_CHECK_REFUSALS = 2;
+
+/** The quick review of a new completion check: does it measure the WHOLE request? */
+export function buildCheckReviewPrompt(input: {
+  goalTexts: readonly string[];
+  contextText: string;
+  description: string;
+  probe: string;
+  unit?: string;
+  value: number;
+  target: number;
+}): { instructions: string; prompt: string } {
+  return {
+    instructions:
+      'You review a completion check that an assistant registered for a long user request. Answer with JSON only: {"whole": true|false, "reason": "<one short sentence>"}. ' +
+      "whole=false only when the check clearly measures PART of the request: it counts one batch or subset, or a coarser unit than the job is measured in (for example files or chapters while the request or the assistant's own status counts a much larger total of lines or items), or value/target says the job is much further along than the assistant's own status says. " +
+      "whole=true when it plausibly measures the entire job, or when you cannot tell.",
+    prompt: [
+      "User request:",
+      ...input.goalTexts.map(
+        (text) => `<<<
+${text.slice(0, 3000)}
+>>>`,
+      ),
+      "Assistant's recent text (status, progress):",
+      `<<<
+${input.contextText.slice(-3000)}
+>>>`,
+      `Registered check: "${input.description}" — probe \`${input.probe}\` now ${formatValue(input.value)}, target ${formatValue(input.target)}${input.unit ? ` ${input.unit}` : ""} (${Math.floor((input.value / Math.max(input.target, 1)) * 100)}%).`,
+    ].join("\n"),
+  };
+}
+
+export function parseCheckReview(
+  text: string | undefined,
+): { whole: boolean; reason: string } | undefined {
+  const match = text?.match(/\{[\s\S]*\}/);
+  if (!match) return undefined;
+  try {
+    const parsed = JSON.parse(match[0]) as { whole?: unknown; reason?: unknown };
+    if (typeof parsed.whole !== "boolean") return undefined;
+    return {
+      whole: parsed.whole,
+      reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : "",
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+export function goalPartialCheckError(reason: string): string {
+  return `Not registered: the review says this check measures only part of the request${reason ? ` (${reason})` : ""}. Register a probe and a target for the TOTAL of the entire job, in the unit the whole job is measured in (the same total your own status reports), not a batch, a subset or a coarser unit.`;
+}
+
+/** Bilingual line under a part's reply: where the whole job stands, measured by the check. */
+export function goalStatusLine(goal: GoalCheck, value: number, language: "it" | "en"): string {
+  const unit = goal.unit ? ` ${goal.unit}` : "";
+  const percent = goalPercent(goal, value);
+  const where =
+    goal.kind === "exit"
+      ? language === "it"
+        ? "controllo finale non ancora superato"
+        : "final check not passed yet"
+      : `${formatValue(value)}/${formatValue(goal.target)}${unit}${percent === null ? "" : ` (${percent}%)`}`;
+  return language === "it"
+    ? `Stato del lavoro: ${where}. Proseguo con la parte successiva.`
+    : `Progress: ${where}. Continuing with the next part.`;
+}
+
+/** The percent to show: the lowest of the measured and the bot-reported ones. */
+export function displayPercent(
+  measured: number | null | undefined,
+  reported: number | null | undefined,
+): number | undefined {
+  const values = [measured, reported].filter((v): v is number => typeof v === "number");
+  return values.length ? Math.min(...values) : undefined;
 }

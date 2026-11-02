@@ -3,15 +3,20 @@ import {
   protectedComputerLifecycleRefusal,
 } from "./desktop-command-guard.js";
 import {
+  buildCheckReviewPrompt,
   type GoalCheck,
   goalAlreadyReachedError,
+  goalPartialCheckError,
   goalReached,
   MAX_GOAL_CHECK_CHANGES,
+  MAX_PARTIAL_CHECK_REFUSALS,
+  parseCheckReview,
   parseGoalCheckArgs,
   SET_GOAL_CHECK_TOOL,
 } from "./goal-check.js";
 import { loadGoalLedger, runGoalProbe, saveGoalLedger } from "./goal-gate.js";
 import type { ToolHandlers } from "./run-tool-gate.js";
+import { currentRequestMessages } from "./run-tools-plan.js";
 
 /** set_goal_check: registers the request's completion check after running it once. */
 export const goalTools: ToolHandlers = {
@@ -41,6 +46,40 @@ export const goalTools: ToolHandlers = {
       return call.finish({ error: goalAlreadyReachedError(probe.value, parsed.target) });
     }
     const ledger = await loadGoalLedger(ctx);
+    // The quick review refuses a check that clearly measures only part of the request (a batch,
+    // a coarser unit than the job is counted in), at most MAX_PARTIAL_CHECK_REFUSALS times.
+    if (
+      ctx.completionJudge &&
+      parsed.kind === "number" &&
+      (ledger.partialRefusals ?? 0) < MAX_PARTIAL_CHECK_REFUSALS
+    ) {
+      const goalTexts = (await currentRequestMessages(ctx).catch(() => []))
+        .filter((message) => !message.aside)
+        .map((message) => message.text);
+      const review = parseCheckReview(
+        await ctx
+          .completionJudge(
+            buildCheckReviewPrompt({
+              goalTexts,
+              contextText: `${ctx.state.reply.narrationSoFar}\n${ctx.state.reply.assembled}`,
+              description: parsed.description,
+              probe: parsed.probe,
+              unit: parsed.unit,
+              value: probe.value,
+              target: parsed.target,
+            }),
+            AbortSignal.any([ctx.abortController.signal, AbortSignal.timeout(10_000)]),
+          )
+          .catch(() => undefined),
+      );
+      if (review && !review.whole) {
+        await saveGoalLedger(ctx, {
+          ...ledger,
+          partialRefusals: (ledger.partialRefusals ?? 0) + 1,
+        }).catch(() => undefined);
+        return call.finish({ error: goalPartialCheckError(review.reason) });
+      }
+    }
     const same = ledger.goal?.probe === parsed.probe && ledger.goal.kind === parsed.kind;
     const changes = (ledger.goal?.changes ?? 0) + (ledger.goal && !same ? 1 : 0);
     if (changes > MAX_GOAL_CHECK_CHANGES) {

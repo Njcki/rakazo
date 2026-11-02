@@ -34,7 +34,7 @@ import {
   continuationPrompt,
 } from "./continue-later.js";
 import { looksLikeDanglingNarration } from "./final-answer-guard.js";
-import { SET_GOAL_CHECK_TOOL } from "./goal-check.js";
+import { displayPercent, SET_GOAL_CHECK_TOOL } from "./goal-check.js";
 import {
   evaluateGoalGate,
   evaluateRequestedContinuation,
@@ -1184,6 +1184,8 @@ async function applyCompletionGate(ctx: RunContext) {
         ...(goalGate.percent != null ? { percent: goalGate.percent } : {}),
       };
       if (reason === "close_attempt") dropStandbyClose(ctx.state.reply);
+      // Every part that goes on tells the user where the whole job stands, measured.
+      appendReplyNotice(ctx.state.reply, goalGate.statusLine);
     } else if (decision.kind === "refused") continuation.refused = decision.refused;
     else if (goalGate.stop === "stalled") {
       // The check did not move: the chain stops now and the reply says where it stands.
@@ -1297,8 +1299,14 @@ async function checkRequestedContinuation(ctx: RunContext) {
       continuation.requested = {
         ...requested,
         ...(goalGate.note ? { goalNote: goalGate.note } : {}),
-        ...(goalGate.percent != null ? { percent: goalGate.percent } : {}),
       };
+      // The shown percent never exceeds the measured or the bot-reported one; a disputed
+      // check (no measured percent) shows none.
+      const percent =
+        goalGate.percent == null ? undefined : displayPercent(goalGate.percent, requested.percent);
+      continuation.requested.percent = percent ?? null;
+      if (goalGate.statusLine && !requested.summary.includes(goalGate.statusLine))
+        continuation.requested.summary = `${requested.summary.trim()}\n\n${goalGate.statusLine}`;
     } else {
       // The summary stays the reply of this part; the chain ends here.
       continuation.requested = undefined;

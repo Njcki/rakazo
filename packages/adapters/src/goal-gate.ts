@@ -21,6 +21,7 @@ import {
   goalPercent,
   goalProgressLine,
   goalStalledNotice,
+  goalStatusLine,
   JUDGE_TIMEOUT_MS,
   type JudgeVerdict,
   MAX_GOAL_CHECK_CHANGES,
@@ -181,6 +182,8 @@ export type GoalGateResult = {
   continueReason?: "goal_probe" | "goal_check_missing" | "judge_unfinished";
   /** Why the request ends under this gate (logged). */
   stop?: "reached" | "stalled" | "stop_asked" | "judge_complete" | "judge_no_work";
+  /** A measured status line for the user under a part that continues. */
+  statusLine?: string;
   /** Line added to the progress summary (changes with the value, so the digest guard sees progress). */
   progressLine?: string;
   /** Note for the next part's prompt. */
@@ -306,6 +309,7 @@ export async function evaluateGoalGate(
         progressLine: goalProgressLine(goal, value),
         note: goalContinuationNote(goal, value),
         percent: goalPercent(goal, value),
+        statusLine: goalStatusLine(goal, value, input.language),
         log,
       };
     }

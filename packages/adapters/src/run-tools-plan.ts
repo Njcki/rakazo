@@ -10,6 +10,11 @@ import {
 import type { RunContext } from "./run-context.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
 import {
+  messagesAskToStop,
+  parseStopVerdict,
+  STOP_CLASSIFIER_INSTRUCTIONS,
+} from "./stop-intent.js";
+import {
   asksToStopOrChange,
   isAsideMessage,
   isBareContinuation,
@@ -297,6 +302,33 @@ export async function userAskedToStopOrChange(ctx: RunContext): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether the user asked to stop the current long chain: only a message written AFTER the
+ * chain started (never the request itself) with an explicit, non-negated stop command, or
+ * ambiguous stop wording the quick classifier reads as "stop now". The Stop button cancels
+ * the run directly and never gets here.
+ */
+export async function userAskedToStopChain(ctx: RunContext): Promise<boolean> {
+  const texts = (await currentRequestMessages(ctx))
+    .filter((message) => !message.source && !message.inherited)
+    .map((message) => message.text);
+  if (!texts.length) return false;
+  const judge = ctx.completionJudge;
+  const result = await messagesAskToStop(
+    texts,
+    judge
+      ? async (text) =>
+          parseStopVerdict(
+            await judge(
+              { instructions: STOP_CLASSIFIER_INSTRUCTIONS, prompt: text.slice(0, 2000) },
+              AbortSignal.any([ctx.abortController.signal, AbortSignal.timeout(10_000)]),
+            ),
+          )
+      : undefined,
+  );
+  return result.stop;
 }
 
 /** Piano / plan_* tools (NK 0013/0017/0028). */

@@ -13,6 +13,7 @@ import {
   blocksText,
   currentRequestMessages,
   loadOriginalRequest,
+  userAskedToStopChain,
   userAskedToStopOrChange,
 } from "./run-tools-plan.js";
 import {
@@ -34,7 +35,9 @@ const FINAL_REPLY = [
 
 const text = (value: string) => [{ kind: "text", text: value }];
 
-function ctx(overrides: { continuationIndex?: number; later?: string[] } = {}): RunContext {
+function ctx(
+  overrides: { continuationIndex?: number; later?: string[]; source?: string } = {},
+): RunContext {
   const later = overrides.later ?? [
     "non lavorare sul mio PC, lavora sul tuo!!",
     "e non fare confusione tra i file miei e tuoi",
@@ -43,7 +46,7 @@ function ctx(overrides: { continuationIndex?: number; later?: string[] } = {}): 
   ];
   const message = {
     findUnique: vi.fn(async () => ({
-      blocks: text("Continua"),
+      blocks: text(overrides.source ?? "Continua"),
       role: "user",
       threadId: "t-1",
       seq: 89,
@@ -78,6 +81,23 @@ function ctx(overrides: { continuationIndex?: number; later?: string[] } = {}): 
     },
   } as unknown as RunContext;
 }
+
+describe("stop during a long chain", () => {
+  it("the request itself never stops its own chain, even with stop words in it", async () => {
+    const source = "Traduci tutto, non fermarti e annulla le righe vuote; stop solo alla fine";
+    expect(await userAskedToStopChain(ctx({ source, later: [] }))).toBe(false);
+  });
+
+  it("later messages: negated or past-tense wording does not stop, an explicit command does", async () => {
+    expect(
+      await userAskedToStopChain(
+        ctx({ later: ["non ti fermare", "si è fermato di nuovo?", "ha smesso?"] }),
+      ),
+    ).toBe(false);
+    expect(await userAskedToStopChain(ctx({ later: ["ok", "basta così"] }))).toBe(true);
+    expect(await userAskedToStopChain(ctx({ later: ["fermati"] }))).toBe(true);
+  });
+});
 
 describe("side question during a long task", () => {
   it("reads stored text blocks (kind: text)", () => {
